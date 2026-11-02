@@ -267,3 +267,4 @@ CREATE POLICY "Permitir lectura" ON storage.objects FOR SELECT TO authenticated 
 -- 7. DATOS INICIALES
 INSERT INTO public.categorias (nombre) VALUES ('Herramientas'), ('Químicos'), ('Insumos'), ('Higiene'), ('Seguridad') ON CONFLICT DO NOTHING;
 INSERT INTO public.clientes (nombre) VALUES ('Mercado Juan Carrasco'), ('Mercado Miguel Hidalgo'), ('Mercado Ricardo Flores Magón'), ('Mercado Cuauhtémoc'), ('Mercado José María Pino Suárez') ON CONFLICT DO NOTHING;
+
