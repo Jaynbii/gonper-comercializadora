@@ -7,7 +7,8 @@ const menuItems = [
   { name: 'Inicio', path: '/', icon: '📊' },
   { name: 'Inventario', path: '/inventario', icon: '📦' },
   { name: 'Órdenes', path: '/ordenes', icon: '📄' },
-  { name: 'Proveedores', path: '/proveedores', icon: '🏭' },
+  { name: 'Compras', path: '/compras', icon: '🛒' },        // 👈 Flujo de faltantes
+  { name: 'Proveedores', path: '/proveedores', icon: '🏭' }, // 👈 Directorio y precios
   { name: 'Clientes', path: '/clientes', icon: '🏢' }, 
 ]
 
