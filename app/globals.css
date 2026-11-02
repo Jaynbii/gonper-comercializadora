@@ -1,26 +1,33 @@
+/* app/globals.css */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 1. Definimos nuestros colores personalizados */
+@theme {
+  --color-gonper-bg: #F8FAFC;
+  --color-gonper-surface: #FFFFFF;
+  --color-gonper-border: #E2E8F0;
+  --color-gonper-text: #0F172A;
+  --color-gonper-muted: #64748B;
+  --color-gonper-primary: #0EA5E9;
+  --color-gonper-primary-hover: #0284C7;
+  --color-gonper-success: #10B981;
+  --color-gonper-warning: #F59E0B;
+  --color-gonper-danger: #EF4444;
 }
 
+/* 2. ✅ La clave: usamos @theme inline para las fuentes */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Mapeamos las variables de next/font a las utilidades de Tailwind */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* 3. Estilos base para el cuerpo del documento */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-gonper-bg);
+  color: var(--color-gonper-text);
+  font-family: var(--font-sans);
+  /* Asegura que los números en tablas se alineen verticalmente */
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
 }
