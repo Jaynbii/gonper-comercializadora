@@ -56,13 +56,13 @@ export async function recibirMercancia(ordenCompraId: string, items: any[]) {
       // Actualizar producto
       await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id)
 
-      // Registrar movimiento de entrada
+      // Registrar movimiento de entrada (Usando la nueva columna orden_compra_id)
       await supabase.from('movimientos_inventario').insert({
         producto_id: item.producto_id,
         tipo_movimiento: 'ENTRADA_COMPRA',
         cantidad: item.cantidad_recibida,
         motivo: 'Recepción de Orden de Compra',
-        orden_id: ordenCompraId,
+        orden_compra_id: ordenCompraId, // 👈 Aquí está la corrección
         usuario_id: user.id
       })
 
