@@ -18,7 +18,7 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
   // --- LÓGICA SUGERENCIAS ---
   const handleSelectProveedor = (productoId: string, proveedorId: string) => {
     const prov = proveedores.find((p: any) => p.id === proveedorId)
-    const rel = prov?.producto_proveedores.find((r: any) => r.producto_id === productoId)
+    const rel = (prov?.producto_proveedores || []).find((r: any) => r.producto_id === productoId)
     const precio = rel ? rel.precio_unitario : 0
     
     setItemsSeleccionados(prev => ({
@@ -35,7 +35,6 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
   }
 
   const handleGenerar = async (proveedorId: string) => {
-    // Filtramos solo los items de este proveedor
     const itemsDelProveedor = Object.entries(itemsSeleccionados)
       .filter(([_, data]) => data.proveedorId === proveedorId)
       .map(([prodId, data]) => ({
@@ -62,9 +61,9 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
   const handleRecibir = async () => {
     const itemsAEntregar = ordenActiva.orden_compra_items.map((item: any) => ({
       id: item.id,
-      producto_id: item.productos.id, // Asumiendo que el join trae el id del producto
+      producto_id: item.productos?.id, // Usar el ID del producto desde el join
       cantidad_recibida: cantidadesRecibidas[item.id] || 0
-    })).filter((i: any) => i.cantidad_recibida > 0)
+    })).filter((i: any) => i.cantidad_recibida > 0 && i.producto_id)
 
     if (itemsAEntregar.length === 0) return alert('Ingresa al menos una cantidad recibida')
 
@@ -123,8 +122,12 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
                 <tbody className="divide-y divide-gonper-border">
                   {faltantes.map((prod: any) => {
                     const seleccion = itemsSeleccionados[prod.id]
-                    // Proveedores que venden este producto
-                    const opcionesProv = proveedores.filter((p: any) => p.producto_proveedores.some((r: any) => r.producto_id === prod.id))
+                    
+                    // Filtramos proveedores que SÍ venden este producto
+                    const opcionesProv = proveedores.filter((p: any) => {
+                      const relacion = (p.producto_proveedores || []).find((r: any) => r.producto_id === prod.id);
+                      return !!relacion;
+                    });
 
                     return (
                       <tr key={prod.id} className="hover:bg-gray-50">
@@ -141,7 +144,8 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
                           >
                             <option value="">Selecciona proveedor...</option>
                             {opcionesProv.map((p: any) => {
-                              const precio = p.producto_proveedores.find((r: any) => r.producto_id === prod.id)?.precio_unitario
+                              const relacion = (p.producto_proveedores || []).find((r: any) => r.producto_id === prod.id);
+                              const precio = relacion ? relacion.precio_unitario : 0;
                               return <option key={p.id} value={p.id}>{p.nombre} (${precio})</option>
                             })}
                           </select>
@@ -205,7 +209,6 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
                     <button 
                       onClick={() => {
                         setOrdenActiva(oc)
-                        // Pre-llenar cantidades con lo solicitado
                         const init: Record<string, number> = {}
                         oc.orden_compra_items.forEach((i: any) => { init[i.id] = i.cantidad_solicitada })
                         setCantidadesRecibidas(init)
@@ -256,7 +259,6 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
           </div>
         </div>
       )}
-
     </div>
   )
 }

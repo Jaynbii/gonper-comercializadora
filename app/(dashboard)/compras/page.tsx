@@ -29,23 +29,32 @@ export default async function ComprasPage() {
     return { ...prod, requerido, stock, faltante }
   }).filter(p => p.faltante > 0)
 
-  // 2. Traer proveedores y sus precios para esos productos
-  const { data: proveedores } = await supabase
-    .from('proveedores')
-    .select(`id, nombre, producto_proveedores (producto_id, precio_unitario)`)
-
-  // 3. Traer órdenes de compra generadas
-  const { data: ordenesCompra } = await supabase
-    .from('ordenes_compra')
-    .select(`
+  // 2. Traer datos de forma separada (A PRUEBA DE FALLOS)
+  const [
+    { data: rawProveedores },
+    { data: rawRelaciones },
+    { data: ordenesCompra }
+  ] = await Promise.all([
+    supabase.from('proveedores').select('id, nombre'),
+    supabase.from('producto_proveedores').select('*'),
+    supabase.from('ordenes_compra').select(`
       id, folio, estado, total_estimado, created_at,
       proveedores (nombre),
       orden_compra_items (
         id, cantidad_solicitada, cantidad_recibida,
-        productos (nombre, sku)
+        productos (nombre, sku, id)
       )
-    `)
-    .order('created_at', { ascending: false })
+    `).order('created_at', { ascending: false })
+  ])
+
+  // 3. Unir proveedores con sus precios manualmente
+  const proveedores = (rawProveedores || []).map(prov => {
+    const relacionesProv = rawRelaciones?.filter(rel => rel.proveedor_id === prov.id) || []
+    return {
+      ...prov,
+      producto_proveedores: relacionesProv
+    }
+  })
 
   return (
     <ComprasClient 
