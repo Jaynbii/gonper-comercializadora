@@ -90,7 +90,7 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
             await page.render({ canvasContext: context, viewport, canvas } as any).promise
             setStatusMsg(`Analizando imagen (Página ${i})...`)
             const { data } = await Tesseract.recognize(canvas, 'spa', { logger: m => {} })
-            const textoPorFilas = reconstruirLineasPorCoordenadas(data.words)
+            const textoPorFilas = reconstruirLineasPorCoordenadas((data as any).words)
             textoCompleto += (textoPorFilas || data.text) + '\n'
           }
         }
@@ -105,7 +105,7 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
             }
           } 
         })
-        textoCompleto = reconstruirLineasPorCoordenadas(data.words) || data.text
+        textoCompleto = reconstruirLineasPorCoordenadas((data as any).words) || data.text
       }
 
       setStatusMsg('Cotejando con el catálogo...')
