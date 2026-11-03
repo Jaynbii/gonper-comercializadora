@@ -9,6 +9,38 @@ import Tesseract from 'tesseract.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 
+/**
+ * Reconstruye las líneas de una tabla usando la posición vertical de cada palabra.
+ * Esto evita que Tesseract agrupe primero toda una columna y después otra.
+ */
+function reconstruirLineasPorCoordenadas(words: any[]) {
+  const palabras = (words || [])
+    .filter(word => word.text?.trim() && word.bbox)
+    .map(word => ({
+      texto: word.text.trim(),
+      x: word.bbox.x0,
+      y: (word.bbox.y0 + word.bbox.y1) / 2,
+    }))
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+
+  const filas: { y: number; palabras: typeof palabras }[] = []
+
+  for (const palabra of palabras) {
+    let fila = filas.find(actual => Math.abs(actual.y - palabra.y) <= 18)
+    if (!fila) {
+      fila = { y: palabra.y, palabras: [] }
+      filas.push(fila)
+    }
+    fila.palabras.push(palabra)
+    fila.y = fila.palabras.reduce((suma, actual) => suma + actual.y, 0) / fila.palabras.length
+  }
+
+  return filas
+    .sort((a, b) => a.y - b.y)
+    .map(fila => fila.palabras.sort((a, b) => a.x - b.x).map(p => p.texto).join(' '))
+    .join('\\n')
+}
+
 export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: string, pdfPath: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -57,22 +89,23 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
           if (context) {
             await page.render({ canvasContext: context, viewport, canvas } as any).promise
             setStatusMsg(`Analizando imagen (Página ${i})...`)
-            const { data: { text } } = await Tesseract.recognize(canvas, 'spa', { logger: m => {} })
-            textoCompleto += text + '\n'
+            const { data } = await Tesseract.recognize(canvas, 'spa', { logger: m => {} })
+            const textoPorFilas = reconstruirLineasPorCoordenadas(data.words)
+            textoCompleto += (textoPorFilas || data.text) + '\n'
           }
         }
       } else {
         // Es una FOTO (JPG, PNG, etc)
         setStatusMsg('Analizando fotografía...')
         // Tesseract puede leer una URL de imagen directamente
-        const { data: { text } } = await Tesseract.recognize(fileUrl, 'spa', { 
+        const { data } = await Tesseract.recognize(fileUrl, 'spa', { 
           logger: m => {
             if (m.status === 'recognizing text') {
               setStatusMsg(`Analizando foto: ${(m.progress * 100).toFixed(0)}%`)
             }
           } 
         })
-        textoCompleto = text
+        textoCompleto = reconstruirLineasPorCoordenadas(data.words) || data.text
       }
 
       setStatusMsg('Cotejando con el catálogo...')
