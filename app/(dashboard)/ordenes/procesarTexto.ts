@@ -51,10 +51,10 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
   }[] = []
 
   // Formato original de requisición: código, cantidad, unidad y descripción.
-  const regexFormal = /^(\d{4,8})\s+(\d+(?:[.,]\d{1,3})?)\s*(PIEZAS?|PZAS?|BULTOS?|METROS?|M|CAJAS?|PORRONES?|PAQUETES?|BOLSAS?|GALONES?|KGS?|LITROS?|LTS?)\s+(.+?)\s*(?:(?:\$?\s*)\d{1,3}(?:,\d{3})*(?:\.\d{2})\s+(?:\$?\s*)\d{1,3}(?:,\d{3})*(?:\.\d{2}))?$/i
+  const regexFormal = /^(\d{4,8})\s+(\d+(?:[.,]\d{1,3})?)\s*(PIEZAS?|PZAS?|BULTOS?|METROS?|M|CAJAS?|PORRONES?|PAQUETES?|BOLSAS?|GALON(?:ES)?|KGS?|LITROS?|LTS?)\s+(.+?)\s*(?:(?:\$?\s*)\d{1,3}(?:,\d{3})*(?:\.\d{2})\s+(?:\$?\s*)\d{1,3}(?:,\d{3})*(?:\.\d{2}))?$/i
 
   // Formato alternativo: exige una unidad de medida explícita para evitar encabezados y texto suelto.
-  const regexAlternativo = /^(?:(\d{4,8})\s+)?(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|LITRO|LITROS)\s+(.+)$/i
+  const regexAlternativo = /^(?:(\d{4,8})\s+)?(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|GALON|GALONES|LITRO|LITROS)\s+(.+)$/i
 
   const palabrasBasura = [
     'DEPARTAMENTO', 'MAZATLAN', 'POLIZA', 'FECHA', 'PROVEEDOR',
