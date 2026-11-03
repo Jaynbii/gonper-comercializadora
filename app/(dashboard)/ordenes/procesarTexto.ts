@@ -5,14 +5,14 @@ import Fuse from 'fuse.js'
 
 function formatearNombre(str: string) {
   if (!str) return str
-  return str.toLowerCase().replace(/(^\\w|\\s\\w)/g, m => m.toUpperCase())
+  return str.toLowerCase().replace(/(^\w|\s\w)/g, m => m.toUpperCase())
 }
 
 function limpiarDescripcion(valor: string) {
   return valor
     .replace(/^[^a-zA-ZñÑáéíóúÁÉÍÓÚ0-9]+/, '')
-    .replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ0-9\\s/]/g, '')
-    .replace(/\\s+/g, ' ')
+    .replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ0-9\s/]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase()
 }
@@ -35,11 +35,11 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
   const textoLimpio = textoCrudo
     .replace(/Yabulto/gi, '0.5 bulto ')
     .replace(/Ysbulto/gi, '0.5 bulto ')
-    .replace(/1\\/2/gi, '0.5')
-    .replace(/C\\/3\\s*KGS/gi, 'C/9 KGS')
-    .replace(/JABON\\s*C\\/3/gi, 'JABON C/9')
+    .replace(/1\/2/gi, '0.5')
+    .replace(/C\/3\s*KGS/gi, 'C/9 KGS')
+    .replace(/JABON\s*C\/3/gi, 'JABON C/9')
 
-  const lineas = textoLimpio.split(/\\r?\\n/)
+  const lineas = textoLimpio.split(/\r?\n/)
   const itemsDetectados: {
     codigo_pdf: string
     cantidad: number
@@ -51,11 +51,11 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
   }[] = []
 
   // Formato original de requisición: código, cantidad, unidad y descripción.
-  const regexFormal = /(\\d{4,6})\\s*(\\d+\\.\\d{2})\\s*(PIEZA|BULTO|METRO|CAJA|PORRON|PAQUETE|BOLSA)\\s*(.+)/i
+  const regexFormal = /(\d{4,6})\s*(\d+\.\d{2})\s*(PIEZA|BULTO|METRO|CAJA|PORRON|PAQUETE|BOLSA)\s*(.+)/i
 
   // Formatos alternativos comunes en fotos o documentos reenviados por WhatsApp.
-  const regexAlternativo = /^(?:(\\d{4,8})\\s+)?(\\d+(?:[.,]\\d{1,3})?)\\s*(?:PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|LITRO|LITROS)?\\s+(.+)$/i
-  const regexCantidadFinal = /^(.+?)\\s+(\\d+(?:[.,]\\d{1,3})?)\\s*(PZA|PZ|PIEZA|PIEZAS|BULTO|BULTOS|CAJA|CAJAS|KG|KGS|LTS?)$/i
+  const regexAlternativo = /^(?:(\d{4,8})\s+)?(\d+(?:[.,]\d{1,3})?)\s*(?:PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|LITRO|LITROS)?\s+(.+)$/i
+  const regexCantidadFinal = /^(.+?)\s+(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZ|PIEZA|PIEZAS|BULTO|BULTOS|CAJA|CAJAS|KG|KGS|LTS?)$/i
 
   const palabrasBasura = [
     'DEPARTAMENTO', 'MAZATLAN', 'POLIZA', 'FECHA', 'PROVEEDOR',
@@ -76,7 +76,7 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
     if (formal) {
       codigoPDF = formal[1]
       cantidad = Number(formal[2])
-      descripcionPDF = formal[4].split(/(?=\\d+[.,]\\d{2})/)[0]
+      descripcionPDF = formal[4].split(/(?=\d+[.,]\d{2})/)[0]
     } else {
       const alternativo = lineaTrim.match(regexAlternativo)
       const cantidadFinal = lineaTrim.match(regexCantidadFinal)
