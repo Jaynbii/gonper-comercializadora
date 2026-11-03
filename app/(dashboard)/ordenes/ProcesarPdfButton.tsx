@@ -38,7 +38,7 @@ function reconstruirLineasPorCoordenadas(words: any[]) {
   return filas
     .sort((a, b) => a.y - b.y)
     .map(fila => fila.palabras.sort((a, b) => a.x - b.x).map(p => p.texto).join(' '))
-    .join('\\n')
+    .join('\n')
 }
 
 export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: string, pdfPath: string }) {
