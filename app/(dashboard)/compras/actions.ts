@@ -1,18 +1,52 @@
+
 'use server'
 
+// Importa el cliente de Supabase para ejecutar operaciones desde el servidor.
 import { createClient } from '@/utils/supabase/server'
+
+// Permite actualizar las rutas afectadas después de modificar información.
 import { revalidatePath } from 'next/cache'
 
-export async function generarOrdenCompra(proveedorId: string, items: any[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autorizado')
+// Define la estructura de los artículos que se reciben en una compra.
+interface ItemRecepcion {
+  id: string
+  producto_id: string
+  cantidad_recibida: number
+}
 
-  // 1. Calcular el total estimado
-  const totalEstimado = items.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
+// Crea una orden de compra y registra los productos solicitados.
+export async function generarOrdenCompra(
+  proveedorId: string,
+  items: any[]
+) {
+  // Inicializa el cliente de Supabase en el servidor.
+  const supabase = await createClient()
+
+  // Comprueba que exista una sesión autenticada.
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+
+  // Impide crear órdenes sin autenticación.
+  if (!user) {
+    throw new Error('No autorizado')
+  }
+
+  // Valida que se haya seleccionado un proveedor y existan artículos.
+  if (!proveedorId || !Array.isArray(items) || items.length === 0) {
+    throw new Error('Datos de compra inválidos')
+  }
+
+  // Calcula el total estimado de la orden utilizando cantidades y precios.
+  const totalEstimado = items.reduce(
+    (acc, item) => acc + (item.cantidad * item.precio),
+    0
+  )
+
+  // Genera un folio para identificar la orden de compra.
   const folio = `COM-${Math.floor(Math.random() * 1000000)}`
 
-  // 2. Crear la cabecera de la orden
+  // Inserta la información principal de la orden de compra.
   const { data: ordenData, error: ordenError } = await supabase
     .from('ordenes_compra')
     .insert({
@@ -24,9 +58,12 @@ export async function generarOrdenCompra(proveedorId: string, items: any[]) {
     .select()
     .single()
 
-  if (ordenError) throw new Error(`Error al crear orden: ${ordenError.message}`)
+  // Detiene el proceso si no fue posible crear la orden.
+  if (ordenError) {
+    throw new Error(`Error al crear orden: ${ordenError.message}`)
+  }
 
-  // 3. Insertar los items
+  // Prepara los artículos para relacionarlos con la orden recién creada.
   const itemsAInsertar = items.map(item => ({
     orden_compra_id: ordenData.id,
     producto_id: item.producto_id,
@@ -34,47 +71,105 @@ export async function generarOrdenCompra(proveedorId: string, items: any[]) {
     cantidad_recibida: 0
   }))
 
-  const { error: itemsError } = await supabase.from('orden_compra_items').insert(itemsAInsertar)
-  if (itemsError) throw new Error(`Error al guardar items: ${itemsError.message}`)
+  // Guarda todos los artículos de la orden de compra.
+  const { error: itemsError } = await supabase
+    .from('orden_compra_items')
+    .insert(itemsAInsertar)
 
-  revalidatePath('/compras')
-  return { success: true, folio }
-}
-
-export async function recibirMercancia(ordenCompraId: string, items: any[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autorizado')
-
-  // 1. Recorrer los items recibidos y actualizar el stock
-  for (const item of items) {
-    if (item.cantidad_recibida > 0) {
-      // Obtener stock actual
-      const { data: prod } = await supabase.from('productos').select('stock_actual').eq('id', item.producto_id).single()
-      const nuevoStock = (Number(prod?.stock_actual) || 0) + Number(item.cantidad_recibida)
-
-      // Actualizar producto
-      await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id)
-
-      // Registrar movimiento de entrada (Usando la nueva columna orden_compra_id)
-      await supabase.from('movimientos_inventario').insert({
-        producto_id: item.producto_id,
-        tipo_movimiento: 'ENTRADA_COMPRA',
-        cantidad: item.cantidad_recibida,
-        motivo: 'Recepción de Orden de Compra',
-        orden_compra_id: ordenCompraId, // 👈 Aquí está la corrección
-        usuario_id: user.id
-      })
-
-      // Actualizar la cantidad recibida en el detalle de la orden
-      await supabase.from('orden_compra_items').update({ cantidad_recibida: item.cantidad_recibida }).eq('id', item.id)
-    }
+  // Informa si ocurrió un error al guardar los artículos.
+  if (itemsError) {
+    throw new Error(`Error al guardar items: ${itemsError.message}`)
   }
 
-  // 2. Marcar la orden como RECIBIDA
-  await supabase.from('ordenes_compra').update({ estado: 'RECIBIDA' }).eq('id', ordenCompraId)
-
+  // Actualiza la información visible de la sección de compras.
   revalidatePath('/compras')
-  revalidatePath('/inventario') // Para que el inventario refleje el nuevo stock
-  return { success: true }
+
+  // Devuelve el resultado de la operación y el folio generado.
+  return {
+    success: true,
+    folio
+  }
+}
+
+// Registra la recepción parcial o completa de mercancía.
+// La actualización del inventario y del movimiento se ejecuta dentro
+// de la función SQL recibir_mercancia, en una sola transacción.
+export async function recibirMercancia(
+  ordenCompraId: string,
+  items: ItemRecepcion[]
+) {
+  // Inicializa el cliente de Supabase en el servidor.
+  const supabase = await createClient()
+
+  // Obtiene y valida al usuario autenticado.
+  const {
+    data: { user },
+    error: authError
+  } = await supabase.auth.getUser()
+
+  // Impide que usuarios no autenticados registren recepciones.
+  if (authError || !user) {
+    throw new Error('No autorizado')
+  }
+
+  // Comprueba que se haya recibido una orden y una lista de artículos.
+  if (!ordenCompraId || !Array.isArray(items) || items.length === 0) {
+    throw new Error('Datos de recepción inválidos')
+  }
+
+  // Comprueba que cada artículo tenga identificadores válidos
+  // y una cantidad numérica igual o superior a cero.
+  const itemsInvalidos = items.some(item =>
+    !item.id ||
+    !item.producto_id ||
+    !Number.isFinite(Number(item.cantidad_recibida)) ||
+    Number(item.cantidad_recibida) < 0
+  )
+
+  // Detiene el proceso si algún artículo no cumple las validaciones.
+  if (itemsInvalidos) {
+    throw new Error('Hay artículos con datos inválidos')
+  }
+
+  // Elimina los artículos cuya cantidad recibida sea cero.
+  // Solo se enviarán a la base de datos los artículos con recepción.
+  const itemsARecibir = items
+    .filter(item => Number(item.cantidad_recibida) > 0)
+    .map(item => ({
+      id: item.id,
+      cantidad_recibida: Number(item.cantidad_recibida)
+    }))
+
+  // Evita ejecutar una recepción sin cantidades positivas.
+  if (itemsARecibir.length === 0) {
+    throw new Error('Debes indicar al menos una cantidad recibida')
+  }
+
+  // Obtiene los identificadores de los artículos que se van a recibir.
+  const ids = itemsARecibir.map(item => item.id)
+
+  // Evita procesar dos veces el mismo artículo dentro de una solicitud.
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('Hay artículos duplicados en la recepción')
+  }
+
+  // Ejecuta la función SQL que valida y registra la recepción
+  // de forma transaccional en Supabase.
+  const { data, error } = await supabase.rpc('recibir_mercancia', {
+    p_orden_compra_id: ordenCompraId,
+    p_items: itemsARecibir
+  })
+
+  // Informa cualquier error devuelto por la función SQL.
+  if (error) {
+    throw new Error(`Error al recibir mercancía: ${error.message}`)
+  }
+
+  // Actualiza las secciones que muestran compras, inventario y órdenes.
+  revalidatePath('/compras')
+  revalidatePath('/inventario')
+  revalidatePath('/ordenes')
+
+  // Devuelve el resultado generado por la función SQL.
+  return data
 }
