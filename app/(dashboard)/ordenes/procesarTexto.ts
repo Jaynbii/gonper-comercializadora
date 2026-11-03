@@ -159,7 +159,7 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
 
     if (formal) {
       codigoPDF = formal[1]
-      cantidad = Number(formal[2])
+      cantidad = Number(formal[2].replace(',', '.'))
       descripcionPDF = formal[4].split(/(?=\d+[.,]\d{2})/)[0]
     } else {
       const alternativo = lineaTrim.match(regexAlternativo)
