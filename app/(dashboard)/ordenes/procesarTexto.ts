@@ -62,7 +62,92 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
     'REQUERIMIENTO', 'CANTIDAD', 'DESCRIPCION',
   ]
 
+  // Detectamos requisiciones donde el OCR separa las columnas de códigos,
+  // cantidades y descripciones en bloques independientes.
+  const lineasProcesadas = new Set<number>()
+  const indiceEncabezado = lineas.findIndex(linea =>
+    /CODIGO.*CANTIDAD.*UNIDAD.*DESCRIPCION/i.test(linea.replace(/\\s+/g, ' '))
+  )
+
+  if (indiceEncabezado >= 0) {
+    const codigos: string[] = []
+    let indiceCantidades = -1
+
+    // Los códigos suelen aparecer en una o varias líneas debajo del encabezado.
+    for (let i = indiceEncabezado + 1; i < Math.min(lineas.length, indiceEncabezado + 7); i++) {
+      const candidata = lineas[i].trim()
+      const cantidadesEnLinea = candidata.match(/\\d+(?:[.,]\\d{1,3})?\\s*(?:PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\\b/gi)
+
+      if (cantidadesEnLinea && cantidadesEnLinea.length > 0) {
+        indiceCantidades = i
+        break
+      }
+
+      if (/^\\d{4,8}(?:\\s+\\d{4,8})*$/.test(candidata)) {
+        codigos.push(...candidata.split(/\\s+/))
+        lineasProcesadas.add(i)
+      }
+    }
+
+    if (indiceCantidades >= 0) {
+      const cantidades: { cantidad: number; unidad: string }[] = []
+      const regexCantidadUnidad = /(\\d+(?:[.,]\\d{1,3})?)\\s*(PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\\b/gi
+      let coincidencia: RegExpExecArray | null
+
+      while ((coincidencia = regexCantidadUnidad.exec(lineas[indiceCantidades])) !== null) {
+        cantidades.push({
+          cantidad: Number(coincidencia[1].replace(',', '.')),
+          unidad: coincidencia[2],
+        })
+      }
+
+      // Las descripciones se leen en el mismo orden que códigos y cantidades.
+      const descripciones: string[] = []
+      for (let i = indiceCantidades + 1; i < lineas.length && descripciones.length < cantidades.length; i++) {
+        const descripcion = limpiarDescripcion(lineas[i])
+        if (!descripcion || /^\\d+$/.test(descripcion)) continue
+        if (/^(PROYECTO|COG|PRECIO|IMPORTE|SUBTOTAL|TOTAL|FONDOS|DIRECCION|DE INGRESOS)\\b/.test(descripcion)) break
+        descripciones.push(descripcion)
+        lineasProcesadas.add(i)
+      }
+
+      if (
+        codigos.length === cantidades.length &&
+        cantidades.length === descripciones.length
+      ) {
+        lineasProcesadas.add(indiceCantidades)
+
+        for (let i = 0; i < cantidades.length; i++) {
+          const codigoPDF = codigos[i]
+          const cantidad = cantidades[i].cantidad
+          const descripcionPDF = descripciones[i]
+
+          if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 100000) continue
+          if (descripcionPDF.length < 3) continue
+
+          let productoExistente = productosDB?.find(producto => producto.sku === codigoPDF)
+          if (!productoExistente) {
+            const resultados = fuse.search(descripcionPDF)
+            if (resultados.length > 0) productoExistente = resultados[0].item
+          }
+
+          const nombre = formatearNombre(descripcionPDF)
+          itemsDetectados.push({
+            codigo_pdf: codigoPDF,
+            cantidad,
+            descripcion_pdf: nombre,
+            producto_id: codigoPDF,
+            producto_nombre: nombre,
+            existe_en_bd: !!productoExistente,
+            id_bd: productoExistente?.id || null,
+          })
+        }
+      }
+    }
+  }
+
   for (let indice = 0; indice < lineas.length; indice++) {
+    if (lineasProcesadas.has(indice)) continue
     const lineaTrim = lineas[indice].trim()
     if (!lineaTrim) continue
 
