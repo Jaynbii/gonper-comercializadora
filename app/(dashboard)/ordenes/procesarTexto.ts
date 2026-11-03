@@ -66,7 +66,7 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
   // cantidades y descripciones en bloques independientes.
   const lineasProcesadas = new Set<number>()
   const indiceEncabezado = lineas.findIndex(linea =>
-    /CODIGO.*CANTIDAD.*UNIDAD.*DESCRIPCION/i.test(linea.replace(/\\s+/g, ' '))
+    /CODIGO.*CANTIDAD.*UNIDAD.*DESCRIPCION/i.test(linea.replace(/\s+/g, ' '))
   )
 
   if (indiceEncabezado >= 0) {
@@ -76,22 +76,22 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
     // Los códigos suelen aparecer en una o varias líneas debajo del encabezado.
     for (let i = indiceEncabezado + 1; i < Math.min(lineas.length, indiceEncabezado + 7); i++) {
       const candidata = lineas[i].trim()
-      const cantidadesEnLinea = candidata.match(/\\d+(?:[.,]\\d{1,3})?\\s*(?:PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\\b/gi)
+      const cantidadesEnLinea = candidata.match(/\d+(?:[.,]\d{1,3})?\s*(?:PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\b/gi)
 
       if (cantidadesEnLinea && cantidadesEnLinea.length > 0) {
         indiceCantidades = i
         break
       }
 
-      if (/^\\d{4,8}(?:\\s+\\d{4,8})*$/.test(candidata)) {
-        codigos.push(...candidata.split(/\\s+/))
+      if (/^\d{4,8}(?:\s+\d{4,8})*$/.test(candidata)) {
+        codigos.push(...candidata.split(/\s+/))
         lineasProcesadas.add(i)
       }
     }
 
     if (indiceCantidades >= 0) {
       const cantidades: { cantidad: number; unidad: string }[] = []
-      const regexCantidadUnidad = /(\\d+(?:[.,]\\d{1,3})?)\\s*(PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\\b/gi
+      const regexCantidadUnidad = /(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZAS|PIEZA|PIEZAS|BULTO|BULTOS|METRO|METROS|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|GALON|GALONES|LITRO|LITROS|LT|LTS)\b/gi
       let coincidencia: RegExpExecArray | null
 
       while ((coincidencia = regexCantidadUnidad.exec(lineas[indiceCantidades])) !== null) {
@@ -105,8 +105,8 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
       const descripciones: string[] = []
       for (let i = indiceCantidades + 1; i < lineas.length && descripciones.length < cantidades.length; i++) {
         const descripcion = limpiarDescripcion(lineas[i])
-        if (!descripcion || /^\\d+$/.test(descripcion)) continue
-        if (/^(PROYECTO|COG|PRECIO|IMPORTE|SUBTOTAL|TOTAL|FONDOS|DIRECCION|DE INGRESOS)\\b/.test(descripcion)) break
+        if (!descripcion || /^\d+$/.test(descripcion)) continue
+        if (/^(PROYECTO|COG|PRECIO|IMPORTE|SUBTOTAL|TOTAL|FONDOS|DIRECCION|DE INGRESOS)\b/.test(descripcion)) break
         descripciones.push(descripcion)
         lineasProcesadas.add(i)
       }
