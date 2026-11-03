@@ -53,9 +53,8 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
   // Formato original de requisición: código, cantidad, unidad y descripción.
   const regexFormal = /(\d{4,6})\s*(\d+\.\d{2})\s*(PIEZA|BULTO|METRO|CAJA|PORRON|PAQUETE|BOLSA)\s*(.+)/i
 
-  // Formatos alternativos comunes en fotos o documentos reenviados por WhatsApp.
-  const regexAlternativo = /^(?:(\d{4,8})\s+)?(\d+(?:[.,]\d{1,3})?)\s*(?:PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|LITRO|LITROS)?\s+(.+)$/i
-  const regexCantidadFinal = /^(.+?)\s+(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZ|PIEZA|PIEZAS|BULTO|BULTOS|CAJA|CAJAS|KG|KGS|LTS?)$/i
+  // Formato alternativo: exige una unidad de medida explícita para evitar encabezados y texto suelto.
+  const regexAlternativo = /^(?:(\d{4,8})\s+)?(\d+(?:[.,]\d{1,3})?)\s*(PZA|PZ|PIEZA|PZAS|PIEZAS|BULTO|BULTOS|METRO|METROS|M|CAJA|CAJAS|PORRON|PORRONES|PAQUETE|PAQUETES|BOLSA|BOLSAS|KG|KGS|L|LT|LTS|LITRO|LITROS)\s+(.+)$/i
 
   const palabrasBasura = [
     'DEPARTAMENTO', 'MAZATLAN', 'POLIZA', 'FECHA', 'PROVEEDOR',
@@ -79,18 +78,12 @@ export async function procesarTextoOrden(textoCrudo: string, ordenId: string) {
       descripcionPDF = formal[4].split(/(?=\d+[.,]\d{2})/)[0]
     } else {
       const alternativo = lineaTrim.match(regexAlternativo)
-      const cantidadFinal = lineaTrim.match(regexCantidadFinal)
 
-      if (alternativo) {
-        codigoPDF = alternativo[1] || ''
-        cantidad = Number(alternativo[2].replace(',', '.'))
-        descripcionPDF = alternativo[3]
-      } else if (cantidadFinal) {
-        cantidad = Number(cantidadFinal[2].replace(',', '.'))
-        descripcionPDF = cantidadFinal[1]
-      } else {
-        continue
-      }
+      if (!alternativo) continue
+
+      codigoPDF = alternativo[1] || ''
+      cantidad = Number(alternativo[2].replace(',', '.'))
+      descripcionPDF = alternativo[4]
     }
 
     descripcionPDF = limpiarDescripcion(descripcionPDF)
