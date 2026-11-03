@@ -46,6 +46,7 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [itemsDetectados, setItemsDetectados] = useState<any[] | null>(null)
+  const [textoOCRDebug, setTextoOCRDebug] = useState('')
   const [seleccionados, setSeleccionados] = useState<Set<number>>(new Set())
   const [guardandoInventario, setGuardandoInventario] = useState<number | null>(null)
 
@@ -108,6 +109,7 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
         textoCompleto = reconstruirLineasPorCoordenadas((data as any).words) || data.text
       }
 
+      setTextoOCRDebug(textoCompleto)
       setStatusMsg('Cotejando con el catálogo...')
       const result = await procesarTextoOrden(textoCompleto, ordenId)
       
@@ -204,6 +206,11 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
             </div>
             
             <div className="p-4 overflow-y-auto flex-1">
+              <details className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-amber-900">Diagnóstico de lectura OCR (para revisar artículos faltantes)</summary>
+                <p className="mt-2 mb-2 text-xs text-amber-800">Este es el texto reconstruido desde las posiciones de las palabras. No modifica la orden ni el inventario.</p>
+                <textarea readOnly value={textoOCRDebug} className="w-full min-h-40 rounded border border-amber-200 bg-white p-2 font-mono text-xs text-gray-800" />
+              </details>
               <table className="w-full text-sm text-left">
                 <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
                   <tr>
