@@ -140,7 +140,6 @@ export default function ProcesarPdfButton({
   const [itemsDetectados, setItemsDetectados] = useState<ItemDetectado[] | null>(
     null,
   )
-  const [lineasNoReconocidas, setLineasNoReconocidas] = useState<string[]>([])
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [guardandoInventario, setGuardandoInventario] = useState<string | null>(
     null,
@@ -224,7 +223,6 @@ export default function ProcesarPdfButton({
     setErrorProceso('')
     setErrorRevision('')
     setItemsDetectados(null)
-    setLineasNoReconocidas([])
 
     try {
       let textoCompleto = cacheTexto.get(pdfPath) ?? ''
@@ -269,9 +267,7 @@ export default function ProcesarPdfButton({
         sugerencia: item.sugerencia,
       }))
 
-      const noReconocidas = result.lineasNoReconocidas ?? []
-
-      if (detectados.length === 0 && noReconocidas.length === 0) {
+      if (detectados.length === 0) {
         setErrorProceso(
           'No se detectaron productos válidos en el archivo. Revisa que la foto sea legible.',
         )
@@ -279,7 +275,6 @@ export default function ProcesarPdfButton({
       }
 
       setItemsDetectados(detectados)
-      setLineasNoReconocidas(noReconocidas)
       setSeleccionados(
         new Set(
           detectados.filter((item) => item.existe_en_bd).map((item) => item.key),
@@ -420,13 +415,6 @@ export default function ProcesarPdfButton({
     setSeleccionados((prev) => new Set(prev).add(nueva.key))
   }
 
-  const usarLinea = (linea: string, indice: number) => {
-    agregarFila(linea)
-    setLineasNoReconocidas((prev) =>
-      prev.filter((_, posicion) => posicion !== indice),
-    )
-  }
-
   const eliminarFila = (key: string) => {
     setItemsDetectados((prev) => prev?.filter((item) => item.key !== key) ?? null)
     setSeleccionados((prev) => {
@@ -464,7 +452,6 @@ export default function ProcesarPdfButton({
     try {
       await guardarItemsEnOrden(ordenId, itemsParaGuardar)
       setItemsDetectados(null)
-      setLineasNoReconocidas([])
       router.refresh()
     } catch (error) {
       setErrorRevision(mensajeDeError(error))
@@ -514,7 +501,6 @@ export default function ProcesarPdfButton({
         onClose={() => {
           if (isSaving) return
           setItemsDetectados(null)
-          setLineasNoReconocidas([])
           setErrorRevision('')
         }}
         title="Revisión del requerimiento"
@@ -535,7 +521,6 @@ export default function ProcesarPdfButton({
               onClick={() => {
                 if (isSaving) return
                 setItemsDetectados(null)
-                setLineasNoReconocidas([])
                 setErrorRevision('')
               }}
               disabled={isSaving}
@@ -597,40 +582,6 @@ export default function ProcesarPdfButton({
               />
               {errorRevision}
             </p>
-          )}
-
-          {lineasNoReconocidas.length > 0 && (
-            <div className="mt-3 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg/60 p-3">
-              <p className="text-[12px] font-semibold text-gonper-warning">
-                {lineasNoReconocidas.length}{' '}
-                {lineasNoReconocidas.length === 1
-                  ? 'línea no interpretada'
-                  : 'líneas no interpretadas'}
-              </p>
-              <p className="mt-0.5 text-[11.5px] leading-relaxed text-gonper-warning/85">
-                Revísalas: si son artículos, agrégalas como fila y corrige
-                código, cantidad y unidad.
-              </p>
-              <ul className="mt-2 space-y-1">
-                {lineasNoReconocidas.map((linea, indice) => (
-                  <li
-                    key={`${linea}-${indice}`}
-                    className="flex items-start gap-2 rounded-[4px] bg-gonper-surface/70 px-2 py-1.5"
-                  >
-                    <code className="min-w-0 flex-1 break-words font-mono text-[11px] leading-relaxed text-gonper-text">
-                      {linea}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => usarLinea(linea, indice)}
-                      className="shrink-0 text-[11px] font-semibold text-gonper-primary hover:underline"
-                    >
-                      Agregar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
           )}
 
           {itemsDetectados && itemsDetectados.length > 0 ? (
