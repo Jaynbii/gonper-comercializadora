@@ -38,8 +38,84 @@ type ItemDetectado = {
 // mientras el usuario esté en la misma sesión del navegador.
 const cacheTexto = new Map<string, string>()
 
+// Tesseract pierde filas en fotos pequeñas (por ejemplo, una imagen de
+// WhatsApp de 1080 px). Se escala a ~2200 px y se realza el contraste.
+const ANCHO_OBJETIVO_OCR = 2200
+const ESCALA_MAXIMA_OCR = 3
+const ESCALA_MINIMA_OCR = 0.5
+
 function mensajeDeError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function realzarParaOcr(
+  ctx: CanvasRenderingContext2D,
+  ancho: number,
+  alto: number,
+) {
+  const imagen = ctx.getImageData(0, 0, ancho, alto)
+  const datos = imagen.data
+  const grises = new Uint8ClampedArray(ancho * alto)
+
+  for (let i = 0, pixel = 0; i < datos.length; i += 4, pixel++) {
+    const gris = 0.299 * datos[i] + 0.587 * datos[i + 1] + 0.114 * datos[i + 2]
+    grises[pixel] = (gris - 128) * 1.35 + 128
+  }
+
+  // Máscara de enfoque 3x3: recupera los bordes que se pierden al escalar.
+  for (let y = 0; y < alto; y++) {
+    const arriba = (y > 0 ? y - 1 : y) * ancho
+    const abajo = (y < alto - 1 ? y + 1 : y) * ancho
+    const fila = y * ancho
+
+    for (let x = 0; x < ancho; x++) {
+      const centro = fila + x
+      const valor =
+        5 * grises[centro] -
+        grises[arriba + x] -
+        grises[abajo + x] -
+        grises[fila + (x > 0 ? x - 1 : x)] -
+        grises[fila + (x < ancho - 1 ? x + 1 : x)]
+      const destino = centro * 4
+      const gris = Math.max(0, Math.min(255, valor))
+
+      datos[destino] = gris
+      datos[destino + 1] = gris
+      datos[destino + 2] = gris
+      datos[destino + 3] = 255
+    }
+  }
+
+  ctx.putImageData(imagen, 0, 0)
+}
+
+async function prepararImagenParaOcr(fileUrl: string) {
+  const respuesta = await fetch(fileUrl)
+  if (!respuesta.ok) throw new Error('No se pudo descargar la imagen.')
+
+  const bitmap = await createImageBitmap(await respuesta.blob())
+
+  try {
+    const escala = Math.min(
+      ESCALA_MAXIMA_OCR,
+      Math.max(ESCALA_MINIMA_OCR, ANCHO_OBJETIVO_OCR / bitmap.width),
+    )
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * escala)
+    canvas.height = Math.round(bitmap.height * escala)
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('No se pudo preparar la imagen para OCR.')
+
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    realzarParaOcr(ctx, canvas.width, canvas.height)
+
+    return canvas
+  } finally {
+    bitmap.close()
+  }
 }
 
 export default function ProcesarPdfButton({
@@ -59,44 +135,72 @@ export default function ProcesarPdfButton({
 
   const router = useRouter()
   const contadorFilas = useRef(0)
+  const etiquetaOcr = useRef('Analizando imagen')
 
   const nuevaLlave = () => `fila-${Date.now()}-${contadorFilas.current++}`
+
+  /**
+   * Un solo trabajador para todas las páginas: además de ser más rápido que
+   * crear uno por página, permite conservar los espacios entre columnas.
+   */
+  const crearTrabajadorOcr = async () => {
+    const worker = await Tesseract.createWorker('spa', 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          setStatusMsg(`${etiquetaOcr.current}: ${Math.round(m.progress * 100)}%`)
+        }
+      },
+    })
+
+    await worker.setParameters({ preserve_interword_spaces: '1' })
+    return worker
+  }
 
   const leerPdfConOcr = async (fileUrl: string) => {
     let textoCompleto = ''
     const loadingTask = pdfjsLib.getDocument({ url: fileUrl })
     const pdf = await loadingTask.promise
+    const worker = await crearTrabajadorOcr()
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i)
-      const viewport = page.getViewport({ scale: 2.0 })
-      const canvas = document.createElement('canvas')
-      canvas.height = viewport.height
-      canvas.width = viewport.width
+    try {
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 2.0 })
+        const canvas = document.createElement('canvas')
+        canvas.height = viewport.height
+        canvas.width = viewport.width
 
-      await page.render({ canvas, viewport }).promise
-      setStatusMsg(`Analizando imagen (Página ${i} de ${pdf.numPages})...`)
-      const {
-        data: { text },
-      } = await Tesseract.recognize(canvas, 'spa', { logger: () => {} })
-      textoCompleto += text + '\n'
+        await page.render({ canvas, viewport }).promise
+        etiquetaOcr.current = `Analizando página ${i} de ${pdf.numPages}`
+        setStatusMsg(`${etiquetaOcr.current}...`)
+
+        const {
+          data: { text },
+        } = await worker.recognize(canvas)
+        textoCompleto += text + '\n'
+      }
+    } finally {
+      await worker.terminate()
     }
 
     return textoCompleto
   }
 
   const leerImagenConOcr = async (fileUrl: string) => {
-    setStatusMsg('Analizando fotografía...')
-    const {
-      data: { text },
-    } = await Tesseract.recognize(fileUrl, 'spa', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          setStatusMsg(`Analizando foto: ${(m.progress * 100).toFixed(0)}%`)
-        }
-      },
-    })
-    return text
+    const canvas = await prepararImagenParaOcr(fileUrl)
+    etiquetaOcr.current = 'Analizando fotografía'
+    setStatusMsg(`${etiquetaOcr.current}...`)
+
+    const worker = await crearTrabajadorOcr()
+
+    try {
+      const {
+        data: { text },
+      } = await worker.recognize(canvas)
+      return text
+    } finally {
+      await worker.terminate()
+    }
   }
 
   const handleProcesar = async () => {

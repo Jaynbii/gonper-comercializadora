@@ -217,6 +217,35 @@ test('reconstruye la tabla cuando cada columna viene en líneas separadas', () =
   )
 })
 
+test('lee la foto de ingresos cuando el OCR conserva las columnas', () => {
+  const { items } = parseRequisicion(
+    [
+      'MUNICIPIO DE MAZATLAN ORDEN DE COMPRA: 15280',
+      'Autorizacion: 50378',
+      'CODIGO CANTIDAD UNIDAD DESCRIPCION DEL ARTICULO O SERVICIO PRECIO IMPORTE',
+      '13747   3.00 CAJAS PAPEL PARA MANOS EN ROLLO                  E 736.60 2,209.80',
+      '35980    1.00 CAJA PAPEL HIGIENICO JUMBO 12/200 MTS                   -    1 749.36 749.36',
+      '7385     1.00 GALON JABON LIQUIDO PARA MANOS                          ane16 - a7e.16',
+    ].join('\n'),
+  )
+
+  assert.deepEqual(
+    items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '13747|3|CAJA|PAPEL PARA MANOS EN ROLLO',
+      '35980|1|CAJA|PAPEL HIGIENICO JUMBO 12/200 MTS',
+      '7385|1|GALON|JABON LIQUIDO PARA MANOS',
+    ],
+  )
+})
+
+test('no corta la descripción cuando el hueco no lleva precios', () => {
+  const { items } = parseRequisicion('13747  3.00  CAJAS  PAPEL PARA MANOS   EN ROLLO')
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+})
+
 test('no confunde la fecha del encabezado con el código de la fila', () => {
   const { items } = parseRequisicion(
     'REQUISICION 12345 FECHA 03/11/2026 13747 3.00 CAJAS PAPEL PARA MANOS EN ROLLO 736.60 2,209.80',

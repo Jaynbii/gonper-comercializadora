@@ -113,8 +113,21 @@ function quitarPreciosFinales(texto: string) {
   return limpio
 }
 
+/**
+ * Cuando Tesseract conserva los espacios entre columnas, la descripción queda
+ * separada de los precios por varios espacios. Si después de ese hueco hay
+ * dígitos, la descripción termina ahí.
+ */
+function recortarColumnasDePrecio(texto: string) {
+  const columnas = texto.split(/\s{2,}/)
+  if (columnas.length < 2) return texto
+
+  const resto = columnas.slice(1).join(' ')
+  return /\d/.test(resto) ? columnas[0] : texto
+}
+
 function limpiarDescripcion(texto: string) {
-  let limpio = quitarPreciosFinales(texto)
+  let limpio = quitarPreciosFinales(recortarColumnasDePrecio(texto))
 
   limpio = limpio.replace(/^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/u, '')
   limpio = limpio.replace(/[^\p{L}\p{N}\s/#,.+-]/gu, '')
