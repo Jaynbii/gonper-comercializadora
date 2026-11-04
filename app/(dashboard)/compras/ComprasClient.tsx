@@ -138,40 +138,61 @@ export default function ComprasClient({
     })
   }
 
-  const handleGenerar = async (proveedorId: string) => {
-    const itemsDelProveedor = Object.entries(itemsSeleccionados)
-      .filter(([, data]) => data.proveedorId === proveedorId)
-      .map(([productoId, data]) => ({
-        producto_id: productoId,
-        cantidad: data.cantidad,
-        precio: data.precio,
-      }))
-
-    if (itemsDelProveedor.length === 0) {
-      setErrorMsg('Selecciona al menos un producto.')
+  const handleGenerarTodas = async () => {
+    if (proveedoresSeleccionados.length === 0) {
+      setErrorMsg('Selecciona al menos un producto y su proveedor.')
       return
     }
 
-    setGenerandoProveedor(proveedorId)
+    setGenerandoProveedor('todos')
     setMensaje('')
     setErrorMsg('')
 
-    try {
-      const res = await generarOrdenCompra(proveedorId, itemsDelProveedor)
-      setMensaje(`Orden ${res.folio} generada con éxito.`)
+    const generadas: string[] = []
+    const productosGenerados: string[] = []
+    const errores: string[] = []
+
+    for (const proveedorId of proveedoresSeleccionados) {
+      const itemsDelProveedor = Object.entries(itemsSeleccionados)
+        .filter(([, data]) => data.proveedorId === proveedorId)
+        .map(([productoId, data]) => ({
+          producto_id: productoId,
+          cantidad: data.cantidad,
+          precio: data.precio,
+        }))
+
+      if (itemsDelProveedor.length === 0) continue
+
+      const proveedor = proveedores.find((item) => item.id === proveedorId)
+      try {
+        const res = await generarOrdenCompra(proveedorId, itemsDelProveedor)
+        generadas.push(res.folio)
+        productosGenerados.push(...itemsDelProveedor.map((item) => item.producto_id))
+      } catch (error) {
+        const detalle = error instanceof Error ? error.message : 'No se pudo generar la orden.'
+        errores.push((proveedor?.nombre || 'Proveedor') + ': ' + detalle)
+      }
+    }
+
+    if (productosGenerados.length > 0) {
       setItemsSeleccionados((prev) => {
         const nuevos = { ...prev }
-        itemsDelProveedor.forEach((item) => delete nuevos[item.producto_id])
+        productosGenerados.forEach((productoId) => delete nuevos[productoId])
         return nuevos
       })
       router.refresh()
-    } catch (error) {
-      setErrorMsg(
-        error instanceof Error ? error.message : 'No se pudo generar la orden.',
-      )
-    } finally {
-      setGenerandoProveedor(null)
     }
+
+    if (errores.length > 0) {
+      const resumen = generadas.length > 0
+        ? 'Se generaron ' + generadas.length + ' órdenes (' + generadas.join(', ') + '). '
+        : ''
+      setErrorMsg(resumen + 'Errores: ' + errores.join(' | '))
+    } else if (generadas.length > 0) {
+      setMensaje('Compras generadas: ' + generadas.join(', ') + '.')
+    }
+
+    setGenerandoProveedor(null)
   }
 
   const abrirRecepcion = (orden: OrdenCompra) => {
@@ -536,50 +557,28 @@ export default function ComprasClient({
                         ? 'producto seleccionado'
                         : 'productos seleccionados'}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {proveedoresSeleccionados.map((proveedorId) => {
-                        const proveedor = proveedores.find(
-                          (item) => item.id === proveedorId,
-                        )
-                        return (
-                          <button
-                            key={proveedorId}
-                            type="button"
-                            onClick={() => handleGenerar(proveedorId)}
-                            disabled={generandoProveedor !== null}
-                            className="btn btn-primary"
-                          >
-                            {generandoProveedor === proveedorId
-                              ? 'Generando…'
-                              : `Generar orden · ${proveedor?.nombre}`}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGenerarTodas}
+                      disabled={generandoProveedor !== null}
+                      className="btn btn-primary"
+                    >
+                      {generandoProveedor === 'todos' ? 'Generando compras…' : 'Generar compras'}
+                    </button>
                   </div>
                 )}
               </div>
 
               {seleccionados > 0 && (
-                <div className="mt-4 space-y-2 md:hidden">
-                  {proveedoresSeleccionados.map((proveedorId) => {
-                    const proveedor = proveedores.find(
-                      (item) => item.id === proveedorId,
-                    )
-                    return (
-                      <button
-                        key={proveedorId}
-                        type="button"
-                        onClick={() => handleGenerar(proveedorId)}
-                        disabled={generandoProveedor !== null}
-                        className="btn btn-primary w-full"
-                      >
-                        {generandoProveedor === proveedorId
-                          ? 'Generando…'
-                          : `Generar orden · ${proveedor?.nombre}`}
-                      </button>
-                    )
-                  })}
+                <div className="mt-4 md:hidden">
+                  <button
+                    type="button"
+                    onClick={handleGenerarTodas}
+                    disabled={generandoProveedor !== null}
+                    className="btn btn-primary w-full"
+                  >
+                    {generandoProveedor === 'todos' ? 'Generando compras…' : 'Generar compras'}
+                  </button>
                 </div>
               )}
             </>
