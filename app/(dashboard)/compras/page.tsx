@@ -16,6 +16,14 @@ type ProductoCompra = {
   unidad_medida: string | null
 }
 
+type RequisicionActiva = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  clientes: Relacion<{ nombre: string }>
+}
+
 type OrdenCompraCruda = {
   id: string
   folio: string
@@ -65,7 +73,8 @@ export default async function ComprasPage() {
   const [
     { data: rawProveedores },
     { data: rawRelaciones },
-    { data: ordenesCompra }
+    { data: ordenesCompra },
+    { data: requisicionesCrudas }
   ] = await Promise.all([
     supabase.from('proveedores').select('id, nombre'),
     supabase.from('producto_proveedores').select('*'),
@@ -93,6 +102,7 @@ export default async function ComprasPage() {
       faltantes={faltantes} 
       proveedores={proveedores || []} 
       ordenesCompra={normalizarOrdenes(ordenesCompra)}
+      requisiciones={normalizarRequisiciones(requisicionesCrudas)}
     />
   )
 }
@@ -111,5 +121,13 @@ function normalizarOrdenes(ordenes: OrdenCompraCruda[] | null) {
         ? item.productos[0] ?? null
         : item.productos,
     })),
+  }))
+}
+function normalizarRequisiciones(ordenes: RequisicionActiva[] | null) {
+  return (ordenes || []).map((orden) => ({
+    ...orden,
+    clientes: Array.isArray(orden.clientes)
+      ? orden.clientes[0] ?? null
+      : orden.clientes,
   }))
 }
