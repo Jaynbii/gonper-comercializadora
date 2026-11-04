@@ -13,7 +13,8 @@ import {
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import PageHeader from '@/components/ui/PageHeader'
-import { subirYProcesarPDF } from './actions'
+import { crearUrlSubidaPDF, registrarOrdenConPDF } from './actions'
+import { createClient as createSupabaseClient } from '@/utils/supabase/client'
 import { crearCliente } from '@/app/(dashboard)/clientes/actions'
 
 type Cliente = { id: string; nombre: string }
@@ -59,23 +60,58 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
     if (!file) {
       setErrorMsg('Debes seleccionar un archivo primero.')
+      return
+    }
+
+    if (!clienteSeleccionado) {
+      setErrorMsg('Debes seleccionar un cliente.')
       return
     }
 
     setIsUploading(true)
     setErrorMsg('')
 
-    const formData = new FormData(e.currentTarget)
-    formData.append('pdf', file)
-    const result = await subirYProcesarPDF(formData)
+    try {
+      // El servidor genera un permiso temporal; el archivo no pasa por Vercel.
+      const preparacion = await crearUrlSubidaPDF(file.name)
 
-    if (result?.error) {
-      setErrorMsg(result.error)
-      setIsUploading(false)
-    } else {
+      if (preparacion?.error || !preparacion?.path || !preparacion?.token) {
+        setErrorMsg(preparacion?.error || 'No se pudo preparar la subida del archivo.')
+        return
+      }
+
+      const supabase = createSupabaseClient()
+      const { error: uploadError } = await supabase.storage
+        .from('pdf-facturas')
+        .uploadToSignedUrl(preparacion.path, preparacion.token, file, {
+          contentType: file.type || 'application/octet-stream',
+        })
+
+      if (uploadError) {
+        console.error('Error al subir archivo a Supabase:', uploadError)
+        setErrorMsg('No se pudo subir el archivo: ' + uploadError.message)
+        return
+      }
+
+      const resultado = await registrarOrdenConPDF(
+        clienteSeleccionado,
+        preparacion.path,
+      )
+
+      if (resultado?.error) {
+        setErrorMsg(resultado.error)
+        return
+      }
+
       router.push('/ordenes')
+    } catch (error) {
+      console.error('Error durante la carga del archivo:', error)
+      setErrorMsg('Ocurrió un error durante la subida. Verifica tu conexión e inténtalo nuevamente.')
+    } finally {
+      setIsUploading(false)
     }
   }
 
