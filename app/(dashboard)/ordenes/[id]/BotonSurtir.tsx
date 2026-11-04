@@ -1,38 +1,91 @@
 'use client'
 
 import { useState } from 'react'
-import { surtirOrden } from '../actions'
 import { useRouter } from 'next/navigation'
+import { PackageCheck, TriangleAlert } from 'lucide-react'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { surtirOrden } from '../actions'
 
-export default function BotonSurtir({ ordenId, esParcial }: { ordenId: string, esParcial: boolean }) {
+export default function BotonSurtir({
+  ordenId,
+  esParcial,
+}: {
+  ordenId: string
+  esParcial: boolean
+}) {
   const [isLoading, setIsLoading] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
   const router = useRouter()
 
   const handleSurtir = async () => {
-    const mensaje = esParcial 
-      ? '⚠️ ALERTA: No tienes stock suficiente para todos los artículos. Se hará un surtido PARCIAL. ¿Continuar?'
-      : '¿Estás seguro de surtir esta orden? El inventario se descontará automáticamente.'
-
-    if (!confirm(mensaje)) return
-    
     setIsLoading(true)
+    setErrorMsg('')
+
     try {
       await surtirOrden(ordenId)
+      setConfirmOpen(false)
       router.refresh()
-    } catch (error: any) {
-      alert(error.message)
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error ? error.message : 'No se pudo surtir la orden.',
+      )
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <button 
-      onClick={handleSurtir} 
-      disabled={isLoading}
-      className={`${esParcial ? 'bg-orange-500 hover:bg-orange-600' : 'bg-emerald-600 hover:bg-emerald-700'} text-white px-6 py-2 rounded-lg font-bold shadow-sm disabled:bg-gray-400 transition-colors`}
-    >
-      {isLoading ? 'Surtiendo...' : esParcial ? '⚠️ Surtir Parcial' : '✅ Surtir Orden Completa'}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setErrorMsg('')
+          setConfirmOpen(true)
+        }}
+        className={`btn ${
+          esParcial
+            ? 'border border-gonper-warning-border bg-gonper-warning-bg text-gonper-warning hover:bg-gonper-warning-bg/70'
+            : 'btn-primary'
+        }`}
+      >
+        {esParcial ? (
+          <TriangleAlert className="h-4 w-4" strokeWidth={1.75} />
+        ) : (
+          <PackageCheck className="h-4 w-4" strokeWidth={1.75} />
+        )}
+        {esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+      </button>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+        description="El inventario se descontará automáticamente."
+        confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir orden'}
+        pendingLabel="Surtiendo…"
+        tono="primary"
+        pending={isLoading}
+        error={errorMsg}
+        onConfirm={handleSurtir}
+        onClose={() => {
+          if (isLoading) return
+          setConfirmOpen(false)
+          setErrorMsg('')
+        }}
+      >
+        {esParcial ? (
+          <>
+            No hay stock suficiente para todos los artículos. Se surtirá solo lo
+            disponible y la orden quedará como{' '}
+            <strong className="font-semibold">parcial</strong>. ¿Continuar?
+          </>
+        ) : (
+          <>
+            Se descontarán del inventario las cantidades solicitadas de esta
+            orden. ¿Continuar?
+          </>
+        )}
+      </ConfirmDialog>
+    </>
   )
 }

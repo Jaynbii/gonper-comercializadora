@@ -1,16 +1,29 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import {
+  CheckCircle2,
+  ChevronLeft,
+  FileText,
+  Loader2,
+  Upload,
+  UserPlus,
+} from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+import PageHeader from '@/components/ui/PageHeader'
 import { subirYProcesarPDF } from './actions'
 import { crearCliente } from '@/app/(dashboard)/clientes/actions'
 
-export default function UploadClient({ clientes }: { clientes: { id: string, nombre: string }[] }) {
+type Cliente = { id: string; nombre: string }
+
+export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
   const [file, setFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
-  
+
   // Estados para manejar la lista de clientes en vivo y el seleccionado
   const [listaClientes, setListaClientes] = useState(clientes)
   const [clienteSeleccionado, setClienteSeleccionado] = useState('')
@@ -27,30 +40,40 @@ export default function UploadClient({ clientes }: { clientes: { id: string, nom
     return file.type === 'application/pdf' || file.type.startsWith('image/')
   }
 
+  const seleccionarArchivo = (archivo: File) => {
+    if (isValidFile(archivo)) {
+      setFile(archivo)
+      setErrorMsg('')
+    } else {
+      setErrorMsg('Sube únicamente archivos PDF o imágenes (JPG, PNG).')
+    }
+  }
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const droppedFile = e.dataTransfer.files[0]
-      if (isValidFile(droppedFile)) {
-        setFile(droppedFile); setErrorMsg('')
-      } else {
-        setErrorMsg('Por favor, sube únicamente archivos PDF o imágenes (JPG, PNG).')
-      }
+      seleccionarArchivo(e.dataTransfer.files[0])
     }
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!file) { setErrorMsg('Debes seleccionar un archivo primero.'); return }
-    setIsUploading(true); setErrorMsg('')
-    
+    if (!file) {
+      setErrorMsg('Debes seleccionar un archivo primero.')
+      return
+    }
+
+    setIsUploading(true)
+    setErrorMsg('')
+
     const formData = new FormData(e.currentTarget)
-    formData.append('pdf', file) 
+    formData.append('pdf', file)
     const result = await subirYProcesarPDF(formData)
-    
+
     if (result?.error) {
-      setErrorMsg(result.error); setIsUploading(false)
+      setErrorMsg(result.error)
+      setIsUploading(false)
     } else {
       router.push('/ordenes')
     }
@@ -63,145 +86,282 @@ export default function UploadClient({ clientes }: { clientes: { id: string, nom
     setErrorMsgCliente('')
 
     const result = await crearCliente(new FormData(e.currentTarget))
-    
+
     if (result?.error) {
       setErrorMsgCliente(result.error)
       setIsCreatingCliente(false)
-    } else if (result?.success && result.cliente) {
-      // Agregamos el nuevo cliente a la lista local ordenada alfabéticamente
-      const nuevosClientes = [...listaClientes, result.cliente].sort((a, b) => a.nombre.localeCompare(b.nombre))
-      setListaClientes(nuevosClientes)
-      
-      // Seleccionamos automáticamente el cliente recién creado en el combobox
-      setClienteSeleccionado(result.cliente.id)
-      
-      // Cerramos el modal y limpiamos
-      setIsClienteModalOpen(false)
-      setIsCreatingCliente(false)
+      return
     }
+
+    if (result?.success && result.cliente) {
+      const nuevosClientes = [...listaClientes, result.cliente as Cliente].sort(
+        (a, b) => a.nombre.localeCompare(b.nombre),
+      )
+      setListaClientes(nuevosClientes)
+      setClienteSeleccionado(result.cliente.id)
+      setIsClienteModalOpen(false)
+    }
+
+    setIsCreatingCliente(false)
   }
 
   return (
-    <div className="max-w-3xl mx-auto pb-20 md:pb-0">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gonper-text">Subir Requerimiento</h1>
-        <p className="text-sm text-gonper-muted mt-1">Sube el PDF o la foto del requerimiento recibido por WhatsApp.</p>
-      </div>
-      
-      <form onSubmit={handleSubmit} className="bg-gonper-surface p-6 md:p-8 rounded-xl border border-gonper-border shadow-sm">
-        
-        {/* SELECTOR DE CLIENTE + BOTÓN NUEVO */}
-        <div className="mb-8">
-          <label className="block text-sm font-medium text-gonper-text mb-2">¿De qué mercado es este requerimiento?</label>
-          <div className="flex gap-2 flex-col sm:flex-row">
-            <select 
-              name="cliente_id" 
-              required 
+    <div className="mx-auto max-w-[760px] pb-6">
+      <Link
+        href="/ordenes"
+        className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+        Volver a órdenes
+      </Link>
+
+      <PageHeader
+        eyebrow="Requerimiento recibido"
+        title="Nuevo requerimiento"
+      />
+
+      <form onSubmit={handleSubmit} className="card mt-5 overflow-hidden">
+        <div className="border-b border-gonper-border p-5 sm:p-6">
+          <label className="field-label" htmlFor="cliente_id">
+            ¿De qué mercado es este requerimiento?
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              id="cliente_id"
+              name="cliente_id"
+              required
               value={clienteSeleccionado}
               onChange={(e) => setClienteSeleccionado(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gonper-border rounded-lg focus:outline-none focus:ring-2 focus:ring-gonper-primary bg-white"
+              className="field flex-1"
             >
-              <option value="">Selecciona un cliente...</option>
-              {listaClientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              <option value="">Selecciona un cliente…</option>
+              {listaClientes.map((cliente) => (
+                <option key={cliente.id} value={cliente.id}>
+                  {cliente.nombre}
+                </option>
+              ))}
             </select>
-            
+
             <button
               type="button"
-              onClick={() => setIsClienteModalOpen(true)}
-              className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gonper-text border border-gonper-border rounded-lg font-medium whitespace-nowrap transition-colors flex items-center justify-center gap-1"
+              onClick={() => {
+                setErrorMsgCliente('')
+                setIsClienteModalOpen(true)
+              }}
+              className="btn btn-quiet shrink-0"
             >
-              <span className="text-lg">+</span> Nuevo Cliente
+              <UserPlus className="h-4 w-4" strokeWidth={1.75} />
+              Nuevo cliente
             </button>
           </div>
         </div>
 
-        {/* DRAG & DROP ZONE */}
-        <div 
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }} 
-          onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }} 
-          onDrop={handleDrop} 
-          onClick={() => fileInputRef.current?.click()} 
-          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors flex flex-col items-center justify-center min-h-62.5 ${
-            isDragging ? 'border-gonper-primary bg-gonper-primary/5' : 
-            file ? 'border-emerald-500 bg-emerald-50' : 
-            'border-gonper-border hover:border-gonper-primary/50 hover:bg-gonper-bg'
-          }`}
-        >
-          <input 
-            type="file" 
-            accept=".pdf, image/*" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                if (isValidFile(e.target.files[0])) { setFile(e.target.files[0]); setErrorMsg('') }
-                else { setErrorMsg('Por favor, sube únicamente archivos PDF o imágenes.') }
-              }
-            }} 
-          />
-          
-          {file ? (
-            <>
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mb-4">✓</div>
-              <p className="font-bold text-gonper-text text-lg">{file.name}</p>
-              <p className="text-sm text-gonper-muted mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-              <p className="text-sm text-gonper-primary mt-4 font-medium">Haz clic para cambiar el archivo</p>
-            </>
-          ) : (
-            <>
-              <div className="w-16 h-16 bg-gonper-bg text-gonper-muted rounded-full flex items-center justify-center text-3xl mb-4">📸</div>
-              <p className="font-bold text-gonper-text text-lg">Arrastra y suelta tu PDF o Foto aquí</p>
-              <p className="text-sm text-gonper-muted mt-1">o haz clic para buscar en tu dispositivo</p>
-            </>
+        <div className="p-5 sm:p-6">
+          <label
+            htmlFor="archivo-requerimiento"
+            onDragOver={(e) => {
+              e.preventDefault()
+              setIsDragging(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              setIsDragging(false)
+            }}
+            onDrop={handleDrop}
+            className={`flex min-h-[15rem] cursor-pointer flex-col items-center justify-center rounded-[8px] border-2 border-dashed px-5 py-10 text-center transition-colors duration-[140ms] focus-within:border-gonper-primary ${
+              isDragging
+                ? 'border-gonper-primary bg-gonper-primary/[0.04]'
+                : file
+                  ? 'border-gonper-success-border bg-gonper-success-bg/60'
+                  : 'border-gonper-border hover:border-gonper-muted/50 hover:bg-gonper-bg/60'
+            }`}
+          >
+            <input
+              id="archivo-requerimiento"
+              type="file"
+              accept=".pdf, image/*"
+              className="sr-only"
+              ref={fileInputRef}
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  seleccionarArchivo(e.target.files[0])
+                }
+              }}
+            />
+
+            {file ? (
+              <>
+                <span className="grid h-14 w-14 place-items-center rounded-full bg-gonper-success-bg text-gonper-success">
+                  <CheckCircle2 className="h-7 w-7" strokeWidth={1.75} />
+                </span>
+                <p className="mt-4 flex max-w-full items-center gap-2 text-[14px] font-semibold">
+                  <FileText
+                    className="h-4 w-4 shrink-0 text-gonper-success"
+                    strokeWidth={1.75}
+                  />
+                  <span className="truncate">{file.name}</span>
+                </p>
+                <p className="mt-1 text-[12.5px] text-gonper-muted">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+                <p className="mt-4 text-[12.5px] font-medium text-gonper-primary">
+                  Haz clic para cambiar el archivo
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="grid h-14 w-14 place-items-center rounded-full bg-gonper-surface-muted text-gonper-muted">
+                  <Upload className="h-6 w-6" strokeWidth={1.6} />
+                </span>
+                <p className="mt-4 text-[14px] font-semibold">
+                  Arrastra el PDF o la foto aquí
+                </p>
+                <p className="mt-1 text-[12.5px] text-gonper-muted">
+                  o haz clic para buscar en tu dispositivo
+                </p>
+                <p className="mt-4 text-[11.5px] text-gonper-muted">
+                  PDF, JPG o PNG
+                </p>
+              </>
+            )}
+          </label>
+
+          {errorMsg && (
+            <p
+              role="alert"
+              className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger"
+            >
+              {errorMsg}
+            </p>
           )}
         </div>
 
-        {errorMsg && <p className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">{errorMsg}</p>}
-        
-        <div className="mt-8 flex flex-col md:flex-row justify-end gap-4">
-          <button type="button" onClick={() => router.back()} className="px-6 py-3 text-gonper-muted font-medium hover:bg-gonper-bg rounded-lg w-full md:w-auto order-2 md:order-1">Cancelar</button>
-          <button type="submit" disabled={!file || isUploading} className="bg-gonper-primary hover:bg-gonper-primary-hover disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-8 rounded-lg w-full md:w-auto order-1 md:order-2 flex justify-center items-center gap-2">
-            {isUploading ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Subiendo archivo...</> : 'Subir Archivo'}
+        <div className="flex flex-col-reverse gap-2 border-t border-gonper-border bg-gonper-bg/60 p-5 sm:flex-row sm:justify-end sm:p-6">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            disabled={isUploading}
+            className="btn btn-quiet w-full sm:w-auto"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={!file || isUploading}
+            className="btn btn-primary w-full sm:w-auto"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                Subiendo…
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" strokeWidth={1.75} />
+                Subir archivo
+              </>
+            )}
           </button>
         </div>
       </form>
 
-      {/* MODAL PARA NUEVO CLIENTE */}
-      {isClienteModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
-          <div className="bg-gonper-surface w-full max-w-md rounded-t-2xl md:rounded-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gonper-text">Agregar Nuevo Cliente</h2>
-              <button type="button" onClick={() => setIsClienteModalOpen(false)} className="text-gonper-muted hover:text-red-500 text-2xl leading-none">&times;</button>
-            </div>
-            
-            <form onSubmit={handleCrearCliente} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre de la Dependencia o Mercado *</label>
-                <input name="nombre" required className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" placeholder="Ej. Mercado Municipal..." />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre del Contacto</label>
-                <input name="contacto_nombre" className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" placeholder="Ej. Juan Pérez" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Teléfono</label>
-                <input name="telefono" className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" placeholder="Ej. 6691234567" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Dirección</label>
-                <input name="direccion" className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" placeholder="Ej. Calle Juárez #123" />
-              </div>
-              
-              {errorMsgCliente && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{errorMsgCliente}</p>}
-              
-              <button type="submit" disabled={isCreatingCliente} className="mt-4 w-full bg-gonper-primary text-white font-semibold py-3 rounded-lg hover:bg-gonper-primary-hover disabled:bg-gray-400">
-                {isCreatingCliente ? 'Guardando...' : 'Guardar Cliente'}
-              </button>
-            </form>
+      <Modal
+        open={isClienteModalOpen}
+        onClose={() => {
+          if (isCreatingCliente) return
+          setIsClienteModalOpen(false)
+          setErrorMsgCliente('')
+        }}
+        title="Nuevo cliente"
+        description="Regístralo una sola vez y quedará disponible en todos los requerimientos."
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                if (isCreatingCliente) return
+                setIsClienteModalOpen(false)
+                setErrorMsgCliente('')
+              }}
+              disabled={isCreatingCliente}
+              className="btn btn-quiet flex-1 sm:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="cliente-rapido-form"
+              disabled={isCreatingCliente}
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              {isCreatingCliente ? 'Guardando…' : 'Guardar cliente'}
+            </button>
+          </>
+        }
+      >
+        <form
+          id="cliente-rapido-form"
+          key={isClienteModalOpen ? 'abierto' : 'cerrado'}
+          onSubmit={handleCrearCliente}
+          className="px-5 py-5"
+        >
+          <div>
+            <label className="field-label" htmlFor="nuevo-cliente-nombre">
+              Nombre de la dependencia o mercado
+            </label>
+            <input
+              id="nuevo-cliente-nombre"
+              name="nombre"
+              required
+              className="field"
+              placeholder="Mercado Municipal"
+            />
           </div>
-        </div>
-      )}
+
+          <div className="mt-4">
+            <label className="field-label" htmlFor="nuevo-cliente-contacto">
+              Nombre del contacto
+            </label>
+            <input
+              id="nuevo-cliente-contacto"
+              name="contacto_nombre"
+              className="field"
+              placeholder="Juan Pérez"
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="field-label" htmlFor="nuevo-cliente-telefono">
+                Teléfono
+              </label>
+              <input
+                id="nuevo-cliente-telefono"
+                name="telefono"
+                className="field"
+                placeholder="669 123 4567"
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="nuevo-cliente-direccion">
+                Dirección
+              </label>
+              <input
+                id="nuevo-cliente-direccion"
+                name="direccion"
+                className="field"
+                placeholder="Calle Juárez 123"
+              />
+            </div>
+          </div>
+
+          {errorMsgCliente && (
+            <p className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+              {errorMsgCliente}
+            </p>
+          )}
+        </form>
+      </Modal>
     </div>
   )
 }

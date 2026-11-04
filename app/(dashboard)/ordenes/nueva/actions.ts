@@ -55,7 +55,7 @@ export async function subirYProcesarPDF(formData: FormData) {
     revalidatePath('/ordenes')
     return { success: true }
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error inesperado:', err)
     return { error: 'Ocurrió un error inesperado en el servidor.' }
   }

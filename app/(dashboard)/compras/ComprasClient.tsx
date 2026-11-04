@@ -1,30 +1,111 @@
-
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  AlertCircle,
+  CheckCircle2,
+  Package,
+  ReceiptText,
+  Truck,
+  X,
+} from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+import EmptyState from '@/components/ui/EmptyState'
+import PageHeader from '@/components/ui/PageHeader'
+import { Badge } from '@/components/EstadoBadge'
 import { generarOrdenCompra, recibirMercancia } from './actions'
 
-export default function ComprasClient({ faltantes, proveedores, ordenesCompra }: any) {
+type Proveedor = {
+  id: string
+  nombre: string
+  producto_proveedores?: {
+    producto_id: string
+    precio_unitario: number | string
+  }[]
+}
+
+type Faltante = {
+  id: string
+  nombre: string
+  sku: string
+  unidad_medida: string | null
+  faltante: number
+}
+
+type ItemCompra = {
+  id: string
+  cantidad_solicitada: number | string
+  cantidad_recibida: number | string
+  productos?: {
+    id: string
+    nombre: string
+    sku: string
+    unidad_medida: string | null
+  } | null
+}
+
+type OrdenCompra = {
+  id: string
+  folio: string
+  estado: string
+  total_estimado: number | string
+  created_at: string
+  proveedores?: { nombre: string } | null
+  orden_compra_items?: ItemCompra[]
+}
+
+const moneda = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+})
+
+const numero = new Intl.NumberFormat('es-MX', {
+  maximumFractionDigits: 2,
+})
+
+const fecha = new Intl.DateTimeFormat('es-MX', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+
+export default function ComprasClient({
+  faltantes,
+  proveedores,
+  ordenesCompra,
+}: {
+  faltantes: Faltante[]
+  proveedores: Proveedor[]
+  ordenesCompra: OrdenCompra[]
+}) {
+  const router = useRouter()
   const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
 
-  // Estados para generar órdenes de compra.
-  const [itemsSeleccionados, setItemsSeleccionados] = useState<Record<string, { proveedorId: string, cantidad: number, precio: number }>>({})
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [itemsSeleccionados, setItemsSeleccionados] = useState<
+    Record<string, { proveedorId: string; cantidad: number; precio: number }>
+  >({})
+  const [generandoProveedor, setGenerandoProveedor] = useState<string | null>(
+    null,
+  )
 
-  // Estados para recibir mercancía.
-  const [ordenActiva, setOrdenActiva] = useState<any | null>(null)
-  const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<string, number>>({})
+  const [ordenActiva, setOrdenActiva] = useState<OrdenCompra | null>(null)
+  const [cantidadesRecibidas, setCantidadesRecibidas] = useState<
+    Record<string, number>
+  >({})
   const [isReceiving, setIsReceiving] = useState(false)
+  const [errorRecepcion, setErrorRecepcion] = useState('')
 
-  // Selecciona proveedor y establece como cantidad inicial el faltante del producto.
-  const handleSelectProveedor = (productoId: string, proveedorId: string, faltante: number) => {
-    const prov = proveedores.find((p: any) => p.id === proveedorId)
-    const rel = (prov?.producto_proveedores || []).find((r: any) => r.producto_id === productoId)
-    const precio = rel ? rel.precio_unitario : 0
+  const [mensaje, setMensaje] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
-    // Si se selecciona la opción vacía, se elimina la selección del producto.
+  const handleSelectProveedor = (
+    productoId: string,
+    proveedorId: string,
+    faltante: number,
+  ) => {
     if (!proveedorId) {
-      setItemsSeleccionados(prev => {
+      setItemsSeleccionados((prev) => {
         const nuevos = { ...prev }
         delete nuevos[productoId]
         return nuevos
@@ -32,305 +113,651 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
       return
     }
 
-    setItemsSeleccionados(prev => ({
+    const proveedor = proveedores.find((item) => item.id === proveedorId)
+    const relacion = (proveedor?.producto_proveedores || []).find(
+      (item) => item.producto_id === productoId,
+    )
+
+    setItemsSeleccionados((prev) => ({
       ...prev,
       [productoId]: {
         proveedorId,
-        cantidad: faltante,
-        precio
-      }
+        cantidad: prev[productoId]?.cantidad ?? faltante,
+        precio: Number(relacion?.precio_unitario) || 0,
+      },
     }))
   }
 
-  // Actualiza manualmente la cantidad que se solicitará al proveedor.
   const handleCantidad = (productoId: string, cantidad: number) => {
-    setItemsSeleccionados(prev => ({
-      ...prev,
-      [productoId]: {
-        ...prev[productoId],
-        cantidad
+    setItemsSeleccionados((prev) => {
+      if (!prev[productoId]) return prev
+      return {
+        ...prev,
+        [productoId]: { ...prev[productoId], cantidad },
       }
-    }))
+    })
   }
 
-  // Genera una orden con los productos seleccionados para un proveedor.
   const handleGenerar = async (proveedorId: string) => {
     const itemsDelProveedor = Object.entries(itemsSeleccionados)
-      .filter(([_, data]) => data.proveedorId === proveedorId)
-      .map(([prodId, data]) => ({
-        producto_id: prodId,
+      .filter(([, data]) => data.proveedorId === proveedorId)
+      .map(([productoId, data]) => ({
+        producto_id: productoId,
         cantidad: data.cantidad,
-        precio: data.precio
+        precio: data.precio,
       }))
 
     if (itemsDelProveedor.length === 0) {
-      return alert('Selecciona al menos un producto')
+      setErrorMsg('Selecciona al menos un producto.')
+      return
     }
 
-    setIsGenerating(true)
+    setGenerandoProveedor(proveedorId)
+    setMensaje('')
+    setErrorMsg('')
 
     try {
       const res = await generarOrdenCompra(proveedorId, itemsDelProveedor)
-      alert(`Orden ${res.folio} generada con éxito`)
-      window.location.reload()
-    } catch (error: any) {
-      alert(error.message)
+      setMensaje(`Orden ${res.folio} generada con éxito.`)
+      setItemsSeleccionados((prev) => {
+        const nuevos = { ...prev }
+        itemsDelProveedor.forEach((item) => delete nuevos[item.producto_id])
+        return nuevos
+      })
+      router.refresh()
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error ? error.message : 'No se pudo generar la orden.',
+      )
     } finally {
-      setIsGenerating(false)
+      setGenerandoProveedor(null)
     }
   }
 
-  // Registra las cantidades de mercancía que llegaron del proveedor.
+  const abrirRecepcion = (orden: OrdenCompra) => {
+    setOrdenActiva(orden)
+    setErrorRecepcion('')
+    const inicial: Record<string, number> = {}
+    ;(orden.orden_compra_items || []).forEach((item) => {
+      inicial[item.id] = Number(item.cantidad_solicitada)
+    })
+    setCantidadesRecibidas(inicial)
+  }
+
   const handleRecibir = async () => {
-    const itemsAEntregar = ordenActiva.orden_compra_items.map((item: any) => ({
-      id: item.id,
-      producto_id: item.productos?.id,
-      cantidad_recibida: cantidadesRecibidas[item.id] || 0
-    })).filter((i: any) => i.cantidad_recibida > 0 && i.producto_id)
+    if (!ordenActiva) return
+
+    const itemsAEntregar = (ordenActiva.orden_compra_items || [])
+      .map((item) => ({
+        id: item.id,
+        producto_id: item.productos?.id,
+        cantidad_recibida: cantidadesRecibidas[item.id] || 0,
+      }))
+      .filter((item) => item.cantidad_recibida > 0 && item.producto_id)
 
     if (itemsAEntregar.length === 0) {
-      return alert('Ingresa al menos una cantidad recibida')
+      setErrorRecepcion('Ingresa al menos una cantidad recibida.')
+      return
     }
 
     setIsReceiving(true)
+    setErrorRecepcion('')
 
     try {
-      await recibirMercancia(ordenActiva.id, itemsAEntregar)
-      alert('Mercancía recibida y stock actualizado')
+      await recibirMercancia(
+        ordenActiva.id,
+        itemsAEntregar as Parameters<typeof recibirMercancia>[1],
+      )
+      setMensaje(`Mercancía de ${ordenActiva.folio} recibida y stock actualizado.`)
       setOrdenActiva(null)
-      window.location.reload()
-    } catch (error: any) {
-      alert(error.message)
+      router.refresh()
+    } catch (error) {
+      setErrorRecepcion(
+        error instanceof Error ? error.message : 'No se pudo recibir la mercancía.',
+      )
     } finally {
       setIsReceiving(false)
     }
   }
 
+  const seleccionados = Object.keys(itemsSeleccionados).length
+  const proveedoresSeleccionados = Array.from(
+    new Set(Object.values(itemsSeleccionados).map((item) => item.proveedorId)),
+  )
+
   return (
-    <div className="max-w-6xl mx-auto pb-20 md:pb-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gonper-text">Compras y Reabastecimiento</h1>
-          <p className="text-sm text-gonper-muted">Gestiona faltantes y recibe mercancía de proveedores</p>
-        </div>
-      </div>
+    <div className="mx-auto max-w-[1180px] pb-6">
+      <PageHeader
+        eyebrow={`${faltantes.length} ${
+          faltantes.length === 1 ? 'producto por reponer' : 'productos por reponer'
+        }`}
+        title="Compras"
+      />
 
-      {/* Pestañas de navegación. */}
-      <div className="flex border-b border-gonper-border mb-6">
+      <div className="mt-5 flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
         <button
+          type="button"
           onClick={() => setTab('sugerencias')}
-          className={`px-6 py-3 font-medium text-sm transition-colors ${tab === 'sugerencias' ? 'border-b-2 border-gonper-primary text-gonper-primary' : 'text-gonper-muted hover:text-gonper-text'}`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+            tab === 'sugerencias'
+              ? 'bg-gonper-primary text-white'
+              : 'text-gonper-muted hover:text-gonper-text'
+          }`}
         >
-          Sugerencia de Compra ({faltantes.length})
+          Sugerencias
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
+              tab === 'sugerencias'
+                ? 'bg-white/15 text-white'
+                : 'bg-gonper-surface-muted text-gonper-muted'
+            }`}
+          >
+            {faltantes.length}
+          </span>
         </button>
 
         <button
+          type="button"
           onClick={() => setTab('ordenes')}
-          className={`px-6 py-3 font-medium text-sm transition-colors ${tab === 'ordenes' ? 'border-b-2 border-gonper-primary text-gonper-primary' : 'text-gonper-muted hover:text-gonper-text'}`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+            tab === 'ordenes'
+              ? 'bg-gonper-primary text-white'
+              : 'text-gonper-muted hover:text-gonper-text'
+          }`}
         >
-          Órdenes de Compra Generadas
+          Órdenes
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
+              tab === 'ordenes'
+                ? 'bg-white/15 text-white'
+                : 'bg-gonper-surface-muted text-gonper-muted'
+            }`}
+          >
+            {ordenesCompra.length}
+          </span>
         </button>
       </div>
 
-      {/* Contenido de sugerencias de compra. */}
+      {(mensaje || errorMsg) && (
+        <div
+          className={`mt-4 flex items-start gap-2 rounded-[6px] border px-3.5 py-3 text-[12.5px] ${
+            mensaje
+              ? 'border-gonper-success-border bg-gonper-success-bg text-gonper-success'
+              : 'border-gonper-danger-border bg-gonper-danger-bg text-gonper-danger'
+          }`}
+        >
+          {mensaje ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+          ) : (
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+          )}
+          <p className="flex-1">{mensaje || errorMsg}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setMensaje('')
+              setErrorMsg('')
+            }}
+            className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+            aria-label="Cerrar aviso"
+          >
+            <X className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        </div>
+      )}
+
       {tab === 'sugerencias' && (
-        <div className="bg-gonper-surface rounded-xl border border-gonper-border shadow-sm overflow-hidden">
-          {faltantes.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-600 border-b border-gonper-border">
-                  <tr>
-                    <th className="p-4">Producto</th>
-                    <th className="p-4 text-center">Faltante</th>
-                    <th className="p-4">Proveedor y Precio</th>
-                    <th className="p-4 text-center">Cant. a Pedir</th>
-                  </tr>
-                </thead>
+        <div key="sugerencias" className="animate-fade mt-4">
+          {faltantes.length === 0 ? (
+            <div className="card">
+              <EmptyState
+                icon={<CheckCircle2 className="h-6 w-6" strokeWidth={1.5} />}
+                title="Sin faltantes"
+                description="El inventario cubre la demanda de las órdenes activas."
+              />
+            </div>
+          ) : (
+            <>
+              <div className="stagger grid grid-cols-1 gap-3 md:hidden">
+                {faltantes.map((producto) => {
+                  const seleccion = itemsSeleccionados[producto.id]
+                  const opciones = proveedores.filter((proveedor) =>
+                    (proveedor.producto_proveedores || []).some(
+                      (relacion) => relacion.producto_id === producto.id,
+                    ),
+                  )
 
-                <tbody className="divide-y divide-gonper-border">
-                  {faltantes.map((prod: any) => {
-                    const seleccion = itemsSeleccionados[prod.id]
+                  return (
+                    <article key={producto.id} className="card min-w-0 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h2 className="text-[14.5px] font-semibold leading-snug tracking-[-0.01em]">
+                            {producto.nombre}
+                          </h2>
+                          <p className="mt-1 font-mono text-[11.5px] text-gonper-muted">
+                            {producto.sku}
+                          </p>
+                        </div>
+                        <Badge tono="warning">
+                          Faltan {numero.format(producto.faltante)}
+                          {producto.unidad_medida
+                            ? ` ${producto.unidad_medida}`
+                            : ''}
+                        </Badge>
+                      </div>
 
-                    // Se muestran únicamente los proveedores relacionados con el producto.
-                    const opcionesProv = proveedores.filter((p: any) => {
-                      const relacion = (p.producto_proveedores || []).find((r: any) => r.producto_id === prod.id)
-                      return !!relacion
-                    })
-
-                    return (
-                      <tr key={prod.id} className="hover:bg-gray-50">
-                        <td className="p-4">
-                          <p className="font-bold text-gonper-text">{prod.nombre}</p>
-                          <p className="text-xs text-gonper-muted font-mono">{prod.sku}</p>
-                        </td>
-
-                        <td className="p-4 text-center font-bold text-red-600 bg-red-50 rounded-md my-2">
-                          {prod.faltante} <span className="text-xs font-normal">{prod.unidad_medida || ''}</span>
-                        </td>
-
-                        <td className="p-4">
-                          <select
-                            className="w-full px-2 py-1 border rounded text-sm bg-white"
-                            onChange={(e) => handleSelectProveedor(prod.id, e.target.value, Number(prod.faltante))}
-                            value={seleccion?.proveedorId || ''}
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label
+                            className="field-label"
+                            htmlFor={`prov-${producto.id}`}
                           >
-                            <option value="">Selecciona proveedor...</option>
-
-                            {opcionesProv.map((p: any) => {
-                              const relacion = (p.producto_proveedores || []).find((r: any) => r.producto_id === prod.id)
-                              const precio = relacion ? relacion.precio_unitario : 0
-
+                            Proveedor
+                          </label>
+                          <select
+                            id={`prov-${producto.id}`}
+                            className="field"
+                            value={seleccion?.proveedorId || ''}
+                            onChange={(e) =>
+                              handleSelectProveedor(
+                                producto.id,
+                                e.target.value,
+                                producto.faltante,
+                              )
+                            }
+                          >
+                            <option value="">Selecciona proveedor</option>
+                            {opciones.map((proveedor) => {
+                              const relacion = (
+                                proveedor.producto_proveedores || []
+                              ).find(
+                                (item) => item.producto_id === producto.id,
+                              )
                               return (
-                                <option key={p.id} value={p.id}>
-                                  {p.nombre} (${precio})
+                                <option key={proveedor.id} value={proveedor.id}>
+                                  {proveedor.nombre} ·{' '}
+                                  {moneda.format(
+                                    Number(relacion?.precio_unitario) || 0,
+                                  )}
                                 </option>
                               )
                             })}
                           </select>
-                        </td>
+                        </div>
 
-                        <td className="p-4 text-center">
+                        <div>
+                          <label
+                            className="field-label"
+                            htmlFor={`cant-${producto.id}`}
+                          >
+                            Cantidad a pedir
+                          </label>
                           <input
+                            id={`cant-${producto.id}`}
                             type="number"
                             min="1"
-                            value={seleccion?.cantidad ?? Number(prod.faltante)}
-                            onChange={(e) => handleCantidad(prod.id, Number(e.target.value))}
-                            className="w-20 px-2 py-1 border rounded text-center"
+                            step="0.01"
+                            className="field tabular-nums"
+                            value={seleccion?.cantidad ?? producto.faltante}
+                            onChange={(e) =>
+                              handleCantidad(producto.id, Number(e.target.value))
+                            }
+                            disabled={!seleccion}
                           />
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
+
+                      {seleccion && (
+                        <p className="mt-3 border-t border-gonper-border pt-2 text-right text-[12px] text-gonper-muted">
+                          Subtotal{' '}
+                          <span className="text-[13px] font-semibold tabular-nums text-gonper-text">
+                            {moneda.format(seleccion.precio * seleccion.cantidad)}
+                          </span>
+                        </p>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+
+              <div className="mt-5 hidden overflow-hidden rounded-[8px] border border-gonper-border bg-gonper-surface md:block">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                      <th className="px-5 py-3 font-medium">Producto</th>
+                      <th className="px-5 py-3 text-center font-medium">
+                        Faltante
+                      </th>
+                      <th className="px-5 py-3 font-medium">Proveedor y precio</th>
+                      <th className="px-5 py-3 text-center font-medium">
+                        Cantidad
+                      </th>
+                      <th className="px-5 py-3 text-right font-medium">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gonper-border">
+                    {faltantes.map((producto) => {
+                      const seleccion = itemsSeleccionados[producto.id]
+                      const opciones = proveedores.filter((proveedor) =>
+                        (proveedor.producto_proveedores || []).some(
+                          (relacion) => relacion.producto_id === producto.id,
+                        ),
+                      )
+
+                      return (
+                        <tr
+                          key={producto.id}
+                          className="transition-colors duration-[120ms] hover:bg-gonper-hover"
+                        >
+                          <td className="px-5 py-3">
+                            <p className="text-[13.5px] font-medium">
+                              {producto.nombre}
+                            </p>
+                            <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
+                              {producto.sku}
+                            </p>
+                          </td>
+                          <td className="px-5 py-3 text-center">
+                            <Badge tono="warning">
+                              {numero.format(producto.faltante)}
+                              {producto.unidad_medida
+                                ? ` ${producto.unidad_medida}`
+                                : ''}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-3">
+                            <select
+                              className="field h-10"
+                              value={seleccion?.proveedorId || ''}
+                              onChange={(e) =>
+                                handleSelectProveedor(
+                                  producto.id,
+                                  e.target.value,
+                                  producto.faltante,
+                                )
+                              }
+                              aria-label={`Proveedor para ${producto.nombre}`}
+                            >
+                              <option value="">Selecciona proveedor</option>
+                              {opciones.map((proveedor) => {
+                                const relacion = (
+                                  proveedor.producto_proveedores || []
+                                ).find(
+                                  (item) => item.producto_id === producto.id,
+                                )
+                                return (
+                                  <option key={proveedor.id} value={proveedor.id}>
+                                    {proveedor.nombre} ·{' '}
+                                    {moneda.format(
+                                      Number(relacion?.precio_unitario) || 0,
+                                    )}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                          </td>
+                          <td className="px-5 py-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              step="0.01"
+                              className="field h-10 w-24 text-center tabular-nums"
+                              value={seleccion?.cantidad ?? producto.faltante}
+                              onChange={(e) =>
+                                handleCantidad(
+                                  producto.id,
+                                  Number(e.target.value),
+                                )
+                              }
+                              disabled={!seleccion}
+                              aria-label={`Cantidad de ${producto.nombre}`}
+                            />
+                          </td>
+                          <td className="px-5 py-3 text-right text-[13px] font-semibold tabular-nums">
+                            {seleccion
+                              ? moneda.format(
+                                  seleccion.precio * seleccion.cantidad,
+                                )
+                              : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+
+                {seleccionados > 0 && (
+                  <div className="flex flex-col gap-3 border-t border-gonper-border bg-gonper-bg/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-[12.5px] text-gonper-muted">
+                      <span className="font-semibold text-gonper-text">
+                        {seleccionados}
+                      </span>{' '}
+                      {seleccionados === 1
+                        ? 'producto seleccionado'
+                        : 'productos seleccionados'}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {proveedoresSeleccionados.map((proveedorId) => {
+                        const proveedor = proveedores.find(
+                          (item) => item.id === proveedorId,
+                        )
+                        return (
+                          <button
+                            key={proveedorId}
+                            type="button"
+                            onClick={() => handleGenerar(proveedorId)}
+                            disabled={generandoProveedor !== null}
+                            className="btn btn-primary"
+                          >
+                            {generandoProveedor === proveedorId
+                              ? 'Generando…'
+                              : `Generar orden · ${proveedor?.nombre}`}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {seleccionados > 0 && (
+                <div className="mt-4 space-y-2 md:hidden">
+                  {proveedoresSeleccionados.map((proveedorId) => {
+                    const proveedor = proveedores.find(
+                      (item) => item.id === proveedorId,
+                    )
+                    return (
+                      <button
+                        key={proveedorId}
+                        type="button"
+                        onClick={() => handleGenerar(proveedorId)}
+                        disabled={generandoProveedor !== null}
+                        className="btn btn-primary w-full"
+                      >
+                        {generandoProveedor === proveedorId
+                          ? 'Generando…'
+                          : `Generar orden · ${proveedor?.nombre}`}
+                      </button>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === 'ordenes' && (
+        <div key="ordenes" className="animate-fade mt-4">
+          {ordenesCompra.length === 0 ? (
+            <div className="card">
+              <EmptyState
+                icon={<ReceiptText className="h-6 w-6" strokeWidth={1.5} />}
+                title="Sin órdenes de compra"
+                description="Genera una orden desde las sugerencias para empezar a reponer."
+              />
             </div>
           ) : (
-            <p className="p-8 text-center text-gonper-muted">
-              No hay faltantes de inventario en este momento.
-            </p>
-          )}
+            <div className="stagger grid grid-cols-1 gap-3">
+              {ordenesCompra.map((orden) => (
+                <article key={orden.id} className="card p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+                          {orden.proveedores?.nombre || 'Proveedor'}
+                        </h2>
+                        <Badge
+                          tono={
+                            orden.estado === 'RECIBIDA' ? 'success' : 'warning'
+                          }
+                        >
+                          {orden.estado === 'RECIBIDA'
+                            ? 'Recibida'
+                            : 'Pendiente'}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 font-mono text-[11.5px] text-gonper-muted">
+                        {orden.folio} ·{' '}
+                        {fecha.format(new Date(orden.created_at))}
+                      </p>
+                      <p className="mt-1 text-[12px] text-gonper-muted">
+                        {orden.orden_compra_items?.length || 0}{' '}
+                        {orden.orden_compra_items?.length === 1
+                          ? 'producto'
+                          : 'productos'}
+                      </p>
+                    </div>
 
-          {/* Botones para generar órdenes por proveedor. */}
-          {Object.keys(itemsSeleccionados).length > 0 && (
-            <div className="p-4 bg-gray-50 border-t border-gonper-border flex flex-wrap gap-4 justify-end">
-              {Array.from(new Set(Object.values(itemsSeleccionados).map(i => i.proveedorId))).map(provId => {
-                const prov = proveedores.find((p: any) => p.id === provId)
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <div className="text-left sm:text-right">
+                        <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                          Total estimado
+                        </p>
+                        <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
+                          {moneda.format(Number(orden.total_estimado))}
+                        </p>
+                      </div>
 
-                return (
-                  <button
-                    key={provId}
-                    onClick={() => handleGenerar(provId)}
-                    disabled={isGenerating}
-                    className="bg-gonper-primary text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gonper-primary-hover"
-                  >
-                    Generar Orden para {prov?.nombre}
-                  </button>
-                )
-              })}
+                      {orden.estado === 'PENDIENTE' && (
+                        <button
+                          type="button"
+                          onClick={() => abrirRecepcion(orden)}
+                          className="btn btn-quiet"
+                        >
+                          <Truck className="h-4 w-4" strokeWidth={1.75} />
+                          Recibir
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Contenido de órdenes de compra generadas. */}
-      {tab === 'ordenes' && (
-        <div className="bg-gonper-surface rounded-xl border border-gonper-border shadow-sm overflow-hidden">
-          <div className="divide-y divide-gonper-border">
-            {ordenesCompra.map((oc: any) => (
-              <div key={oc.id} className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <p className="font-bold text-gonper-text">{oc.proveedores?.nombre}</p>
-                  <p className="text-xs text-gonper-muted font-mono">{oc.folio}</p>
-                  <p className="text-xs text-gonper-muted mt-1">Total: ${oc.total_estimado}</p>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${oc.estado === 'RECIBIDA' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {oc.estado}
-                  </span>
-
-                  {oc.estado === 'PENDIENTE' && (
-                    <button
-                      onClick={() => {
-                        setOrdenActiva(oc)
-                        const init: Record<string, number> = {}
-                        oc.orden_compra_items.forEach((i: any) => {
-                          init[i.id] = i.cantidad_solicitada
-                        })
-                        setCantidadesRecibidas(init)
-                      }}
-                      className="bg-gonper-primary text-white px-4 py-2 rounded-lg text-sm font-bold"
-                    >
-                      Recibir Mercancía
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {ordenesCompra.length === 0 && (
-              <p className="p-8 text-center text-gonper-muted">
-                No hay órdenes de compra generadas.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal para recibir mercancía. */}
-      {ordenActiva && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold mb-4">
-              Recibir Mercancía - {ordenActiva.folio}
-            </h2>
-
-            <p className="text-sm text-gray-500 mb-4">
+      <Modal
+        open={!!ordenActiva}
+        onClose={() => {
+          if (isReceiving) return
+          setOrdenActiva(null)
+          setErrorRecepcion('')
+        }}
+        title="Recibir mercancía"
+        description={`${ordenActiva?.folio || ''}${
+          ordenActiva?.proveedores?.nombre
+            ? ` · ${ordenActiva.proveedores.nombre}`
+            : ''
+        }`}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                if (isReceiving) return
+                setOrdenActiva(null)
+                setErrorRecepcion('')
+              }}
+              disabled={isReceiving}
+              className="btn btn-quiet flex-1 sm:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleRecibir}
+              disabled={isReceiving}
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              <Truck className="h-4 w-4" strokeWidth={1.75} />
+              {isReceiving ? 'Guardando…' : 'Confirmar recepción'}
+            </button>
+          </>
+        }
+      >
+        {ordenActiva && (
+          <div className="px-5 py-5">
+            <p className="text-[12.5px] text-gonper-muted">
               Confirma las cantidades que llegaron para actualizar el inventario.
             </p>
 
-            <div className="flex flex-col gap-3 max-h-60 overflow-y-auto mb-6">
-              {ordenActiva.orden_compra_items.map((item: any) => (
-                <div key={item.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                  <div>
-                    <p className="font-semibold text-sm">{item.productos?.nombre}</p>
-                    <p className="text-xs text-gray-500">
-                      Solicitado: {item.cantidad_solicitada} {item.productos?.unidad_medida || ''}
+            <div className="mt-4 space-y-2">
+              {ordenActiva.orden_compra_items?.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-[6px] border border-gonper-border bg-gonper-bg/50 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium">
+                      {item.productos?.nombre}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
+                      Solicitado {numero.format(Number(item.cantidad_solicitada))}{' '}
+                      {item.productos?.unidad_medida || ''}
                     </p>
                   </div>
 
                   <input
                     type="number"
-                    className="w-20 px-2 py-1 border rounded text-center font-bold"
-                    value={cantidadesRecibidas[item.id] || 0}
-                    onChange={(e) => setCantidadesRecibidas({
-                      ...cantidadesRecibidas,
-                      [item.id]: Number(e.target.value)
-                    })}
+                    min="0"
+                    step="0.01"
+                    className="field h-10 w-24 shrink-0 text-center font-semibold tabular-nums"
+                    value={cantidadesRecibidas[item.id] ?? 0}
+                    onChange={(e) =>
+                      setCantidadesRecibidas({
+                        ...cantidadesRecibidas,
+                        [item.id]: Number(e.target.value),
+                      })
+                    }
+                    aria-label={`Cantidad recibida de ${item.productos?.nombre}`}
                   />
                 </div>
               ))}
+
+              {(!ordenActiva.orden_compra_items ||
+                ordenActiva.orden_compra_items.length === 0) && (
+                <div className="rounded-[6px] border border-dashed border-gonper-border px-4 py-10 text-center">
+                  <Package
+                    className="mx-auto h-6 w-6 text-gonper-muted"
+                    strokeWidth={1.5}
+                  />
+                  <p className="mt-2 text-[13px] font-medium">
+                    Esta orden no tiene artículos.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setOrdenActiva(null)}
-                className="px-4 py-2 text-gray-600 font-medium"
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={handleRecibir}
-                disabled={isReceiving}
-                className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold disabled:bg-gray-400"
-              >
-                {isReceiving ? 'Guardando...' : 'Confirmar Recepción'}
-              </button>
-            </div>
+            {errorRecepcion && (
+              <p className="mt-3 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+                {errorRecepcion}
+              </p>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   )
 }

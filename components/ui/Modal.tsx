@@ -11,6 +11,7 @@ type ModalProps = {
   children: ReactNode
   footer?: ReactNode
   variant?: 'dialog' | 'sheet'
+  size?: 'normal' | 'wide'
 }
 
 /**
@@ -25,6 +26,7 @@ export default function Modal({
   children,
   footer,
   variant = 'dialog',
+  size = 'normal',
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const cerrandoPorCodigo = useRef(false)
@@ -52,7 +54,9 @@ export default function Modal({
   return (
     <dialog
       ref={ref}
-      className={variant === 'sheet' ? 'sheet-panel' : 'modal-panel'}
+      className={`${variant === 'sheet' ? 'sheet-panel' : 'modal-panel'} ${
+        size === 'wide' ? 'modal-wide' : ''
+      }`}
       aria-labelledby={titleId}
       onClose={() => {
         if (cerrandoPorCodigo.current) {
@@ -91,7 +95,7 @@ export default function Modal({
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-gonper-border bg-gonper-bg/60 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gonper-border bg-gonper-bg/60 px-5 py-3">
             {footer}
           </div>
         )}

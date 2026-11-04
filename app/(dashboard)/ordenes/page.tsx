@@ -1,90 +1,150 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
+import { FilePlus2, FileText, Plus, Upload } from 'lucide-react'
 import VerPdfButton from './VerPdfButton'
 import ProcesarPdfButton from './ProcesarPdfButton'
 import AccionesOrden from './AccionesOrden'
+import EstadoBadge from '@/components/EstadoBadge'
+import EmptyState from '@/components/ui/EmptyState'
+import Fab from '@/components/ui/Fab'
+import PageHeader from '@/components/ui/PageHeader'
+
+type Orden = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  pdf_path: string | null
+  cliente_id: string
+  clientes: { nombre: string } | { nombre: string }[] | null
+}
+
+const fecha = new Intl.DateTimeFormat('es-MX', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+
+const nombreCliente = (clientes: Orden['clientes']) => {
+  if (!clientes) return 'Cliente desconocido'
+  return Array.isArray(clientes)
+    ? clientes[0]?.nombre || 'Cliente desconocido'
+    : clientes.nombre
+}
 
 export default async function OrdenesPage() {
   const supabase = await createClient()
-  
+
   const { data: ordenes, error } = await supabase
     .from('ordenes')
-    .select(`id, folio, estado, created_at, pdf_path, cliente_id, clientes (nombre)`)
+    .select(
+      `id, folio, estado, created_at, pdf_path, cliente_id, clientes (nombre)`,
+    )
     .order('created_at', { ascending: false })
 
   // Necesitamos la lista de clientes para el selector de edición
-  const { data: clientes } = await supabase.from('clientes').select('id, nombre').order('nombre')
+  const { data: clientes } = await supabase
+    .from('clientes')
+    .select('id, nombre')
+    .order('nombre')
 
-  const getBadgeColor = (estado: string) => {
-    switch (estado) {
-      case 'PENDIENTE': return 'bg-amber-100 text-amber-700'
-      case 'PARCIAL': return 'bg-orange-100 text-orange-700'
-      case 'ENTREGADA': return 'bg-emerald-100 text-emerald-700'
-      case 'CANCELADA': return 'bg-red-100 text-red-700'
-      case 'BORRADOR': return 'bg-gray-100 text-gray-700'
-      default: return 'bg-gray-100 text-gray-700'
-    }
-  }
+  const lista = (ordenes ?? []) as Orden[]
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 md:pb-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gonper-text">Órdenes y Requisiciones</h1>
-          <p className="text-sm text-gonper-muted">Historial de pedidos recibidos</p>
+    <div className="mx-auto max-w-[1180px] pb-6">
+      <PageHeader
+        eyebrow={`${lista.length} ${
+          lista.length === 1 ? 'requerimiento' : 'requerimientos'
+        } registrados`}
+        title="Órdenes"
+        action={
+          <Link href="/ordenes/nueva" className="btn btn-primary hidden sm:inline-flex">
+            <Upload className="h-4 w-4" strokeWidth={1.75} />
+            Subir requerimiento
+          </Link>
+        }
+      />
+
+      {error ? (
+        <div className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-4 py-3 text-[13px] text-gonper-danger">
+          No se pudieron cargar las órdenes. Intenta recargar la página.
         </div>
-        <Link href="/ordenes/nueva" className="bg-gonper-primary hover:bg-gonper-primary-hover text-white px-4 py-2 rounded-lg font-medium w-full md:w-auto text-center">+ Subir Requerimiento (PDF)</Link>
-      </div>
-
-      <div className="bg-gonper-surface rounded-xl border border-gonper-border shadow-sm overflow-hidden">
-        {error ? (
-          <div className="p-6 text-red-500">Error al cargar órdenes</div>
-        ) : ordenes && ordenes.length > 0 ? (
-          <div className="divide-y divide-gonper-border">
-            {ordenes.map((orden) => (
-              <div key={orden.id} className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gonper-bg/50 transition-colors">
-                <div>
-                  <Link href={`/ordenes/${orden.id}`} className="font-bold text-gonper-text hover:text-gonper-primary hover:underline transition-colors">
-                    {(orden.clientes as any)?.nombre || 'Cliente Desconocido'}
+      ) : lista.length === 0 ? (
+        <div className="card mt-5">
+          <EmptyState
+            icon={<FileText className="h-6 w-6" strokeWidth={1.5} />}
+            title="Sin órdenes todavía"
+            description="Sube el primer requerimiento en PDF o foto para capturar sus artículos."
+            action={
+              <Link href="/ordenes/nueva" className="btn btn-primary">
+                <FilePlus2 className="h-4 w-4" strokeWidth={1.75} />
+                Subir mi primer requerimiento
+              </Link>
+            }
+          />
+        </div>
+      ) : (
+        <div className="stagger mt-4 grid grid-cols-1 gap-3 md:mt-5 md:gap-0 md:overflow-hidden md:rounded-[8px] md:border md:border-gonper-border md:bg-gonper-surface">
+          {lista.map((orden) => (
+            <article
+              key={orden.id}
+              className="card min-w-0 p-4 md:flex md:items-center md:justify-between md:gap-6 md:rounded-none md:border-0 md:border-b md:border-gonper-border md:px-5 md:py-3.5 md:last:border-b-0 md:hover:bg-gonper-hover"
+            >
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/ordenes/${orden.id}`}
+                    className="min-w-0 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] transition-colors duration-[120ms] hover:text-gonper-primary md:text-[13.5px]"
+                  >
+                    {nombreCliente(orden.clientes)}
                   </Link>
-                  <p className="text-xs text-gonper-muted font-mono mt-1">{orden.folio}</p>
+                  <div className="shrink-0 md:hidden">
+                    <EstadoBadge estado={orden.estado} />
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center justify-between md:justify-end gap-4 w-full md:w-auto">
-                  
-                  {/* Botones de PDF */}
-                  <div className="flex items-center gap-2">
-                    {orden.pdf_path ? (
-                      <>
-                        <VerPdfButton pdfPath={orden.pdf_path} />
-                        {orden.estado === 'BORRADOR' && <ProcesarPdfButton ordenId={orden.id} pdfPath={orden.pdf_path} />}
-                      </>
-                    ) : (
-                      <span className="text-xs text-gray-400 italic">Sin PDF</span>
+
+                <p className="mt-1 font-mono text-[11.5px] text-gonper-muted">
+                  {orden.folio}
+                  <span className="mx-1.5 text-gonper-border">/</span>
+                  {fecha.format(new Date(orden.created_at))}
+                </p>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-0 md:shrink-0 md:justify-end">
+                {orden.pdf_path ? (
+                  <>
+                    <VerPdfButton pdfPath={orden.pdf_path} />
+                    {orden.estado === 'BORRADOR' && (
+                      <ProcesarPdfButton
+                        ordenId={orden.id}
+                        pdfPath={orden.pdf_path}
+                      />
                     )}
-                  </div>
+                  </>
+                ) : (
+                  <span className="text-[11.5px] italic text-gonper-muted">
+                    Sin PDF
+                  </span>
+                )}
 
-                  <div className="text-left md:text-right hidden md:block">
-                    <p className="text-xs text-gonper-muted">Fecha</p>
-                    <p className="text-sm font-medium">{new Date(orden.created_at).toLocaleDateString('es-MX')}</p>
-                  </div>
-                  
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${getBadgeColor(orden.estado)}`}>{orden.estado}</span>
+                <div className="hidden md:block">
+                  <EstadoBadge estado={orden.estado} />
+                </div>
 
-                  {/* 👇 NUEVO COMPONENTE DE ACCIONES 👇 */}
+                <div className="-mr-1 shrink-0">
                   <AccionesOrden orden={orden} clientes={clientes || []} />
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-12 text-center flex flex-col items-center">
-            <span className="text-4xl mb-4">📄</span>
-            <h3 className="text-lg font-bold text-gonper-text mb-1">No hay órdenes aún</h3>
-            <p className="text-gonper-muted text-sm mb-4">Sube tu primer requerimiento en PDF para empezar.</p>
-            <Link href="/ordenes/nueva" className="text-gonper-primary font-medium hover:underline">Subir mi primer PDF &rarr;</Link>
-          </div>
-        )}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <Fab
+        href="/ordenes/nueva"
+        label="Subir requerimiento"
+        icon={<Plus className="h-6 w-6" strokeWidth={2} />}
+      />
     </div>
   )
 }

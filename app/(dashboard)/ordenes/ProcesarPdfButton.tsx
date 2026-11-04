@@ -1,6 +1,16 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  AlertCircle,
+  Loader2,
+  Plus,
+  ScanText,
+  Trash2,
+} from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+import { Badge } from '@/components/EstadoBadge'
 import {
   obtenerUrlParaOCR,
   guardarItemsEnOrden,
@@ -8,7 +18,6 @@ import {
 } from './actions'
 import { procesarTextoOrden } from './procesarTexto'
 import { extraerTextoDelPDF } from './procesarPdf'
-import { useRouter } from 'next/navigation'
 import * as pdfjsLib from 'pdfjs-dist'
 import Tesseract from 'tesseract.js'
 import { parseRequisicion } from '@/utils/requisicion'
@@ -128,15 +137,22 @@ export default function ProcesarPdfButton({
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
-  const [itemsDetectados, setItemsDetectados] = useState<ItemDetectado[] | null>(null)
+  const [itemsDetectados, setItemsDetectados] = useState<ItemDetectado[] | null>(
+    null,
+  )
+  const [lineasNoReconocidas, setLineasNoReconocidas] = useState<string[]>([])
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
-  const [guardandoInventario, setGuardandoInventario] = useState<string | null>(null)
+  const [guardandoInventario, setGuardandoInventario] = useState<string | null>(
+    null,
+  )
+  const [errorProceso, setErrorProceso] = useState('')
+  const [errorRevision, setErrorRevision] = useState('')
 
   const router = useRouter()
   const contadorFilas = useRef(0)
   const etiquetaOcr = useRef('Analizando imagen')
 
-  const nuevaLlave = () => `fila-${Date.now()}-${contadorFilas.current++}`
+  const nuevaLlave = () => `fila-${contadorFilas.current++}`
 
   /**
    * Un solo trabajador para todas las páginas: además de ser más rápido que
@@ -205,7 +221,10 @@ export default function ProcesarPdfButton({
   const handleProcesar = async () => {
     setIsLoading(true)
     setStatusMsg('Iniciando lectura...')
+    setErrorProceso('')
+    setErrorRevision('')
     setItemsDetectados(null)
+    setLineasNoReconocidas([])
 
     try {
       let textoCompleto = cacheTexto.get(pdfPath) ?? ''
@@ -250,18 +269,25 @@ export default function ProcesarPdfButton({
         sugerencia: item.sugerencia,
       }))
 
-      if (detectados.length === 0) {
-        alert('No se detectaron productos válidos en el archivo.')
+      const noReconocidas = result.lineasNoReconocidas ?? []
+
+      if (detectados.length === 0 && noReconocidas.length === 0) {
+        setErrorProceso(
+          'No se detectaron productos válidos en el archivo. Revisa que la foto sea legible.',
+        )
         return
       }
 
       setItemsDetectados(detectados)
+      setLineasNoReconocidas(noReconocidas)
       setSeleccionados(
-        new Set(detectados.filter((item) => item.existe_en_bd).map((item) => item.key)),
+        new Set(
+          detectados.filter((item) => item.existe_en_bd).map((item) => item.key),
+        ),
       )
     } catch (error) {
       console.error(error)
-      alert('Error al procesar: ' + mensajeDeError(error))
+      setErrorProceso('Error al procesar: ' + mensajeDeError(error))
     } finally {
       setIsLoading(false)
       setStatusMsg('')
@@ -304,7 +330,8 @@ export default function ProcesarPdfButton({
                   ...fila,
                   codigo_pdf: sugerencia.sku,
                   descripcion_pdf: sugerencia.nombre,
-                  unidad: normalizarUnidad(sugerencia.unidad_medida) || fila.unidad,
+                  unidad:
+                    normalizarUnidad(sugerencia.unidad_medida) || fila.unidad,
                   existe_en_bd: true,
                   id_bd: sugerencia.id,
                   sugerencia: null,
@@ -338,8 +365,12 @@ export default function ProcesarPdfButton({
     const item = itemsDetectados?.find((fila) => fila.key === key)
     if (!item) return
 
+    setErrorRevision('')
+
     if (!item.codigo_pdf.trim() || !item.descripcion_pdf.trim()) {
-      alert('Completa el código y la descripción antes de registrar el producto.')
+      setErrorRevision(
+        'Completa el código y la descripción antes de registrar el producto.',
+      )
       return
     }
 
@@ -367,7 +398,7 @@ export default function ProcesarPdfButton({
 
       setSeleccionados((prev) => new Set(prev).add(key))
     } catch (error) {
-      alert('Error al registrar producto: ' + mensajeDeError(error))
+      setErrorRevision('Error al registrar producto: ' + mensajeDeError(error))
     } finally {
       setGuardandoInventario(null)
     }
@@ -389,6 +420,13 @@ export default function ProcesarPdfButton({
     setSeleccionados((prev) => new Set(prev).add(nueva.key))
   }
 
+  const usarLinea = (linea: string, indice: number) => {
+    agregarFila(linea)
+    setLineasNoReconocidas((prev) =>
+      prev.filter((_, posicion) => posicion !== indice),
+    )
+  }
+
   const eliminarFila = (key: string) => {
     setItemsDetectados((prev) => prev?.filter((item) => item.key !== key) ?? null)
     setSeleccionados((prev) => {
@@ -400,21 +438,24 @@ export default function ProcesarPdfButton({
 
   const handleConfirmar = async () => {
     if (!itemsDetectados) return
+    setErrorRevision('')
 
     const itemsParaGuardar = itemsDetectados.filter((item) =>
       seleccionados.has(item.key),
     )
 
     if (itemsParaGuardar.length === 0) {
-      alert('No has seleccionado ningún artículo para agregar a la orden.')
+      setErrorRevision('No has seleccionado ningún artículo para agregar a la orden.')
       return
     }
 
     const sinRegistrar = itemsParaGuardar.filter((item) => !item.id_bd)
     if (sinRegistrar.length > 0) {
-      alert(
+      setErrorRevision(
         'Primero registra en inventario: ' +
-          sinRegistrar.map((item) => item.descripcion_pdf || item.codigo_pdf).join(', '),
+          sinRegistrar
+            .map((item) => item.descripcion_pdf || item.codigo_pdf)
+            .join(', '),
       )
       return
     }
@@ -423,10 +464,11 @@ export default function ProcesarPdfButton({
     try {
       await guardarItemsEnOrden(ordenId, itemsParaGuardar)
       setItemsDetectados(null)
-      setIsSaving(false)
+      setLineasNoReconocidas([])
       router.refresh()
     } catch (error) {
-      alert(mensajeDeError(error))
+      setErrorRevision(mensajeDeError(error))
+    } finally {
       setIsSaving(false)
     }
   }
@@ -440,132 +482,445 @@ export default function ProcesarPdfButton({
     <>
       <div className="flex flex-col items-end gap-1">
         <button
+          type="button"
           onClick={handleProcesar}
           disabled={isLoading || isSaving}
-          className="px-3 py-1 text-sm text-white bg-gonper-primary hover:bg-gonper-primary-hover rounded-md disabled:bg-gray-400"
+          className="btn btn-primary px-3 text-[12px]"
         >
-          {isLoading ? 'Leyendo...' : '📸 Leer Archivo'}
+          {isLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+          ) : (
+            <ScanText className="h-3.5 w-3.5" strokeWidth={1.75} />
+          )}
+          {isLoading ? 'Leyendo…' : 'Leer archivo'}
         </button>
-        {statusMsg && <span className="text-xs text-gonper-muted">{statusMsg}</span>}
+        {statusMsg && (
+          <span className="max-w-[16rem] text-right text-[11px] leading-snug text-gonper-muted">
+            {statusMsg}
+          </span>
+        )}
+        {errorProceso && (
+          <span
+            role="alert"
+            className="max-w-[18rem] text-right text-[11px] leading-snug text-gonper-danger"
+          >
+            {errorProceso}
+          </span>
+        )}
       </div>
 
-      {itemsDetectados && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50 gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">Revisión de Requerimiento</h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Corrige lo que el OCR haya leído mal. Los artículos nuevos se registran en el
-                  catálogo con su unidad.
-                </p>
-              </div>
-              <button
-                onClick={() => setItemsDetectados(null)}
-                className="text-2xl text-gray-400 hover:text-red-500"
-                aria-label="Cerrar"
-              >
-                &times;
-              </button>
-            </div>
+      <Modal
+        open={itemsDetectados !== null}
+        onClose={() => {
+          if (isSaving) return
+          setItemsDetectados(null)
+          setLineasNoReconocidas([])
+          setErrorRevision('')
+        }}
+        title="Revisión del requerimiento"
+        description="Corrige lo que el OCR haya leído mal. Las filas nuevas se registran en el catálogo con su unidad."
+        size="wide"
+        footer={
+          <>
+            <p className="mr-auto w-full text-[12px] text-gonper-muted sm:w-auto">
+              <span className="font-semibold text-gonper-text">
+                {seleccionados.size}
+              </span>{' '}
+              {seleccionados.size === 1
+                ? 'artículo seleccionado'
+                : 'artículos seleccionados'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (isSaving) return
+                setItemsDetectados(null)
+                setLineasNoReconocidas([])
+                setErrorRevision('')
+              }}
+              disabled={isSaving}
+              className="btn btn-quiet flex-1 sm:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmar}
+              disabled={
+                isSaving ||
+                seleccionados.size === 0 ||
+                guardandoInventario !== null
+              }
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              {isSaving ? 'Guardando…' : 'Confirmar y agregar'}
+            </button>
+          </>
+        }
+      >
+        <div className="px-4 py-4 sm:px-5">
+          <datalist id="unidades-comunes">
+            {UNIDADES_COMUNES.map((unidad) => (
+              <option key={unidad} value={unidad} />
+            ))}
+          </datalist>
 
-            <div className="p-4 overflow-y-auto flex-1">
-              <datalist id="unidades-comunes">
-                {UNIDADES_COMUNES.map((unidad) => (
-                  <option key={unidad} value={unidad} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-[12.5px] font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                checked={todosSeleccionados}
+                onChange={toggleTodos}
+              />
+              Seleccionar todo
+            </label>
+
+            <button
+              type="button"
+              onClick={() => agregarFila()}
+              className="btn btn-quiet h-9 px-3 text-[12px]"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              Agregar fila
+            </button>
+          </div>
+
+          {errorRevision && (
+            <p
+              role="alert"
+              className="mt-3 flex items-start gap-2 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger"
+            >
+              <AlertCircle
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                strokeWidth={1.75}
+              />
+              {errorRevision}
+            </p>
+          )}
+
+          {lineasNoReconocidas.length > 0 && (
+            <div className="mt-3 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg/60 p-3">
+              <p className="text-[12px] font-semibold text-gonper-warning">
+                {lineasNoReconocidas.length}{' '}
+                {lineasNoReconocidas.length === 1
+                  ? 'línea no interpretada'
+                  : 'líneas no interpretadas'}
+              </p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-gonper-warning/85">
+                Revísalas: si son artículos, agrégalas como fila y corrige
+                código, cantidad y unidad.
+              </p>
+              <ul className="mt-2 space-y-1">
+                {lineasNoReconocidas.map((linea, indice) => (
+                  <li
+                    key={`${linea}-${indice}`}
+                    className="flex items-start gap-2 rounded-[4px] bg-gonper-surface/70 px-2 py-1.5"
+                  >
+                    <code className="min-w-0 flex-1 break-words font-mono text-[11px] leading-relaxed text-gonper-text">
+                      {linea}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => usarLinea(linea, indice)}
+                      className="shrink-0 text-[11px] font-semibold text-gonper-primary hover:underline"
+                    >
+                      Agregar
+                    </button>
+                  </li>
                 ))}
-              </datalist>
+              </ul>
+            </div>
+          )}
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-sm text-left">
-                  <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
-                    <tr>
-                      <th className="p-3 w-12 text-center" title="Seleccionar para esta orden">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 cursor-pointer"
-                          checked={todosSeleccionados}
-                          onChange={toggleTodos}
-                        />
+          {itemsDetectados && itemsDetectados.length > 0 ? (
+            <>
+              <div className="mt-3 hidden overflow-hidden rounded-[6px] border border-gonper-border md:block">
+                <table className="w-full table-fixed border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                      <th className="w-11 px-2 py-2.5 text-center font-medium">
+                        <span className="sr-only">Seleccionar</span>
                       </th>
-                      <th className="p-3 w-28">Código</th>
-                      <th className="p-3">Descripción</th>
-                      <th className="p-3 w-24 text-center">Cantidad</th>
-                      <th className="p-3 w-28">Unidad</th>
-                      <th className="p-3 w-36 text-center border-l border-gray-200">
+                      <th className="w-[6.5rem] px-2 py-2.5 font-medium">
+                        Código
+                      </th>
+                      <th className="px-2 py-2.5 font-medium">Descripción</th>
+                      <th className="w-20 px-2 py-2.5 text-center font-medium">
+                        Cant.
+                      </th>
+                      <th className="w-[6.5rem] px-2 py-2.5 font-medium">
+                        Unidad
+                      </th>
+                      <th className="w-[8.5rem] px-2 py-2.5 text-center font-medium">
                         Inventario
                       </th>
-                      <th className="p-3 w-10" />
+                      <th className="w-10 px-2 py-2.5">
+                        <span className="sr-only">Quitar</span>
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {itemsDetectados.map((item) => (
-                      <tr
-                        key={item.key}
-                        className={`transition-colors ${
-                          seleccionados.has(item.key)
-                            ? 'bg-blue-50/30'
-                            : 'opacity-60 bg-gray-50'
-                        }`}
-                      >
-                        <td className="p-3 text-center align-top">
+                  <tbody className="divide-y divide-gonper-border">
+                    {itemsDetectados.map((item) => {
+                      const seleccionado = seleccionados.has(item.key)
+
+                      return (
+                        <tr
+                          key={item.key}
+                          className={`align-top transition-colors duration-[120ms] ${
+                            seleccionado
+                              ? 'bg-gonper-primary/[0.035]'
+                              : 'bg-gonper-bg/40 opacity-60'
+                          }`}
+                        >
+                          <td className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                              checked={seleccionado}
+                              onChange={() => toggleSeleccion(item.key)}
+                              aria-label={`Seleccionar ${item.descripcion_pdf || item.codigo_pdf}`}
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={item.codigo_pdf}
+                              onChange={(e) =>
+                                actualizarItem(item.key, {
+                                  codigo_pdf: e.target.value,
+                                })
+                              }
+                              inputMode="numeric"
+                              placeholder="Código"
+                              aria-label="Código"
+                              className="field h-9 px-2 font-mono text-[12px]"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={item.descripcion_pdf}
+                              onChange={(e) =>
+                                actualizarItem(item.key, {
+                                  descripcion_pdf: e.target.value,
+                                })
+                              }
+                              placeholder="Descripción del artículo"
+                              aria-label="Descripción"
+                              className="field h-9 px-2 text-[13px] font-medium"
+                            />
+                            {item.sugerencia && (
+                              <div className="mt-1 flex items-start gap-1.5 text-[11px] leading-snug text-gonper-warning">
+                                <span className="min-w-0">
+                                  Sugerencia: {item.sugerencia.nombre} (
+                                  {item.sugerencia.sku})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => aplicarSugerencia(item)}
+                                  className="shrink-0 font-semibold text-gonper-primary hover:underline"
+                                >
+                                  Usar
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.cantidad}
+                              onChange={(e) =>
+                                actualizarItem(item.key, {
+                                  cantidad: e.target.value,
+                                })
+                              }
+                              aria-label="Cantidad"
+                              className="field h-9 px-1 text-center text-[13px] font-semibold"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              value={item.unidad}
+                              onChange={(e) =>
+                                actualizarItem(item.key, {
+                                  unidad: e.target.value.toUpperCase(),
+                                })
+                              }
+                              list="unidades-comunes"
+                              placeholder="CAJA"
+                              aria-label="Unidad"
+                              className="field h-9 px-2 text-[12px] font-semibold uppercase"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            {item.existe_en_bd ? (
+                              <Badge tono="success">Inventariado</Badge>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRegistrarEnInventario(item.key)
+                                }
+                                disabled={guardandoInventario === item.key}
+                                className="btn h-8 border border-gonper-warning-border bg-gonper-warning-bg px-2.5 text-[11.5px] text-gonper-warning hover:bg-gonper-warning-bg/70"
+                              >
+                                {guardandoInventario === item.key ? (
+                                  <Loader2
+                                    className="h-3.5 w-3.5 animate-spin"
+                                    strokeWidth={2}
+                                  />
+                                ) : (
+                                  <Plus
+                                    className="h-3.5 w-3.5"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                                Registrar
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => eliminarFila(item.key)}
+                              className="btn-icon text-gonper-muted hover:bg-gonper-danger-bg hover:text-gonper-danger"
+                              title="Quitar fila"
+                              aria-label="Quitar fila"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid gap-2 md:hidden">
+                {itemsDetectados.map((item) => {
+                  const seleccionado = seleccionados.has(item.key)
+
+                  return (
+                    <div
+                      key={item.key}
+                      className={`rounded-[6px] border p-3 transition-colors duration-[120ms] ${
+                        seleccionado
+                          ? 'border-gonper-border bg-gonper-surface'
+                          : 'border-gonper-border bg-gonper-bg/50 opacity-65'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="flex items-center gap-2 text-[12px] font-medium text-gonper-muted">
                           <input
                             type="checkbox"
-                            className="w-4 h-4 cursor-pointer"
-                            checked={seleccionados.has(item.key)}
+                            className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                            checked={seleccionado}
                             onChange={() => toggleSeleccion(item.key)}
                           />
-                        </td>
-                        <td className="p-2 align-top">
+                          Incluir en la orden
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => eliminarFila(item.key)}
+                          className="btn-icon -mr-1 -mt-1 text-gonper-muted hover:text-gonper-danger"
+                          aria-label="Quitar fila"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                        </button>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_5.5rem] gap-2">
+                        <div className="min-w-0">
+                          <label
+                            className="field-label"
+                            htmlFor={`codigo-${item.key}`}
+                          >
+                            Código
+                          </label>
                           <input
+                            id={`codigo-${item.key}`}
                             value={item.codigo_pdf}
                             onChange={(e) =>
-                              actualizarItem(item.key, { codigo_pdf: e.target.value })
+                              actualizarItem(item.key, {
+                                codigo_pdf: e.target.value,
+                              })
                             }
                             inputMode="numeric"
                             placeholder="Código"
-                            className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
+                            className="field h-10 font-mono text-[12.5px]"
                           />
-                        </td>
-                        <td className="p-2 align-top">
+                        </div>
+                        <div>
+                          <label
+                            className="field-label"
+                            htmlFor={`cantidad-${item.key}`}
+                          >
+                            Cantidad
+                          </label>
                           <input
-                            value={item.descripcion_pdf}
-                            onChange={(e) =>
-                              actualizarItem(item.key, {
-                                descripcion_pdf: e.target.value,
-                              })
-                            }
-                            placeholder="Descripción del artículo"
-                            className="w-full rounded border border-gray-300 px-2 py-1 font-medium"
-                          />
-                          {item.sugerencia && (
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-700">
-                              <span>
-                                Sugerencia: {item.sugerencia.nombre} ({item.sugerencia.sku})
-                              </span>
-                              <button
-                                onClick={() => aplicarSugerencia(item)}
-                                className="font-bold text-blue-600 hover:underline"
-                              >
-                                Usar
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-2 text-center align-top">
-                          <input
+                            id={`cantidad-${item.key}`}
                             type="number"
                             min="0"
                             step="0.01"
                             value={item.cantidad}
                             onChange={(e) =>
-                              actualizarItem(item.key, { cantidad: e.target.value })
+                              actualizarItem(item.key, {
+                                cantidad: e.target.value,
+                              })
                             }
-                            className="w-20 rounded border border-gray-300 px-2 py-1 text-center font-bold"
+                            className="field h-10 text-center font-semibold"
                           />
-                        </td>
-                        <td className="p-2 align-top">
+                        </div>
+                      </div>
+
+                      <div className="mt-2">
+                        <label
+                          className="field-label"
+                          htmlFor={`descripcion-${item.key}`}
+                        >
+                          Descripción
+                        </label>
+                        <input
+                          id={`descripcion-${item.key}`}
+                          value={item.descripcion_pdf}
+                          onChange={(e) =>
+                            actualizarItem(item.key, {
+                              descripcion_pdf: e.target.value,
+                            })
+                          }
+                          placeholder="Descripción del artículo"
+                          className="field h-10 text-[13px] font-medium"
+                        />
+                      </div>
+
+                      {item.sugerencia && (
+                        <div className="mt-1.5 flex items-start gap-2 text-[11.5px] leading-snug text-gonper-warning">
+                          <span className="min-w-0">
+                            Sugerencia: {item.sugerencia.nombre} (
+                            {item.sugerencia.sku})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => aplicarSugerencia(item)}
+                            className="shrink-0 font-semibold text-gonper-primary hover:underline"
+                          >
+                            Usar
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mt-2 flex items-end justify-between gap-2">
+                        <div className="w-28">
+                          <label
+                            className="field-label"
+                            htmlFor={`unidad-${item.key}`}
+                          >
+                            Unidad
+                          </label>
                           <input
+                            id={`unidad-${item.key}`}
                             value={item.unidad}
                             onChange={(e) =>
                               actualizarItem(item.key, {
@@ -574,80 +929,52 @@ export default function ProcesarPdfButton({
                             }
                             list="unidades-comunes"
                             placeholder="CAJA"
-                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs font-semibold"
+                            className="field h-10 text-[12.5px] font-semibold uppercase"
                           />
-                        </td>
-                        <td className="p-3 text-center align-top border-l border-gray-200">
-                          {item.existe_en_bd ? (
-                            <span className="text-emerald-600 font-bold text-xs bg-emerald-100 px-2 py-1 rounded">
-                              Inventariado
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleRegistrarEnInventario(item.key)}
-                              disabled={guardandoInventario === item.key}
-                              className="text-xs font-bold text-blue-600 bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                            >
-                              {guardandoInventario === item.key
-                                ? 'Guardando...'
-                                : '+ Registrar'}
-                            </button>
-                          )}
-                        </td>
-                        <td className="p-2 text-center align-top">
+                        </div>
+
+                        {item.existe_en_bd ? (
+                          <Badge tono="success">Inventariado</Badge>
+                        ) : (
                           <button
-                            onClick={() => eliminarFila(item.key)}
-                            className="text-gray-400 hover:text-red-500"
-                            title="Quitar fila"
+                            type="button"
+                            onClick={() => handleRegistrarEnInventario(item.key)}
+                            disabled={guardandoInventario === item.key}
+                            className="btn h-10 border border-gonper-warning-border bg-gonper-warning-bg px-3 text-[12px] text-gonper-warning hover:bg-gonper-warning-bg/70"
                           >
-                            ✕
+                            {guardandoInventario === item.key ? (
+                              <Loader2
+                                className="h-3.5 w-3.5 animate-spin"
+                                strokeWidth={2}
+                              />
+                            ) : (
+                              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                            )}
+                            Registrar
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-
-              {itemsDetectados.length === 0 && (
-                <p className="py-6 text-center text-sm text-gray-500">
-                  No hay filas detectadas. Agrega una fila manualmente o usa una línea de las
-                  que no se pudieron interpretar.
-                </p>
-              )}
-
-              <button
-                onClick={() => agregarFila()}
-                className="mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-gonper-primary hover:text-gonper-primary"
-              >
-                + Agregar fila
-              </button>
+            </>
+          ) : (
+            <div className="mt-3 rounded-[6px] border border-dashed border-gonper-border px-4 py-10 text-center">
+              <ScanText
+                className="mx-auto h-6 w-6 text-gonper-muted"
+                strokeWidth={1.5}
+              />
+              <p className="mt-2 text-[13px] font-medium">
+                No hay filas detectadas
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-gonper-muted">
+                Agrega una fila manualmente con el botón de arriba.
+              </p>
             </div>
-
-            <div className="p-4 border-t bg-gray-50 flex flex-col md:flex-row gap-3 md:justify-between md:items-center">
-              <div className="text-sm text-gray-600">
-                <span className="font-bold text-blue-600">{seleccionados.size}</span> artículos
-                seleccionados para la orden.
-              </div>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setItemsDetectados(null)}
-                  className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleConfirmar}
-                  disabled={isSaving || seleccionados.size === 0 || guardandoInventario !== null}
-                  className="px-6 py-2 bg-gonper-primary text-white font-bold rounded-lg hover:bg-gonper-primary-hover disabled:bg-gray-400"
-                >
-                  {isSaving ? 'Guardando Orden...' : 'Confirmar y Agregar a Orden'}
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </Modal>
     </>
   )
 }

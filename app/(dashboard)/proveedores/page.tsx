@@ -1,6 +1,24 @@
 import { createClient } from '@/utils/supabase/server'
 import ProveedoresClient from './ProveedoresClient'
 
+type Relacion<T> = T | T[] | null
+
+type ProductoBase = { id: string; nombre: string; sku: string }
+
+type RelacionCruda = {
+  id: string
+  precio_unitario: number | string
+  productos: Relacion<ProductoBase>
+}
+
+type ProveedorCrudo = {
+  id: string
+  nombre: string
+  telefono: string | null
+  correo: string | null
+  producto_proveedores: RelacionCruda[] | null
+}
+
 export default async function ProveedoresPage() {
   const supabase = await createClient()
   
@@ -20,16 +38,34 @@ export default async function ProveedoresPage() {
     .select('id, nombre, sku')
     .order('nombre', { ascending: true })
 
-  // 👇 ESTO ES LO NUEVO: Mostrar el error exacto en pantalla
   if (error || errorProductos) {
     return (
-      <div className="p-8 text-red-600 bg-red-50 rounded-lg border border-red-200 m-8">
-        <h2 className="font-bold text-lg mb-2">Error de Base de Datos</h2>
-        <p>{error?.message || errorProductos?.message}</p>
-        <p className="text-sm mt-4">Revisa que hayas ejecutado el SQL de la tabla 'producto_proveedores'</p>
+      <div className="mx-auto max-w-[1180px] pb-6">
+        <div className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-4 py-3 text-[13px] text-gonper-danger">
+          <p className="font-semibold">No se pudo cargar el directorio.</p>
+          <p className="mt-1 text-[12.5px]">
+            {error?.message || errorProductos?.message}
+          </p>
+        </div>
       </div>
     )
   }
 
-  return <ProveedoresClient proveedoresIniciales={proveedores || []} catalogoProductos={catalogoProductos || []} />
+  return <ProveedoresClient proveedoresIniciales={normalizarProveedores(proveedores)} catalogoProductos={catalogoProductos || []} />
+}
+
+// Supabase devuelve la relación uno-a-uno como arreglo cuando no hay tipos
+// generados. El cliente espera un solo producto por relación.
+function normalizarProveedores(proveedores: ProveedorCrudo[] | null) {
+  return (proveedores || []).map((proveedor) => ({
+    ...proveedor,
+    producto_proveedores: (proveedor.producto_proveedores || []).map(
+      (relacion) => ({
+        ...relacion,
+        productos: Array.isArray(relacion.productos)
+          ? relacion.productos[0] ?? null
+          : relacion.productos,
+      }),
+    ),
+  }))
 }

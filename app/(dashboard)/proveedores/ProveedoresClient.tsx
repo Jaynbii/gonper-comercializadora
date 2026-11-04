@@ -1,403 +1,1021 @@
 'use client'
 
 import { useState } from 'react'
-import { 
-  crearProveedor, actualizarProveedor, eliminarProveedor, 
-  asignarPrecioAProducto, actualizarPrecioProducto, quitarProductoAProveedor 
+import {
+  Check,
+  ChevronRight,
+  Factory,
+  Mail,
+  Package,
+  Pencil,
+  Phone,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import EmptyState from '@/components/ui/EmptyState'
+import Fab from '@/components/ui/Fab'
+import PageHeader from '@/components/ui/PageHeader'
+import {
+  crearProveedor,
+  actualizarProveedor,
+  eliminarProveedor,
+  asignarPrecioAProducto,
+  actualizarPrecioProducto,
+  quitarProductoAProveedor,
 } from './actions'
 
-export default function ProveedoresClient({ 
-  proveedoresIniciales, 
-  catalogoProductos 
-}: { 
-  proveedoresIniciales: any[], 
-  catalogoProductos: any[] 
-}) {
-  // 🧠 ESTADO LOCAL para evitar recargar la página
-  const [listaProveedores, setListaProveedores] = useState(proveedoresIniciales)
+type Producto = { id: string; nombre: string; sku: string }
 
+type Relacion = {
+  id: string
+  precio_unitario: number | string
+  productos: Producto | null
+}
+
+type Proveedor = {
+  id: string
+  nombre: string
+  telefono: string | null
+  correo: string | null
+  producto_proveedores?: Relacion[]
+}
+
+const moneda = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+})
+
+const normalizar = (valor: string) =>
+  valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+export default function ProveedoresClient({
+  proveedoresIniciales,
+  catalogoProductos,
+}: {
+  proveedoresIniciales: Proveedor[]
+  catalogoProductos: Producto[]
+}) {
+  const [listaProveedores, setListaProveedores] = useState(proveedoresIniciales)
   const [busqueda, setBusqueda] = useState('')
-  
-  // Estados del modal de Proveedor (Alta/Edición)
+
   const [isProveedorModalOpen, setIsProveedorModalOpen] = useState(false)
-  const [proveedorAEditar, setProveedorAEditar] = useState<any | null>(null)
+  const [proveedorAEditar, setProveedorAEditar] = useState<Proveedor | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
-  // Estados del modal de Catálogo (Precios)
-  const [proveedorActivo, setProveedorActivo] = useState<any | null>(null)
+  const [proveedorActivo, setProveedorActivo] = useState<Proveedor | null>(null)
   const [nuevoPrecio, setNuevoPrecio] = useState('')
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [errorMsgProducto, setErrorMsgProducto] = useState('')
 
-  // Estados para el buscador de productos
   const [busquedaProducto, setBusquedaProducto] = useState('')
-  const [productoSeleccionado, setProductoSeleccionado] = useState<{id: string, nombre: string, sku: string} | null>(null)
+  const [productoSeleccionado, setProductoSeleccionado] =
+    useState<Producto | null>(null)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
-  const proveedoresFiltrados = listaProveedores.filter(p => 
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  const [relacionEditando, setRelacionEditando] = useState<string | null>(null)
+  const [precioEdicion, setPrecioEdicion] = useState('')
+  const [isUpdatingPrecio, setIsUpdatingPrecio] = useState(false)
+  const [errorPrecio, setErrorPrecio] = useState('')
+
+  const [proveedorAEliminar, setProveedorAEliminar] = useState<Proveedor | null>(
+    null,
+  )
+  const [isDeletingProveedor, setIsDeletingProveedor] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+
+  const [relacionAEliminar, setRelacionAEliminar] = useState<Relacion | null>(null)
+  const [isRemovingProduct, setIsRemovingProduct] = useState(false)
+  const [errorQuitar, setErrorQuitar] = useState('')
+
+  const termino = normalizar(busqueda.trim())
+
+  const proveedoresFiltrados = listaProveedores.filter((proveedor) =>
+    normalizar(proveedor.nombre).includes(termino),
   )
 
-  // --- LÓGICA MODAL PROVEEDOR ---
-  const handleOpenCreateProveedor = () => {
+  const abrirCrear = () => {
     setProveedorAEditar(null)
     setErrorMsg('')
+    setIsSubmitting(false)
     setIsProveedorModalOpen(true)
   }
 
-  const handleOpenEditProveedor = (prov: any) => {
-    setProveedorAEditar(prov)
+  const abrirEditar = (proveedor: Proveedor) => {
+    setProveedorAEditar(proveedor)
     setErrorMsg('')
+    setIsSubmitting(false)
     setIsProveedorModalOpen(true)
+  }
+
+  const cerrarProveedorModal = () => {
+    if (isSubmitting) return
+    setIsProveedorModalOpen(false)
+    setErrorMsg('')
   }
 
   const handleSubmitProveedor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
     setErrorMsg('')
-    
+
     const formData = new FormData(e.currentTarget)
-    const result = proveedorAEditar 
+    const nombre = String(formData.get('nombre') || '').trim()
+    const telefono = String(formData.get('telefono') || '').trim() || null
+    const correo = String(formData.get('correo') || '').trim() || null
+
+    const result = proveedorAEditar
       ? await actualizarProveedor(proveedorAEditar.id, formData)
       : await crearProveedor(formData)
 
     if (result?.error) {
       setErrorMsg(result.error)
       setIsSubmitting(false)
-    } else {
-      setIsProveedorModalOpen(false)
-      setIsSubmitting(false)
-      // Si se creó, recargamos para verlo (o podríamos actualizar el estado, pero para el proveedor está bien recargar)
-      window.location.reload()
+      return
     }
+
+    if (proveedorAEditar) {
+      const actualizado = {
+        ...proveedorAEditar,
+        nombre,
+        telefono,
+        correo,
+      }
+      setListaProveedores((prev) =>
+        prev
+          .map((proveedor) =>
+            proveedor.id === actualizado.id ? actualizado : proveedor,
+          )
+          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      )
+      setProveedorActivo((prev) =>
+        prev?.id === actualizado.id ? { ...prev, nombre, telefono, correo } : prev,
+      )
+    } else if (
+      result &&
+      result.success &&
+      'proveedor' in result &&
+      result.proveedor
+    ) {
+      const nuevo: Proveedor = {
+        ...(result.proveedor as Proveedor),
+        producto_proveedores: [],
+      }
+      setListaProveedores((prev) =>
+        [...prev, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      )
+    }
+
+    setIsProveedorModalOpen(false)
+    setIsSubmitting(false)
   }
 
-  const handleEliminarProveedor = async (id: string) => {
-    if (!confirm('¿Seguro que deseas eliminar este proveedor?')) return
-    const result = await eliminarProveedor(id)
-    if (result?.error) alert(result.error)
-    else window.location.reload()
+  const handleEliminarProveedor = async () => {
+    if (!proveedorAEliminar) return
+
+    setIsDeletingProveedor(true)
+    setErrorEliminar('')
+
+    const result = await eliminarProveedor(proveedorAEliminar.id)
+
+    if (result?.error) {
+      setErrorEliminar(result.error)
+      setIsDeletingProveedor(false)
+      return
+    }
+
+    setListaProveedores((prev) =>
+      prev.filter((proveedor) => proveedor.id !== proveedorAEliminar.id),
+    )
+    if (proveedorActivo?.id === proveedorAEliminar.id) setProveedorActivo(null)
+    setProveedorAEliminar(null)
+    setIsDeletingProveedor(false)
   }
 
-  // --- LÓGICA BUSCADOR DE PRODUCTOS ---
-  const productosDisponibles = catalogoProductos.filter(prod => 
-    !proveedorActivo?.producto_proveedores?.some((rel: any) => rel.productos?.id === prod.id)
+  const productosDisponibles = catalogoProductos.filter(
+    (producto) =>
+      !proveedorActivo?.producto_proveedores?.some(
+        (relacion) => relacion.productos?.id === producto.id,
+      ),
   )
 
-  const productosFiltradosBusqueda = productosDisponibles.filter(prod => 
-    prod.nombre.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
-    prod.sku.toLowerCase().includes(busquedaProducto.toLowerCase())
+  const productosFiltradosBusqueda = productosDisponibles.filter(
+    (producto) =>
+      normalizar(producto.nombre).includes(normalizar(busquedaProducto)) ||
+      normalizar(producto.sku).includes(normalizar(busquedaProducto)),
   )
 
-  const handleSelectProducto = (prod: any) => {
-    setProductoSeleccionado(prod)
+  const handleSelectProducto = (producto: Producto) => {
+    setProductoSeleccionado(producto)
     setBusquedaProducto('')
     setIsDropdownOpen(false)
   }
 
-  // 🧠 LÓGICA PARA AGREGAR PRODUCTO SIN CERRAR MODAL
   const handleAddProducto = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!productoSeleccionado || !nuevoPrecio) return
+    if (!proveedorActivo || !productoSeleccionado || !nuevoPrecio) return
 
     setIsAddingProduct(true)
     setErrorMsgProducto('')
 
-    const result = await asignarPrecioAProducto(proveedorActivo.id, productoSeleccionado.id, parseFloat(nuevoPrecio))
-    
+    const result = await asignarPrecioAProducto(
+      proveedorActivo.id,
+      productoSeleccionado.id,
+      parseFloat(nuevoPrecio),
+    )
+
     if (result?.error) {
       setErrorMsgProducto(result.error)
-    } else if (result?.success && result.id) {
-      // 1. Actualizamos la tabla del modal abierto (proveedorActivo)
-      const nuevaRelacion = {
-        id: result.id,
-        precio_unitario: parseFloat(nuevoPrecio),
-        productos: productoSeleccionado
-      }
-      
-      const nuevoProveedorActivo = {
-        ...proveedorActivo,
-        producto_proveedores: [...(proveedorActivo.producto_proveedores || []), nuevaRelacion]
-      }
-      setProveedorActivo(nuevoProveedorActivo)
-
-      // 2. Actualizamos la lista principal para que el contador suba
-      setListaProveedores(prev => prev.map(p => p.id === nuevoProveedorActivo.id ? nuevoProveedorActivo : p))
-
-      // 3. Limpiamos los inputs para el siguiente producto
-      setNuevoPrecio('')
-      setProductoSeleccionado(null)
-    }
-    setIsAddingProduct(false)
-  }
-
-  const handleUpdatePrecio = async (idRelacion: string, precioActual: number) => {
-    const nuevoPrecioStr = prompt('Ingresa el nuevo precio:', precioActual.toString())
-    if (nuevoPrecioStr === null) return
-    const nuevoPrecioNum = parseFloat(nuevoPrecioStr)
-    
-    if (isNaN(nuevoPrecioNum)) {
-      alert('Por favor, ingresa un número válido.')
+      setIsAddingProduct(false)
       return
     }
 
-    const result = await actualizarPrecioProducto(idRelacion, nuevoPrecioNum)
-    
-    if (result?.error) {
-      alert(result.error)
-    } else {
-      // Actualizamos la tabla en vivo
-      const nuevosProductos = proveedorActivo.producto_proveedores.map((rel: any) => 
-        rel.id === idRelacion ? { ...rel, precio_unitario: nuevoPrecioNum } : rel
+    if (result?.success && result.id) {
+      const nuevaRelacion: Relacion = {
+        id: result.id,
+        precio_unitario: parseFloat(nuevoPrecio),
+        productos: productoSeleccionado,
+      }
+
+      const actualizado: Proveedor = {
+        ...proveedorActivo,
+        producto_proveedores: [
+          ...(proveedorActivo.producto_proveedores || []),
+          nuevaRelacion,
+        ],
+      }
+
+      setProveedorActivo(actualizado)
+      setListaProveedores((prev) =>
+        prev.map((proveedor) =>
+          proveedor.id === actualizado.id ? actualizado : proveedor,
+        ),
       )
-      const nuevoProveedorActivo = { ...proveedorActivo, producto_proveedores: nuevosProductos }
-      setProveedorActivo(nuevoProveedorActivo)
-      setListaProveedores(prev => prev.map(p => p.id === nuevoProveedorActivo.id ? nuevoProveedorActivo : p))
+
+      setNuevoPrecio('')
+      setProductoSeleccionado(null)
     }
+
+    setIsAddingProduct(false)
   }
 
-  const handleRemoveProducto = async (idRelacion: string) => {
-    if (!confirm('¿Quitar este producto del catálogo del proveedor?')) return
-    const result = await quitarProductoAProveedor(idRelacion)
-    
-    if (result?.error) {
-      alert(result.error)
-    } else {
-      // Actualizamos la tabla en vivo
-      const nuevosProductos = proveedorActivo.producto_proveedores.filter((rel: any) => rel.id !== idRelacion)
-      const nuevoProveedorActivo = { ...proveedorActivo, producto_proveedores: nuevosProductos }
-      setProveedorActivo(nuevoProveedorActivo)
-      setListaProveedores(prev => prev.map(p => p.id === nuevoProveedorActivo.id ? nuevoProveedorActivo : p))
+  const empezarEdicionPrecio = (relacion: Relacion) => {
+    setRelacionEditando(relacion.id)
+    setPrecioEdicion(String(relacion.precio_unitario))
+    setErrorPrecio('')
+  }
+
+  const guardarPrecio = async (relacion: Relacion) => {
+    if (!proveedorActivo) return
+
+    const precio = Number(precioEdicion)
+
+    if (!Number.isFinite(precio) || precio < 0) {
+      setErrorPrecio('Ingresa un precio válido.')
+      return
     }
+
+    setIsUpdatingPrecio(true)
+    setErrorPrecio('')
+
+    const result = await actualizarPrecioProducto(relacion.id, precio)
+
+    if (result?.error) {
+      setErrorPrecio(result.error)
+      setIsUpdatingPrecio(false)
+      return
+    }
+
+    const actualizado: Proveedor = {
+      ...proveedorActivo,
+      producto_proveedores: (proveedorActivo.producto_proveedores || []).map(
+        (item) =>
+          item.id === relacion.id ? { ...item, precio_unitario: precio } : item,
+      ),
+    }
+
+    setProveedorActivo(actualizado)
+    setListaProveedores((prev) =>
+      prev.map((proveedor) =>
+        proveedor.id === actualizado.id ? actualizado : proveedor,
+      ),
+    )
+    setRelacionEditando(null)
+    setIsUpdatingPrecio(false)
+  }
+
+  const handleQuitarProducto = async () => {
+    if (!proveedorActivo || !relacionAEliminar) return
+
+    setIsRemovingProduct(true)
+    setErrorQuitar('')
+
+    const result = await quitarProductoAProveedor(relacionAEliminar.id)
+
+    if (result?.error) {
+      setErrorQuitar(result.error)
+      setIsRemovingProduct(false)
+      return
+    }
+
+    const actualizado: Proveedor = {
+      ...proveedorActivo,
+      producto_proveedores: (proveedorActivo.producto_proveedores || []).filter(
+        (item) => item.id !== relacionAEliminar.id,
+      ),
+    }
+
+    setProveedorActivo(actualizado)
+    setListaProveedores((prev) =>
+      prev.map((proveedor) =>
+        proveedor.id === actualizado.id ? actualizado : proveedor,
+      ),
+    )
+    setRelacionAEliminar(null)
+    setIsRemovingProduct(false)
   }
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 md:pb-0 relative">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gonper-text">Proveedores</h1>
-          <p className="text-sm text-gonper-muted">Directorio y catálogo de precios por proveedor</p>
-        </div>
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <input 
-            type="text" placeholder="Buscar proveedor..." 
-            className="w-full md:w-72 px-4 py-2 border border-gonper-border rounded-lg focus:outline-none focus:ring-2 focus:ring-gonper-primary" 
-            value={busqueda} onChange={(e) => setBusqueda(e.target.value)} 
-          />
-          <button onClick={handleOpenCreateProveedor} className="hidden md:block bg-gonper-primary hover:bg-gonper-primary-hover text-white px-4 py-2 rounded-lg font-medium whitespace-nowrap">+ Nuevo Proveedor</button>
-        </div>
+    <div className="mx-auto max-w-[1180px] pb-6">
+      <PageHeader
+        eyebrow={`${listaProveedores.length} ${
+          listaProveedores.length === 1 ? 'proveedor' : 'proveedores'
+        } en el directorio`}
+        title="Proveedores"
+        action={
+          <button
+            type="button"
+            onClick={abrirCrear}
+            className="btn btn-primary hidden sm:inline-flex"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            Nuevo proveedor
+          </button>
+        }
+      />
+
+      <div className="relative mt-5 max-w-sm">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gonper-muted"
+          strokeWidth={1.75}
+        />
+        <input
+          type="search"
+          placeholder="Buscar proveedor"
+          className="field pl-9"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          aria-label="Buscar proveedor"
+        />
       </div>
 
-      {/* VISTA MÓVIL */}
-      <div className="grid grid-cols-1 gap-4 md:hidden">
-        {proveedoresFiltrados.map((p) => (
-          <div key={p.id} className="bg-gonper-surface p-4 rounded-xl border border-gonper-border shadow-sm flex flex-col gap-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-bold text-gonper-text text-lg">{p.nombre}</h3>
-                {p.telefono && <p className="text-sm text-gonper-muted mt-1">📞 {p.telefono}</p>}
+      <div className="stagger mt-4 grid grid-cols-1 gap-3 md:hidden">
+        {proveedoresFiltrados.map((proveedor) => (
+          <article key={proveedor.id} className="card min-w-0 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[14.5px] font-semibold leading-snug tracking-[-0.01em]">
+                  {proveedor.nombre}
+                </h2>
+
+                <div className="mt-2 space-y-1">
+                  {proveedor.telefono ? (
+                    <p className="flex items-center gap-1.5 text-[12px] text-gonper-muted">
+                      <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      {proveedor.telefono}
+                    </p>
+                  ) : null}
+                  {proveedor.correo ? (
+                    <p className="flex items-center gap-1.5 truncate text-[12px] text-gonper-muted">
+                      <Mail className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                      <span className="truncate">{proveedor.correo}</span>
+                    </p>
+                  ) : null}
+                  {!proveedor.telefono && !proveedor.correo && (
+                    <p className="text-[12px] text-gonper-muted">
+                      Sin datos de contacto
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleOpenEditProveedor(p)} className="text-blue-500 p-1">✏️</button>
-                <button onClick={() => handleEliminarProveedor(p.id)} className="text-red-400 p-1">🗑️</button>
+
+              <div className="-mr-1 -mt-1 flex shrink-0 items-center">
+                <button
+                  type="button"
+                  onClick={() => abrirEditar(proveedor)}
+                  className="btn-icon"
+                  aria-label={`Editar ${proveedor.nombre}`}
+                >
+                  <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorEliminar('')
+                    setProveedorAEliminar(proveedor)
+                  }}
+                  className="btn-icon hover:bg-gonper-danger-bg hover:text-gonper-danger"
+                  aria-label={`Eliminar ${proveedor.nombre}`}
+                >
+                  <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                </button>
               </div>
             </div>
-            
-            <button 
-              onClick={() => setProveedorActivo(p)}
-              className="mt-2 w-full py-2 bg-blue-50 text-blue-700 font-medium rounded-lg border border-blue-100 text-sm flex justify-center items-center gap-2"
+
+            <button
+              type="button"
+              onClick={() => setProveedorActivo(proveedor)}
+              className="mt-4 flex w-full items-center justify-between rounded-[6px] border border-gonper-border bg-gonper-bg/60 px-3 py-2.5 text-left transition-colors duration-[120ms] hover:bg-gonper-hover"
             >
-              📦 Ver Catálogo y Precios ({p.producto_proveedores?.length || 0})
+              <span className="flex items-center gap-2 text-[12.5px] font-medium text-gonper-primary">
+                <Package className="h-4 w-4" strokeWidth={1.75} />
+                Catálogo y precios
+              </span>
+              <span className="flex items-center gap-1 text-[11.5px] font-medium text-gonper-muted">
+                {proveedor.producto_proveedores?.length || 0}
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </span>
             </button>
-          </div>
+          </article>
         ))}
+
+        {proveedoresFiltrados.length === 0 && (
+          <div className="card">
+            <EmptyState
+              icon={<Factory className="h-6 w-6" strokeWidth={1.5} />}
+              title="Sin proveedores"
+              description={
+                busqueda
+                  ? 'Prueba con otro nombre.'
+                  : 'Agrega tu primer proveedor para asociar precios a los productos.'
+              }
+            />
+          </div>
+        )}
       </div>
 
-      {/* VISTA PC */}
-      <div className="hidden md:block bg-gonper-surface rounded-xl border border-gonper-border shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="mt-5 hidden overflow-hidden rounded-[8px] border border-gonper-border bg-gonper-surface md:block">
+        <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="bg-gonper-bg border-b border-gonper-border text-sm text-gonper-muted">
-              <th className="p-4 font-medium">Proveedor</th>
-              <th className="p-4 font-medium">Contacto</th>
-              <th className="p-4 font-medium text-center">Catálogo</th>
-              <th className="p-4 font-medium text-center">Acciones</th>
+            <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+              <th className="px-5 py-3 font-medium">Proveedor</th>
+              <th className="px-5 py-3 font-medium">Contacto</th>
+              <th className="px-5 py-3 text-center font-medium">Catálogo</th>
+              <th className="px-5 py-3 text-center font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gonper-border">
-            {proveedoresFiltrados.map((p) => (
-              <tr key={p.id} className="hover:bg-gonper-bg/50 transition-colors">
-                <td className="p-4 font-bold text-gonper-text">{p.nombre}</td>
-                <td className="p-4 text-sm text-gonper-muted">{p.telefono || '-'}</td>
-                <td className="p-4 text-center">
-                  <button 
-                    onClick={() => setProveedorActivo(p)}
-                    className="bg-blue-50 text-blue-700 px-4 py-1 rounded-full text-sm font-bold border border-blue-200 hover:bg-blue-100 transition-colors"
+            {proveedoresFiltrados.map((proveedor) => (
+              <tr
+                key={proveedor.id}
+                className="transition-colors duration-[120ms] hover:bg-gonper-hover"
+              >
+                <td className="px-5 py-3.5 text-[13.5px] font-medium">
+                  {proveedor.nombre}
+                </td>
+                <td className="px-5 py-3.5">
+                  <p className="text-[12.5px] text-gonper-muted">
+                    {proveedor.telefono || 'Sin teléfono'}
+                  </p>
+                  <p className="text-[12px] text-gonper-muted">
+                    {proveedor.correo || 'Sin correo'}
+                  </p>
+                </td>
+                <td className="px-5 py-3.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setProveedorActivo(proveedor)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-gonper-border bg-gonper-bg/60 px-3 py-1.5 text-[12px] font-medium text-gonper-primary transition-colors duration-[120ms] hover:bg-gonper-hover"
                   >
-                    {p.producto_proveedores?.length || 0} Productos
+                    {proveedor.producto_proveedores?.length || 0} productos
+                    <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
                   </button>
                 </td>
-                <td className="p-4 text-center flex justify-center gap-3">
-                  <button onClick={() => handleOpenEditProveedor(p)} className="text-blue-400 hover:text-blue-600 p-1" title="Editar Proveedor">✏️</button>
-                  <button onClick={() => handleEliminarProveedor(p.id)} className="text-red-400 hover:text-red-600 p-1" title="Eliminar Proveedor">🗑️</button>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => abrirEditar(proveedor)}
+                      className="btn-icon"
+                      title="Editar proveedor"
+                      aria-label={`Editar ${proveedor.nombre}`}
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setErrorEliminar('')
+                        setProveedorAEliminar(proveedor)
+                      }}
+                      className="btn-icon hover:bg-gonper-danger-bg hover:text-gonper-danger"
+                      title="Eliminar proveedor"
+                      aria-label={`Eliminar ${proveedor.nombre}`}
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {proveedoresFiltrados.length === 0 && (
+          <EmptyState
+            icon={<Factory className="h-6 w-6" strokeWidth={1.5} />}
+            title="Sin proveedores"
+            description={
+              busqueda
+                ? 'Prueba con otro nombre.'
+                : 'Agrega tu primer proveedor para asociar precios a los productos.'
+            }
+          />
+        )}
       </div>
 
-      <button onClick={handleOpenCreateProveedor} className="md:hidden fixed bottom-20 right-6 bg-gonper-primary text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-40">+</button>
+      <Fab
+        label="Nuevo proveedor"
+        onClick={abrirCrear}
+        icon={<Plus className="h-6 w-6" strokeWidth={2} />}
+      />
 
-      {/* MODAL 1: CREAR / EDITAR PROVEEDOR */}
-      {isProveedorModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
-          <div className="bg-gonper-surface w-full max-w-md rounded-t-2xl md:rounded-2xl p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gonper-text">{proveedorAEditar ? 'Editar Proveedor' : 'Nuevo Proveedor'}</h2>
-              <button onClick={() => setIsProveedorModalOpen(false)} className="text-2xl text-gray-400">&times;</button>
-            </div>
-            <form key={proveedorAEditar?.id || 'nuevo'} onSubmit={handleSubmitProveedor} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre de la Empresa *</label>
-                <input name="nombre" required defaultValue={proveedorAEditar?.nombre || ''} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" placeholder="Ej. Distribuidora Culiacán" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Teléfono</label>
-                <input name="telefono" defaultValue={proveedorAEditar?.telefono || ''} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Correo Electrónico</label>
-                <input name="correo" type="email" defaultValue={proveedorAEditar?.correo || ''} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none" />
-              </div>
-              {errorMsg && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{errorMsg}</p>}
-              <button type="submit" disabled={isSubmitting} className="mt-4 w-full bg-gonper-primary text-white font-bold py-3 rounded-lg disabled:bg-gray-400">
-                {isSubmitting ? 'Guardando...' : 'Guardar Proveedor'}
-              </button>
-            </form>
+      <Modal
+        open={isProveedorModalOpen}
+        onClose={cerrarProveedorModal}
+        title={proveedorAEditar ? 'Editar proveedor' : 'Nuevo proveedor'}
+        description={
+          proveedorAEditar
+            ? 'Actualiza los datos de contacto.'
+            : 'Registra un proveedor en el directorio.'
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={cerrarProveedorModal}
+              disabled={isSubmitting}
+              className="btn btn-quiet flex-1 sm:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="proveedor-form"
+              disabled={isSubmitting}
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              {isSubmitting
+                ? 'Guardando…'
+                : proveedorAEditar
+                  ? 'Guardar cambios'
+                  : 'Crear proveedor'}
+            </button>
+          </>
+        }
+      >
+        <form
+          id="proveedor-form"
+          key={`${proveedorAEditar?.id ?? 'nuevo'}-${
+            isProveedorModalOpen ? 'abierto' : 'cerrado'
+          }`}
+          onSubmit={handleSubmitProveedor}
+          className="px-5 py-5"
+        >
+          <div>
+            <label className="field-label" htmlFor="proveedor-nombre">
+              Nombre de la empresa
+            </label>
+            <input
+              id="proveedor-nombre"
+              name="nombre"
+              required
+              defaultValue={proveedorAEditar?.nombre || ''}
+              className="field"
+              placeholder="Distribuidora Culiacán"
+            />
           </div>
-        </div>
-      )}
 
-      {/* MODAL 2: GESTIONAR CATÁLOGO (PRECIOS) */}
-      {proveedorActivo && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-          <div className="bg-gonper-surface w-full max-w-2xl rounded-t-2xl md:rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
-              <div>
-                <h2 className="text-lg font-bold text-gonper-text">Catálogo y Precios</h2>
-                <p className="text-sm text-gonper-primary font-medium">{proveedorActivo.nombre}</p>
-              </div>
-              <button onClick={() => setProveedorActivo(null)} className="text-3xl text-gray-400 hover:text-red-500">&times;</button>
-            </div>
+          <div className="mt-4">
+            <label className="field-label" htmlFor="proveedor-telefono">
+              Teléfono
+            </label>
+            <input
+              id="proveedor-telefono"
+              name="telefono"
+              defaultValue={proveedorAEditar?.telefono || ''}
+              className="field"
+              placeholder="669 123 4567"
+            />
+          </div>
 
-            <div className="p-4 flex-1 overflow-y-auto">
-              
-              {/* FORMULARIO CON BUSCADOR INTELIGENTE */}
-              <form onSubmit={handleAddProducto} className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 flex flex-col md:flex-row gap-3 items-start">
-                
-                {/* BUSCADOR */}
-                <div className="flex-1 w-full relative">
-                  <label className="block text-xs font-medium mb-1">Buscar Producto del Inventario</label>
-                  
+          <div className="mt-4">
+            <label className="field-label" htmlFor="proveedor-correo">
+              Correo electrónico
+            </label>
+            <input
+              id="proveedor-correo"
+              name="correo"
+              type="email"
+              defaultValue={proveedorAEditar?.correo || ''}
+              className="field"
+              placeholder="ventas@proveedor.com"
+            />
+          </div>
+
+          {errorMsg && (
+            <p className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+              {errorMsg}
+            </p>
+          )}
+        </form>
+      </Modal>
+
+      <Modal
+        open={!!proveedorActivo}
+        onClose={() => {
+          setProveedorActivo(null)
+          setRelacionEditando(null)
+          setErrorPrecio('')
+          setErrorMsgProducto('')
+        }}
+        title="Catálogo y precios"
+        description={proveedorActivo?.nombre ?? undefined}
+      >
+        {proveedorActivo && (
+          <div className="px-5 py-5">
+            <form
+              onSubmit={handleAddProducto}
+              className="rounded-[6px] border border-gonper-border bg-gonper-bg/60 p-4"
+            >
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
+                <div className="relative">
+                  <label className="field-label" htmlFor="producto-busqueda">
+                    Producto del inventario
+                  </label>
+
                   {productoSeleccionado ? (
-                    <div className="flex items-center justify-between w-full px-3 py-2 border rounded-lg bg-emerald-50 border-emerald-200">
-                      <div>
-                        <p className="text-sm font-bold text-emerald-800">{productoSeleccionado.nombre}</p>
-                        <p className="text-xs text-emerald-600 font-mono">{productoSeleccionado.sku}</p>
+                    <div className="flex h-11 items-center justify-between gap-2 rounded-[6px] border border-gonper-success-border bg-gonper-success-bg px-3 sm:h-10">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-gonper-success">
+                          {productoSeleccionado.nombre}
+                        </p>
+                        <p className="font-mono text-[11px] text-gonper-success/80">
+                          {productoSeleccionado.sku}
+                        </p>
                       </div>
-                      <button type="button" onClick={() => setProductoSeleccionado(null)} className="text-red-500 font-bold text-xl">&times;</button>
+                      <button
+                        type="button"
+                        onClick={() => setProductoSeleccionado(null)}
+                        className="btn-icon shrink-0 text-gonper-success"
+                        aria-label="Quitar producto seleccionado"
+                      >
+                        <X className="h-4 w-4" strokeWidth={1.75} />
+                      </button>
                     </div>
                   ) : (
                     <>
-                      <input 
-                        type="text"
-                        placeholder="Escribe el nombre o SKU..."
+                      <input
+                        id="producto-busqueda"
+                        type="search"
+                        placeholder="Nombre o SKU"
                         value={busquedaProducto}
-                        onChange={(e) => { setBusquedaProducto(e.target.value); setIsDropdownOpen(true); }}
+                        onChange={(e) => {
+                          setBusquedaProducto(e.target.value)
+                          setIsDropdownOpen(true)
+                        }}
                         onFocus={() => setIsDropdownOpen(true)}
-                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-gonper-primary focus:outline-none"
+                        className="field"
+                        autoComplete="off"
                       />
-                      {/* LISTA DESPLEGABLE DE RESULTADOS */}
-                      {isDropdownOpen && busquedaProducto.length > 0 && (
-                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+
+                      {isDropdownOpen && busquedaProducto.trim().length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-[6px] border border-gonper-border bg-gonper-surface py-1 shadow-[0_18px_44px_-14px_rgba(27,26,24,0.24)]">
                           {productosFiltradosBusqueda.length > 0 ? (
-                            productosFiltradosBusqueda.map(prod => (
-                              <div 
-                                key={prod.id} 
-                                onClick={() => handleSelectProducto(prod)}
-                                className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                            productosFiltradosBusqueda.map((producto) => (
+                              <button
+                                key={producto.id}
+                                type="button"
+                                onClick={() => handleSelectProducto(producto)}
+                                className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-gonper-hover"
                               >
-                                <p className="text-sm font-medium text-gray-800">{prod.nombre}</p>
-                                <p className="text-xs text-gray-500 font-mono">{prod.sku}</p>
-                              </div>
+                                <span className="text-[13px] font-medium">
+                                  {producto.nombre}
+                                </span>
+                                <span className="font-mono text-[11px] text-gonper-muted">
+                                  {producto.sku}
+                                </span>
+                              </button>
                             ))
                           ) : (
-                            <div className="px-3 py-4 text-center text-sm text-gray-500">
-                              No se encontraron productos.
-                            </div>
+                            <p className="px-3 py-4 text-center text-[12.5px] text-gonper-muted">
+                              Sin resultados.
+                            </p>
                           )}
                         </div>
                       )}
                     </>
                   )}
-                  
-                  {productosDisponibles.length === 0 && <p className="text-xs text-amber-600 mt-1">Todos los productos del inventario ya están asignados a este proveedor.</p>}
-                </div>
 
-                {/* PRECIO Y BOTÓN */}
-                <div className="w-full md:w-32">
-                  <label className="block text-xs font-medium mb-1">Precio ($)</label>
-                  <input type="number" step="0.01" required value={nuevoPrecio} onChange={e => setNuevoPrecio(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="0.00" />
-                </div>
-                {/* 👇 CAMBIO DE TEXTO AQUÍ 👇 */}
-                <button type="submit" disabled={isAddingProduct || !productoSeleccionado} className="w-full md:w-auto bg-gonper-primary text-white px-4 h-10 mt-5 rounded-lg font-bold text-sm disabled:bg-gray-400">
-                  {isAddingProduct ? '...' : 'Agregar Producto'}
-                </button>
-              </form>
-              
-              {errorMsgProducto && <p className="text-sm text-red-600 bg-red-50 p-2 rounded mb-4">{errorMsgProducto}</p>}
-
-              {/* Tabla de productos del proveedor */}
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-100 text-gray-600">
-                  <tr>
-                    <th className="p-3">Producto</th>
-                    <th className="p-3 text-right">Precio Unitario</th>
-                    <th className="p-3 text-center">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {proveedorActivo.producto_proveedores?.map((rel: any) => (
-                    <tr key={rel.id}>
-                      <td className="p-3">
-                        <p className="font-semibold text-gonper-text">{rel.productos?.nombre}</p>
-                        <p className="text-xs text-gray-500 font-mono">{rel.productos?.sku}</p>
-                      </td>
-                      <td className="p-3 text-right font-bold text-emerald-600">${rel.precio_unitario}</td>
-                      <td className="p-3 text-center flex justify-center gap-2">
-                        <button onClick={() => handleUpdatePrecio(rel.id, rel.precio_unitario)} className="text-blue-400 hover:text-blue-600 p-1" title="Editar Precio">✏️</button>
-                        <button onClick={() => handleRemoveProducto(rel.id)} className="text-red-400 hover:text-red-600 p-1" title="Quitar Producto">🗑️</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {(!proveedorActivo.producto_proveedores || proveedorActivo.producto_proveedores.length === 0) && (
-                    <tr>
-                      <td colSpan={3} className="p-6 text-center text-gray-500">Este proveedor aún no tiene productos asignados.</td>
-                    </tr>
+                  {productosDisponibles.length === 0 && (
+                    <p className="mt-1.5 text-[11.5px] text-gonper-warning">
+                      Todos los productos ya están asignados a este proveedor.
+                    </p>
                   )}
-                </tbody>
-              </table>
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="producto-precio">
+                    Precio
+                  </label>
+                  <input
+                    id="producto-precio"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={nuevoPrecio}
+                    onChange={(e) => setNuevoPrecio(e.target.value)}
+                    className="field text-right tabular-nums"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={
+                    isAddingProduct ||
+                    !productoSeleccionado ||
+                    !nuevoPrecio ||
+                    productosDisponibles.length === 0
+                  }
+                  className="btn btn-primary sm:mb-0"
+                >
+                  {isAddingProduct ? 'Agregando…' : 'Agregar'}
+                </button>
+              </div>
+
+              {errorMsgProducto && (
+                <p className="mt-3 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+                  {errorMsgProducto}
+                </p>
+              )}
+            </form>
+
+            <div className="mt-5 flex items-center justify-between">
+              <h3 className="text-[13.5px] font-semibold">
+                {proveedorActivo.producto_proveedores?.length || 0} productos
+              </h3>
+              {errorPrecio && (
+                <span className="text-[12px] text-gonper-danger">{errorPrecio}</span>
+              )}
             </div>
-            
-            <div className="p-4 border-t bg-gray-50 rounded-b-2xl text-right">
-              <button onClick={() => setProveedorActivo(null)} className="px-6 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg">Cerrar</button>
-            </div>
+
+            {(proveedorActivo.producto_proveedores?.length || 0) > 0 ? (
+              <>
+                <div className="mt-2 hidden overflow-hidden rounded-[6px] border border-gonper-border sm:block">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                        <th className="px-3 py-2.5 font-medium">Producto</th>
+                        <th className="px-3 py-2.5 text-right font-medium">Precio</th>
+                        <th className="w-24 px-3 py-2.5 text-center font-medium">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gonper-border">
+                      {proveedorActivo.producto_proveedores?.map((relacion) => (
+                        <tr
+                          key={relacion.id}
+                          className="transition-colors duration-[120ms] hover:bg-gonper-hover"
+                        >
+                          <td className="px-3 py-2.5">
+                            <p className="text-[13px] font-medium">
+                              {relacion.productos?.nombre}
+                            </p>
+                            <p className="font-mono text-[11px] text-gonper-muted">
+                              {relacion.productos?.sku}
+                            </p>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {relacionEditando === relacion.id ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={precioEdicion}
+                                  onChange={(e) => setPrecioEdicion(e.target.value)}
+                                  className="field h-9 w-24 text-right text-[13px]"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => guardarPrecio(relacion)}
+                                  disabled={isUpdatingPrecio}
+                                  className="btn-icon text-gonper-primary"
+                                  aria-label="Guardar precio"
+                                >
+                                  <Check className="h-4 w-4" strokeWidth={2} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRelacionEditando(null)}
+                                  disabled={isUpdatingPrecio}
+                                  className="btn-icon"
+                                  aria-label="Cancelar edición de precio"
+                                >
+                                  <X className="h-4 w-4" strokeWidth={1.75} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => empezarEdicionPrecio(relacion)}
+                                className="text-[13px] font-semibold tabular-nums text-gonper-text transition-colors hover:text-gonper-primary"
+                                title="Editar precio"
+                              >
+                                {moneda.format(Number(relacion.precio_unitario))}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => empezarEdicionPrecio(relacion)}
+                                className="btn-icon"
+                                title="Editar precio"
+                                aria-label="Editar precio"
+                              >
+                                <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setErrorQuitar('')
+                                  setRelacionAEliminar(relacion)
+                                }}
+                                className="btn-icon hover:bg-gonper-danger-bg hover:text-gonper-danger"
+                                title="Quitar producto"
+                                aria-label="Quitar producto"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="stagger mt-3 grid gap-2 sm:hidden">
+                  {proveedorActivo.producto_proveedores?.map((relacion) => (
+                    <div
+                      key={relacion.id}
+                      className="rounded-[6px] border border-gonper-border p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium">
+                            {relacion.productos?.nombre}
+                          </p>
+                          <p className="font-mono text-[11px] text-gonper-muted">
+                            {relacion.productos?.sku}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center">
+                          <button
+                            type="button"
+                            onClick={() => empezarEdicionPrecio(relacion)}
+                            className="btn-icon"
+                            aria-label="Editar precio"
+                          >
+                            <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setErrorQuitar('')
+                              setRelacionAEliminar(relacion)
+                            }}
+                            className="btn-icon hover:bg-gonper-danger-bg hover:text-gonper-danger"
+                            aria-label="Quitar producto"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between border-t border-gonper-border pt-2">
+                        <span className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                          Precio
+                        </span>
+                        {relacionEditando === relacion.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={precioEdicion}
+                              onChange={(e) => setPrecioEdicion(e.target.value)}
+                              className="field h-9 w-24 text-right text-[13px]"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => guardarPrecio(relacion)}
+                              disabled={isUpdatingPrecio}
+                              className="btn-icon text-gonper-primary"
+                              aria-label="Guardar precio"
+                            >
+                              <Check className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRelacionEditando(null)}
+                              disabled={isUpdatingPrecio}
+                              className="btn-icon"
+                              aria-label="Cancelar edición de precio"
+                            >
+                              <X className="h-4 w-4" strokeWidth={1.75} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[14px] font-semibold tabular-nums">
+                            {moneda.format(Number(relacion.precio_unitario))}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 rounded-[6px] border border-dashed border-gonper-border px-4 py-10 text-center">
+                <Package
+                  className="mx-auto h-6 w-6 text-gonper-muted"
+                  strokeWidth={1.5}
+                />
+                <p className="mt-2 text-[13px] font-medium">
+                  Catálogo vacío
+                </p>
+                <p className="mt-1 text-[12px] text-gonper-muted">
+                  Agrega el primer producto y su precio.
+                </p>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!proveedorAEliminar}
+        title="Eliminar proveedor"
+        description="Esta acción no se puede deshacer."
+        pending={isDeletingProveedor}
+        error={errorEliminar}
+        onConfirm={handleEliminarProveedor}
+        onClose={() => {
+          if (isDeletingProveedor) return
+          setProveedorAEliminar(null)
+          setErrorEliminar('')
+        }}
+      >
+        ¿Eliminar <strong className="font-semibold">{proveedorAEliminar?.nombre}</strong>
+        ? Se quitará del directorio y de sus productos asociados.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!relacionAEliminar}
+        title="Quitar producto"
+        description="El producto seguirá en el inventario."
+        confirmLabel="Quitar"
+        pendingLabel="Quitando…"
+        pending={isRemovingProduct}
+        error={errorQuitar}
+        onConfirm={handleQuitarProducto}
+        onClose={() => {
+          if (isRemovingProduct) return
+          setRelacionAEliminar(null)
+          setErrorQuitar('')
+        }}
+      >
+        ¿Quitar{' '}
+        <strong className="font-semibold">
+          {relacionAEliminar?.productos?.nombre}
+        </strong>{' '}
+        del catálogo de este proveedor?
+      </ConfirmDialog>
     </div>
   )
 }

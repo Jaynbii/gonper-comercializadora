@@ -14,10 +14,17 @@ interface ItemRecepcion {
   cantidad_recibida: number
 }
 
+// Define la estructura de los artículos que se piden en una compra.
+interface ItemCompra {
+  producto_id: string
+  cantidad: number
+  precio: number
+}
+
 // Crea una orden de compra y registra los productos solicitados.
 export async function generarOrdenCompra(
   proveedorId: string,
-  items: any[]
+  items: ItemCompra[]
 ) {
   // Inicializa el cliente de Supabase en el servidor.
   const supabase = await createClient()

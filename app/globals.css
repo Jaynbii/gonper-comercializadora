@@ -162,8 +162,40 @@
 }
 
 .animate-page {
-  animation: rise 220ms var(--ease-out-quint) both;
+  animation: fade 180ms var(--ease-out-quint) both;
 }
+
+.animate-fade {
+  animation: fade 200ms var(--ease-out-quint) both;
+}
+
+.animate-fab {
+  animation: fab-in 260ms var(--ease-out-quint) both;
+}
+
+@keyframes fab-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stagger > * {
+  animation: rise 280ms var(--ease-out-quint) both;
+}
+
+.stagger > *:nth-child(2) { animation-delay: 35ms; }
+.stagger > *:nth-child(3) { animation-delay: 70ms; }
+.stagger > *:nth-child(4) { animation-delay: 105ms; }
+.stagger > *:nth-child(5) { animation-delay: 140ms; }
+.stagger > *:nth-child(6) { animation-delay: 175ms; }
+.stagger > *:nth-child(7) { animation-delay: 210ms; }
+.stagger > *:nth-child(8) { animation-delay: 245ms; }
+
 
 .animate-rise {
   animation: rise 320ms var(--ease-out-quint) both;
@@ -203,6 +235,12 @@ dialog.modal-panel[open] {
   opacity: 1;
   transform: none;
 }
+
+dialog.modal-panel.modal-wide {
+  width: min(100vw - 1rem, 72rem);
+  max-height: min(92dvh, 56rem);
+}
+
 
 @starting-style {
   dialog.modal-panel[open] {

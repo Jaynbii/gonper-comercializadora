@@ -1,134 +1,390 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ChevronLeft, Package, TriangleAlert } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
+import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 
-export default async function OrdenDetallePage({ params }: { params: Promise<{ id: string }> }) {
+type Producto = {
+  nombre: string
+  sku: string
+  stock_actual: number | string
+  unidad_medida: string | null
+}
+
+type ItemOrden = {
+  id: string
+  cantidad_solicitada: number | string
+  cantidad_surtida: number | string | null
+  estado_item: string | null
+  unidad: string | null
+  productos: Producto | Producto[] | null
+}
+
+type Orden = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  clientes: { nombre: string } | { nombre: string }[] | null
+  orden_items: ItemOrden[]
+}
+
+const numero = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
+
+const fecha = new Intl.DateTimeFormat('es-MX', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+})
+
+const productoDe = (item: ItemOrden): Producto | null =>
+  Array.isArray(item.productos) ? item.productos[0] ?? null : item.productos
+
+const nombreCliente = (clientes: Orden['clientes']) => {
+  if (!clientes) return 'Cliente desconocido'
+  return Array.isArray(clientes)
+    ? clientes[0]?.nombre || 'Cliente desconocido'
+    : clientes.nombre
+}
+
+export default async function OrdenDetallePage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: orden, error } = await supabase
+  const { data, error } = await supabase
     .from('ordenes')
-    .select(`
+    .select(
+      `
       id, folio, estado, created_at,
       clientes (nombre),
       orden_items (
         id, cantidad_solicitada, cantidad_surtida, estado_item, unidad,
         productos (nombre, sku, stock_actual, unidad_medida)
       )
-    `)
+    `,
+    )
     .eq('id', id)
     .single()
 
-  if (error || !orden) return notFound()
+  if (error || !data) return notFound()
 
-  // Calcular si hay algo para surtir en general
-  let hayStockTotal = false
-  let hayStockParcial = false
+  const orden = data as unknown as Orden
+  const items = orden.orden_items ?? []
 
-  orden.orden_items.forEach((item: any) => {
-    const prod = Array.isArray(item.productos) ? item.productos[0] : item.productos
-    if (prod && prod.stock_actual >= item.cantidad_solicitada) hayStockTotal = true
-    if (prod && prod.stock_actual > 0) hayStockParcial = true
-  })
+  // Hay stock total solo si TODOS los artículos están cubiertos.
+  const hayStockTotal =
+    items.length > 0 &&
+    items.every((item) => {
+      const producto = productoDe(item)
+      return (
+        !!producto &&
+        Number(producto.stock_actual) >= Number(item.cantidad_solicitada)
+      )
+    })
 
-  const getBadgeColor = (estado: string) => {
-    switch (estado) {
-      case 'PENDIENTE': return 'bg-amber-100 text-amber-700'
-      case 'PARCIAL': return 'bg-orange-100 text-orange-700'
-      case 'ENTREGADA': return 'bg-emerald-100 text-emerald-700'
-      default: return 'bg-gray-100 text-gray-700'
-    }
-  }
+  const hayStockParcial = items.some(
+    (item) => Number(productoDe(item)?.stock_actual) > 0,
+  )
+
+  const puedeSurtir =
+    orden.estado !== 'ENTREGADA' &&
+    orden.estado !== 'PARCIAL' &&
+    orden.estado !== 'CANCELADA'
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 md:pb-0">
-      {/* Header */}
-      <div className="mb-6">
-        <Link href="/ordenes" className="text-sm text-gonper-primary hover:underline mb-4 inline-block">&larr; Volver a Órdenes</Link>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gonper-surface p-6 rounded-xl border border-gonper-border shadow-sm">
-          <div>
-            <h1 className="text-2xl font-bold text-gonper-text">{(orden.clientes as any)?.nombre}</h1>
-            <p className="text-sm text-gonper-muted font-mono mt-1">Folio: {orden.folio}</p>
-            <p className="text-xs text-gonper-muted mt-1">Fecha: {new Date(orden.created_at).toLocaleString('es-MX')}</p>
+    <div className="mx-auto max-w-[980px] pb-6">
+      <Link
+        href="/ordenes"
+        className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+        Volver a órdenes
+      </Link>
+
+      <header className="card p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="eyebrow">Requerimiento</p>
+            <h1 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.025em] sm:text-[28px]">
+              {nombreCliente(orden.clientes)}
+            </h1>
+            <p className="mt-1.5 font-mono text-[11.5px] text-gonper-muted">
+              {orden.folio}
+            </p>
+            <p className="mt-0.5 text-[12px] text-gonper-muted">
+              {fecha.format(new Date(orden.created_at))}
+            </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold ${getBadgeColor(orden.estado)}`}>
-              {orden.estado}
-            </span>
-            
-            {/* Solo mostramos el botón si no está entregada y si hay AL MENOS algo de stock */}
-            {orden.estado !== 'ENTREGADA' && orden.estado !== 'PARCIAL' && (
-              hayStockParcial ? (
-                <BotonSurtir ordenId={orden.id} esParcial={!hayStockTotal} />
-              ) : (
-                <span className="text-xs font-bold text-red-500 bg-red-50 px-3 py-2 rounded-lg border border-red-200">
-                  ⚠️ Sin Stock: No se puede surtir
-                </span>
-              )
-            )}
+          <div className="shrink-0">
+            <EstadoBadge estado={orden.estado} />
           </div>
         </div>
-      </div>
 
-      {/* Lista de Artículos */}
-      <div className="bg-gonper-surface rounded-xl border border-gonper-border shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gonper-border bg-gray-50 flex justify-between items-center">
-          <h2 className="font-bold text-gonper-text">Cotejo de Inventario</h2>
-          <span className="text-xs text-gray-500">El sistema descontará el stock automáticamente al surtir.</span>
-        </div>
-        <div className="divide-y divide-gonper-border">
-          {orden.orden_items.map((item: any) => {
-            const prod = Array.isArray(item.productos) ? item.productos[0] : item.productos
-            const solicitado = Number(item.cantidad_solicitada)
-            const stock = Number(prod?.stock_actual) || 0
-            const unidad = item.unidad || prod?.unidad_medida || ''
-            
-            // Lógica de faltantes
-            const aSurtir = Math.min(stock, solicitado)
-            const faltante = solicitado - aSurtir
-
-            // Colores de la fila según el stock
-            let rowColor = "bg-white"
-            if (faltante === solicitado) rowColor = "bg-red-50/30" // No hay nada
-            else if (faltante > 0) rowColor = "bg-amber-50/30" // Falta una parte
-            else rowColor = "bg-emerald-50/10" // Hay todo
-
-            return (
-              <div key={item.id} className={`p-4 flex flex-col md:flex-row justify-between md:items-center gap-4 transition-colors ${rowColor}`}>
-                <div className="flex-1">
-                  <p className="font-bold text-gonper-text">{prod?.nombre || 'Producto eliminado'}</p>
-                  <p className="text-xs text-gonper-muted font-mono">{prod?.sku}</p>
-                </div>
-                
-                <div className="flex items-center gap-6">
-                  <div className="text-center w-16">
-                    <p className="text-xs text-gonper-muted mb-1">Solicitado</p>
-                    <p className="font-bold text-lg text-gray-700">{solicitado} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
-                  </div>
-                  <div className="text-center w-16">
-                    <p className="text-xs text-gonper-muted mb-1">En Stock</p>
-                    <p className={`font-bold text-lg ${stock === 0 ? 'text-red-500' : 'text-blue-600'}`}>{stock} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
-                  </div>
-                  <div className="text-center w-20 border-l pl-4 border-gray-200">
-                    <p className="text-xs text-gonper-muted mb-1">Faltante</p>
-                    <p className={`font-bold text-lg ${faltante > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                      {faltante > 0 ? faltante : '0'} <span className="text-xs font-normal text-gray-500">{unidad}</span>
-                    </p>
-                  </div>
-                  
-                  {orden.estado === 'ENTREGADA' || orden.estado === 'PARCIAL' ? (
-                    <div className="text-center w-16 border-l pl-4 border-gray-200">
-                      <p className="text-xs text-gonper-muted mb-1">Surtido</p>
-                      <p className="font-bold text-lg text-gray-700">{item.cantidad_surtida} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+        <div className="mt-5 flex flex-col gap-3 border-t border-gonper-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          {puedeSurtir ? (
+            hayStockParcial ? (
+              <BotonSurtir ordenId={orden.id} esParcial={!hayStockTotal} />
+            ) : (
+              <Badge tono="danger">
+                <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} />
+                Sin stock para surtir
+              </Badge>
             )
-          })}
+          ) : (
+            <p className="text-[12.5px] text-gonper-muted">
+              {orden.estado === 'CANCELADA'
+                ? 'Esta orden está cancelada.'
+                : 'Esta orden ya fue surtida.'}
+            </p>
+          )}
+
+          {puedeSurtir && hayStockParcial && (
+            <p className="text-[11.5px] leading-relaxed text-gonper-muted">
+              Al surtir se descuenta el inventario automáticamente.
+            </p>
+          )}
         </div>
-      </div>
+      </header>
+
+      <section className="card mt-4 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-gonper-border px-5 py-3.5">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+            Cotejo de inventario
+          </h2>
+          <span className="text-[11.5px] text-gonper-muted">
+            {items.length} {items.length === 1 ? 'artículo' : 'artículos'}
+          </span>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <Package
+              className="mx-auto h-6 w-6 text-gonper-muted"
+              strokeWidth={1.5}
+            />
+            <p className="mt-2 text-[13px] font-medium">
+              Esta orden todavía no tiene artículos
+            </p>
+            <p className="mt-1 text-[12px] text-gonper-muted">
+              Procesa el PDF desde la lista de órdenes para capturarlos.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="stagger divide-y divide-gonper-border md:hidden">
+              {items.map((item) => {
+                const producto = productoDe(item)
+                const solicitado = Number(item.cantidad_solicitada)
+                const stock = Number(producto?.stock_actual) || 0
+                const unidad = item.unidad || producto?.unidad_medida || ''
+                const aSurtir = Math.min(stock, solicitado)
+                const faltante = Math.max(0, solicitado - aSurtir)
+                const surtido = Number(item.cantidad_surtida) || 0
+
+                return (
+                  <article key={item.id} className="min-w-0 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-[14px] font-semibold leading-snug">
+                          {producto?.nombre || 'Producto eliminado'}
+                        </h3>
+                        <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
+                          {producto?.sku || '—'}
+                        </p>
+                      </div>
+                      <Badge
+                        tono={
+                          faltante === 0
+                            ? 'success'
+                            : aSurtir > 0
+                              ? 'warning'
+                              : 'danger'
+                        }
+                      >
+                        {faltante === 0
+                          ? 'Completo'
+                          : aSurtir > 0
+                            ? 'Parcial'
+                            : 'Sin stock'}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gonper-border pt-3">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
+                          Solicitado
+                        </p>
+                        <p className="mt-1 text-[16px] font-semibold tabular-nums">
+                          {numero.format(solicitado)}
+                          {unidad && (
+                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                              {unidad}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
+                          En stock
+                        </p>
+                        <p
+                          className={`mt-1 text-[16px] font-semibold tabular-nums ${
+                            stock === 0 ? 'text-gonper-danger' : 'text-gonper-text'
+                          }`}
+                        >
+                          {numero.format(stock)}
+                          {unidad && (
+                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                              {unidad}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
+                          Faltante
+                        </p>
+                        <p
+                          className={`mt-1 text-[16px] font-semibold tabular-nums ${
+                            faltante > 0
+                              ? 'text-gonper-danger'
+                              : 'text-gonper-success'
+                          }`}
+                        >
+                          {numero.format(faltante)}
+                          {unidad && (
+                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                              {unidad}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {(orden.estado === 'ENTREGADA' ||
+                      orden.estado === 'PARCIAL') && (
+                      <p className="mt-2 flex items-center justify-between border-t border-gonper-border pt-2 text-[12px]">
+                        <span className="text-gonper-muted">Surtido</span>
+                        <span className="font-semibold tabular-nums">
+                          {numero.format(surtido)} {unidad}
+                        </span>
+                      </p>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                    <th className="px-5 py-3 font-medium">Artículo</th>
+                    <th className="px-4 py-3 text-center font-medium">
+                      Solicitado
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium">
+                      En stock
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium">
+                      Faltante
+                    </th>
+                    {(orden.estado === 'ENTREGADA' ||
+                      orden.estado === 'PARCIAL') && (
+                      <th className="px-4 py-3 text-center font-medium">
+                        Surtido
+                      </th>
+                    )}
+                    <th className="px-5 py-3 text-center font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gonper-border">
+                  {items.map((item) => {
+                    const producto = productoDe(item)
+                    const solicitado = Number(item.cantidad_solicitada)
+                    const stock = Number(producto?.stock_actual) || 0
+                    const unidad = item.unidad || producto?.unidad_medida || ''
+                    const aSurtir = Math.min(stock, solicitado)
+                    const faltante = Math.max(0, solicitado - aSurtir)
+                    const surtido = Number(item.cantidad_surtida) || 0
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="transition-colors duration-[120ms] hover:bg-gonper-hover"
+                      >
+                        <td className="px-5 py-3.5">
+                          <p className="text-[13.5px] font-medium">
+                            {producto?.nombre || 'Producto eliminado'}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
+                            {producto?.sku || '—'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums">
+                          {numero.format(solicitado)}
+                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                            {unidad}
+                          </span>
+                        </td>
+                        <td
+                          className={`px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums ${
+                            stock === 0 ? 'text-gonper-danger' : ''
+                          }`}
+                        >
+                          {numero.format(stock)}
+                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                            {unidad}
+                          </span>
+                        </td>
+                        <td
+                          className={`px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums ${
+                            faltante > 0
+                              ? 'text-gonper-danger'
+                              : 'text-gonper-success'
+                          }`}
+                        >
+                          {numero.format(faltante)}
+                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
+                            {unidad}
+                          </span>
+                        </td>
+                        {(orden.estado === 'ENTREGADA' ||
+                          orden.estado === 'PARCIAL') && (
+                          <td className="px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums">
+                            {numero.format(surtido)}
+                          </td>
+                        )}
+                        <td className="px-5 py-3.5 text-center">
+                          <Badge
+                            tono={
+                              faltante === 0
+                                ? 'success'
+                                : aSurtir > 0
+                                  ? 'warning'
+                                  : 'danger'
+                            }
+                          >
+                            {faltante === 0
+                              ? 'Completo'
+                              : aSurtir > 0
+                                ? 'Parcial'
+                                : 'Sin stock'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   )
 }

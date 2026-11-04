@@ -1,6 +1,38 @@
 import { createClient } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
 
+type Relacion<T> = T | T[] | null
+
+type ItemActivo = {
+  cantidad_solicitada: number | string
+  cantidad_surtida: number | string | null
+  producto_id: string
+}
+
+type ProductoCompra = {
+  id: string
+  nombre: string
+  sku: string
+  unidad_medida: string | null
+}
+
+type OrdenCompraCruda = {
+  id: string
+  folio: string
+  estado: string
+  total_estimado: number | string
+  created_at: string
+  proveedores: Relacion<{ nombre: string }>
+  orden_compra_items:
+    | {
+        id: string
+        cantidad_solicitada: number | string
+        cantidad_recibida: number | string
+        productos: Relacion<ProductoCompra>
+      }[]
+    | null
+}
+
 export default async function ComprasPage() {
   const supabase = await createClient()
 
@@ -12,7 +44,7 @@ export default async function ComprasPage() {
 
   const demandaPorProducto: Record<string, number> = {}
   ordenesActivas?.forEach(orden => {
-    orden.orden_items?.forEach((item: any) => {
+    orden.orden_items?.forEach((item: ItemActivo) => {
       const pendiente = Number(item.cantidad_solicitada) - Number(item.cantidad_surtida)
       if (pendiente > 0) {
         demandaPorProducto[item.producto_id] = (demandaPorProducto[item.producto_id] || 0) + pendiente
@@ -60,7 +92,24 @@ export default async function ComprasPage() {
     <ComprasClient 
       faltantes={faltantes} 
       proveedores={proveedores || []} 
-      ordenesCompra={ordenesCompra || []}
+      ordenesCompra={normalizarOrdenes(ordenesCompra)}
     />
   )
+}
+
+// Supabase entrega las relaciones como arreglos cuando no hay tipos
+// generados. La interfaz del cliente usa el primer elemento.
+function normalizarOrdenes(ordenes: OrdenCompraCruda[] | null) {
+  return (ordenes || []).map((orden) => ({
+    ...orden,
+    proveedores: Array.isArray(orden.proveedores)
+      ? orden.proveedores[0] ?? null
+      : orden.proveedores,
+    orden_compra_items: (orden.orden_compra_items || []).map((item) => ({
+      ...item,
+      productos: Array.isArray(item.productos)
+        ? item.productos[0] ?? null
+        : item.productos,
+    })),
+  }))
 }

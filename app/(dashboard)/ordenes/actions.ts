@@ -172,11 +172,14 @@ export async function surtirOrden(ordenId: string) {
 
       const p1 = supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id)
       const p2 = supabase.from('orden_items').update({ cantidad_surtida: cantidadASurtir, estado_item: nuevoEstadoItem }).eq('id', item.id)
-      let p3 = Promise.resolve()
+      let p3: Promise<void> = Promise.resolve()
       if (cantidadASurtir > 0) {
-        p3 = supabase.from('movimientos_inventario').insert({
-          producto_id: item.producto_id, tipo_movimiento: 'SALIDA_ORDEN', cantidad: cantidadASurtir, motivo: 'Surtido de Orden', orden_id: ordenId, usuario_id: user.id
-        }) as any
+        p3 = (async () => {
+          const { error } = await supabase.from('movimientos_inventario').insert({
+            producto_id: item.producto_id, tipo_movimiento: 'SALIDA_ORDEN', cantidad: cantidadASurtir, motivo: 'Surtido de Orden', orden_id: ordenId, usuario_id: user.id
+          })
+          if (error) throw new Error(`Error al registrar el movimiento: ${error.message}`)
+        })()
       }
       await Promise.all([p1, p2, p3])
     })
@@ -190,8 +193,8 @@ export async function surtirOrden(ordenId: string) {
     if (updateError) throw new Error(`Error al actualizar orden: ${updateError.message}`)
 
     return { success: true, estado: nuevoEstadoOrden }
-  } catch (error: any) {
-    throw new Error(error.message)
+  } catch (error: unknown) {
+    throw new Error(error instanceof Error ? error.message : String(error))
   }
 }
 
