@@ -1,159 +1,355 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { obtenerUrlParaOCR, guardarItemsEnOrden, registrarProductoEnInventario } from './actions'
+import { useRef, useState } from 'react'
+import {
+  obtenerUrlParaOCR,
+  guardarItemsEnOrden,
+  registrarProductoEnInventario,
+} from './actions'
 import { procesarTextoOrden } from './procesarTexto'
+import { extraerTextoDelPDF } from './procesarPdf'
 import { useRouter } from 'next/navigation'
 import * as pdfjsLib from 'pdfjs-dist'
 import Tesseract from 'tesseract.js'
+import { parseRequisicion } from '@/utils/requisicion'
+import { normalizarUnidad, UNIDADES_COMUNES } from '@/utils/unidades'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 
+type Sugerencia = {
+  id: string
+  sku: string
+  nombre: string
+  unidad_medida: string | null
+}
 
-export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: string, pdfPath: string }) {
+type ItemDetectado = {
+  key: string
+  codigo_pdf: string
+  cantidad: string
+  unidad: string
+  descripcion_pdf: string
+  existe_en_bd: boolean
+  id_bd: string | null
+  sugerencia: Sugerencia | null
+}
+
+// El nombre del archivo es único, así que la lectura se puede reutilizar
+// mientras el usuario esté en la misma sesión del navegador.
+const cacheTexto = new Map<string, string>()
+
+function mensajeDeError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export default function ProcesarPdfButton({
+  ordenId,
+  pdfPath,
+}: {
+  ordenId: string
+  pdfPath: string
+}) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
-  const [itemsDetectados, setItemsDetectados] = useState<any[] | null>(null)
-  const [seleccionados, setSeleccionados] = useState<Set<number>>(new Set())
-  const [guardandoInventario, setGuardandoInventario] = useState<number | null>(null)
+  const [itemsDetectados, setItemsDetectados] = useState<ItemDetectado[] | null>(null)
+  const [lineasNoReconocidas, setLineasNoReconocidas] = useState<string[]>([])
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [guardandoInventario, setGuardandoInventario] = useState<string | null>(null)
 
   const router = useRouter()
+  const contadorFilas = useRef(0)
 
-  useEffect(() => {
-    if (itemsDetectados) {
-      const iniciales = new Set<number>()
-      itemsDetectados.forEach((item, index) => {
-        if (item.existe_en_bd) iniciales.add(index)
-      })
-      setSeleccionados(iniciales)
+  const nuevaLlave = () => `fila-${Date.now()}-${contadorFilas.current++}`
+
+  const leerPdfConOcr = async (fileUrl: string) => {
+    let textoCompleto = ''
+    const loadingTask = pdfjsLib.getDocument({ url: fileUrl })
+    const pdf = await loadingTask.promise
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const viewport = page.getViewport({ scale: 2.0 })
+      const canvas = document.createElement('canvas')
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      await page.render({ canvas, viewport }).promise
+      setStatusMsg(`Analizando imagen (Página ${i} de ${pdf.numPages})...`)
+      const {
+        data: { text },
+      } = await Tesseract.recognize(canvas, 'spa', { logger: () => {} })
+      textoCompleto += text + '\n'
     }
-  }, [itemsDetectados])
+
+    return textoCompleto
+  }
+
+  const leerImagenConOcr = async (fileUrl: string) => {
+    setStatusMsg('Analizando fotografía...')
+    const {
+      data: { text },
+    } = await Tesseract.recognize(fileUrl, 'spa', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          setStatusMsg(`Analizando foto: ${(m.progress * 100).toFixed(0)}%`)
+        }
+      },
+    })
+    return text
+  }
 
   const handleProcesar = async () => {
     setIsLoading(true)
     setStatusMsg('Iniciando lectura...')
     setItemsDetectados(null)
+    setLineasNoReconocidas([])
 
     try {
-      const fileUrl = await obtenerUrlParaOCR(pdfPath)
-      let textoCompleto = ''
+      let textoCompleto = cacheTexto.get(pdfPath) ?? ''
 
-      // 🧠 VERIFICAMOS SI ES PDF O IMAGEN
-      const esPDF = pdfPath.toLowerCase().endsWith('.pdf')
+      if (!textoCompleto) {
+        const esPDF = pdfPath.toLowerCase().endsWith('.pdf')
 
-      if (esPDF) {
-        setStatusMsg('Leyendo PDF...')
-        const loadingTask = pdfjsLib.getDocument({ url: fileUrl })
-        const pdf = await loadingTask.promise
-        
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i)
-          const viewport = page.getViewport({ scale: 2.0 })
-          const canvas = document.createElement('canvas')
-          const context = canvas.getContext('2d')
-          canvas.height = viewport.height
-          canvas.width = viewport.width
+        if (esPDF) {
+          setStatusMsg('Buscando texto en el PDF...')
+          const extraido = await extraerTextoDelPDF(pdfPath)
 
-          if (context) {
-            await page.render({ canvasContext: context, viewport, canvas } as any).promise
-            setStatusMsg(`Analizando imagen (Página ${i})...`)
-            const { data: { text } } = await Tesseract.recognize(canvas, 'spa', { logger: m => {} })
-            textoCompleto += text + '\n'
+          // Si el PDF tiene capa de texto y el parser reconoce filas, no se
+          // pasa por Tesseract. Los PDFs escaneados caen al OCR.
+          if (
+            extraido.success &&
+            parseRequisicion(extraido.textoExtraido).items.length > 0
+          ) {
+            textoCompleto = extraido.textoExtraido
+          } else {
+            const fileUrl = await obtenerUrlParaOCR(pdfPath)
+            textoCompleto = await leerPdfConOcr(fileUrl)
           }
+        } else {
+          const fileUrl = await obtenerUrlParaOCR(pdfPath)
+          textoCompleto = await leerImagenConOcr(fileUrl)
         }
-      } else {
-        // Es una FOTO (JPG, PNG, etc)
-        setStatusMsg('Analizando fotografía...')
-        // Tesseract puede leer una URL de imagen directamente
-        const { data: { text } } = await Tesseract.recognize(fileUrl, 'spa', { 
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              setStatusMsg(`Analizando foto: ${(m.progress * 100).toFixed(0)}%`)
-            }
-          } 
-        })
-        textoCompleto = text
+
+        if (textoCompleto.trim()) cacheTexto.set(pdfPath, textoCompleto)
       }
 
       setStatusMsg('Cotejando con el catálogo...')
-      const result = await procesarTextoOrden(textoCompleto, ordenId)
-      
-      if (result.success && result.items.length > 0) {
-        setItemsDetectados(result.items)
-      } else {
-        alert("No se detectaron productos válidos en la imagen.")
+      const result = await procesarTextoOrden(textoCompleto)
+
+      const detectados: ItemDetectado[] = result.items.map((item) => ({
+        key: nuevaLlave(),
+        codigo_pdf: item.codigo_pdf,
+        cantidad: String(item.cantidad),
+        unidad: item.unidad,
+        descripcion_pdf: item.descripcion_pdf,
+        existe_en_bd: item.existe_en_bd,
+        id_bd: item.id_bd,
+        sugerencia: item.sugerencia,
+      }))
+
+      setLineasNoReconocidas(result.lineasNoReconocidas)
+
+      if (detectados.length === 0 && result.lineasNoReconocidas.length === 0) {
+        alert('No se detectaron productos válidos en el archivo.')
+        return
       }
-    } catch (error: any) {
+
+      setItemsDetectados(detectados)
+      setSeleccionados(
+        new Set(detectados.filter((item) => item.existe_en_bd).map((item) => item.key)),
+      )
+    } catch (error) {
       console.error(error)
-      alert("Error al procesar: " + error.message)
+      alert('Error al procesar: ' + mensajeDeError(error))
     } finally {
       setIsLoading(false)
       setStatusMsg('')
     }
   }
 
-  const toggleSeleccion = (index: number) => {
-    const nuevos = new Set(seleccionados)
-    if (nuevos.has(index)) nuevos.delete(index)
-    else nuevos.add(index)
-    setSeleccionados(nuevos)
+  const actualizarItem = (key: string, cambios: Partial<ItemDetectado>) => {
+    setItemsDetectados((prev) =>
+      prev
+        ? prev.map((item) => {
+            if (item.key !== key) return item
+
+            const actualizado = { ...item, ...cambios }
+
+            // Al cambiar el código, la fila deja de apuntar al producto anterior.
+            if (
+              cambios.codigo_pdf !== undefined &&
+              cambios.codigo_pdf !== item.codigo_pdf
+            ) {
+              actualizado.id_bd = null
+              actualizado.existe_en_bd = false
+              actualizado.sugerencia = null
+            }
+
+            return actualizado
+          })
+        : null,
+    )
+  }
+
+  const aplicarSugerencia = (item: ItemDetectado) => {
+    if (!item.sugerencia) return
+    const sugerencia = item.sugerencia
+
+    setItemsDetectados((prev) =>
+      prev
+        ? prev.map((fila) =>
+            fila.key === item.key
+              ? {
+                  ...fila,
+                  codigo_pdf: sugerencia.sku,
+                  descripcion_pdf: sugerencia.nombre,
+                  unidad: normalizarUnidad(sugerencia.unidad_medida) || fila.unidad,
+                  existe_en_bd: true,
+                  id_bd: sugerencia.id,
+                  sugerencia: null,
+                }
+              : fila,
+          )
+        : null,
+    )
+    setSeleccionados((prev) => new Set(prev).add(item.key))
+  }
+
+  const toggleSeleccion = (key: string) => {
+    setSeleccionados((prev) => {
+      const nuevos = new Set(prev)
+      if (nuevos.has(key)) nuevos.delete(key)
+      else nuevos.add(key)
+      return nuevos
+    })
   }
 
   const toggleTodos = () => {
     if (!itemsDetectados) return
     if (seleccionados.size === itemsDetectados.length) {
-      setSeleccionados(new Set()) 
+      setSeleccionados(new Set())
     } else {
-      setSeleccionados(new Set(itemsDetectados.map((_, i) => i))) 
+      setSeleccionados(new Set(itemsDetectados.map((item) => item.key)))
     }
   }
 
-  const handleRegistrarEnInventario = async (index: number) => {
-    if (!itemsDetectados) return
-    setGuardandoInventario(index)
-    try {
-      const item = itemsDetectados[index]
-      const productoNuevo = await registrarProductoEnInventario(item)
-      
-      const nuevosItems = [...itemsDetectados]
-      nuevosItems[index].existe_en_bd = true
-      nuevosItems[index].id_bd = productoNuevo.id
-      setItemsDetectados(nuevosItems)
+  const handleRegistrarEnInventario = async (key: string) => {
+    const item = itemsDetectados?.find((fila) => fila.key === key)
+    if (!item) return
 
-      const nuevosSeleccionados = new Set(seleccionados)
-      nuevosSeleccionados.add(index)
-      setSeleccionados(nuevosSeleccionados)
-    } catch (error: any) {
-      alert("Error al registrar producto: " + error.message)
+    if (!item.codigo_pdf.trim() || !item.descripcion_pdf.trim()) {
+      alert('Completa el código y la descripción antes de registrar el producto.')
+      return
+    }
+
+    setGuardandoInventario(key)
+    try {
+      const producto = await registrarProductoEnInventario(item)
+
+      setItemsDetectados((prev) =>
+        prev
+          ? prev.map((fila) =>
+              fila.key === key
+                ? {
+                    ...fila,
+                    existe_en_bd: true,
+                    id_bd: producto.id,
+                    unidad:
+                      normalizarUnidad(producto.unidad_medida) ||
+                      normalizarUnidad(fila.unidad) ||
+                      '',
+                  }
+                : fila,
+            )
+          : null,
+      )
+
+      setSeleccionados((prev) => new Set(prev).add(key))
+    } catch (error) {
+      alert('Error al registrar producto: ' + mensajeDeError(error))
     } finally {
       setGuardandoInventario(null)
     }
   }
 
+  const agregarFila = (descripcion = '') => {
+    const nueva: ItemDetectado = {
+      key: nuevaLlave(),
+      codigo_pdf: '',
+      cantidad: '1',
+      unidad: '',
+      descripcion_pdf: descripcion,
+      existe_en_bd: false,
+      id_bd: null,
+      sugerencia: null,
+    }
+
+    setItemsDetectados((prev) => [...(prev ?? []), nueva])
+    setSeleccionados((prev) => new Set(prev).add(nueva.key))
+  }
+
+  const agregarLineaNoReconocida = (linea: string) => {
+    agregarFila(linea)
+    setLineasNoReconocidas((prev) => prev.filter((item) => item !== linea))
+  }
+
+  const eliminarFila = (key: string) => {
+    setItemsDetectados((prev) => prev?.filter((item) => item.key !== key) ?? null)
+    setSeleccionados((prev) => {
+      const nuevos = new Set(prev)
+      nuevos.delete(key)
+      return nuevos
+    })
+  }
+
   const handleConfirmar = async () => {
     if (!itemsDetectados) return
-    const itemsParaGuardar = itemsDetectados.filter((_, index) => seleccionados.has(index))
+
+    const itemsParaGuardar = itemsDetectados.filter((item) =>
+      seleccionados.has(item.key),
+    )
 
     if (itemsParaGuardar.length === 0) {
-      alert("No has seleccionado ningún artículo para agregar a la orden.")
+      alert('No has seleccionado ningún artículo para agregar a la orden.')
+      return
+    }
+
+    const sinRegistrar = itemsParaGuardar.filter((item) => !item.id_bd)
+    if (sinRegistrar.length > 0) {
+      alert(
+        'Primero registra en inventario: ' +
+          sinRegistrar.map((item) => item.descripcion_pdf || item.codigo_pdf).join(', '),
+      )
       return
     }
 
     setIsSaving(true)
     try {
       await guardarItemsEnOrden(ordenId, itemsParaGuardar)
-      router.refresh() 
-    } catch (error: any) {
-      alert(error.message) 
+      setItemsDetectados(null)
+      setLineasNoReconocidas([])
+      setIsSaving(false)
+      router.refresh()
+    } catch (error) {
+      alert(mensajeDeError(error))
       setIsSaving(false)
     }
   }
 
+  const todosSeleccionados =
+    !!itemsDetectados &&
+    itemsDetectados.length > 0 &&
+    seleccionados.size === itemsDetectados.length
+
   return (
     <>
       <div className="flex flex-col items-end gap-1">
-        <button onClick={handleProcesar} disabled={isLoading || isSaving} className="px-3 py-1 text-sm text-white bg-gonper-primary hover:bg-gonper-primary-hover rounded-md disabled:bg-gray-400">
+        <button
+          onClick={handleProcesar}
+          disabled={isLoading || isSaving}
+          className="px-3 py-1 text-sm text-white bg-gonper-primary hover:bg-gonper-primary-hover rounded-md disabled:bg-gray-400"
+        >
           {isLoading ? 'Leyendo...' : '📸 Leer Archivo'}
         </button>
         {statusMsg && <span className="text-xs text-gonper-muted">{statusMsg}</span>}
@@ -161,65 +357,225 @@ export default function ProcesarPdfButton({ ordenId, pdfPath }: { ordenId: strin
 
       {itemsDetectados && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
-            
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50 gap-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">Revisión de Requerimiento</h2>
-                <p className="text-xs text-gray-500 mt-1">1. Registra en el catálogo los artículos nuevos. 2. Selecciona los que van para esta orden.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Corrige lo que el OCR haya leído mal. Los artículos nuevos se registran en el
+                  catálogo con su unidad.
+                </p>
               </div>
-              <button onClick={() => setItemsDetectados(null)} className="text-2xl text-gray-400 hover:text-red-500">&times;</button>
-            </div>
-            
-            <div className="p-4 overflow-y-auto flex-1">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
-                  <tr>
-                    <th className="p-3 w-12 text-center" title="Seleccionar para esta orden">
-                      <input type="checkbox" className="w-4 h-4 cursor-pointer" checked={seleccionados.size === itemsDetectados.length && itemsDetectados.length > 0} onChange={toggleTodos} />
-                    </th>
-                    <th className="p-3">Código</th>
-                    <th className="p-3">Descripción (Documento)</th>
-                    <th className="p-3 text-center">Cantidad</th>
-                    <th className="p-3 text-center border-l border-gray-200">Estado en Inventario</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {itemsDetectados.map((item, idx) => (
-                    <tr key={idx} className={`transition-colors ${seleccionados.has(idx) ? 'bg-blue-50/30' : 'opacity-60 bg-gray-50'}`}>
-                      <td className="p-3 text-center">
-                        <input type="checkbox" className="w-4 h-4 cursor-pointer" checked={seleccionados.has(idx)} onChange={() => toggleSeleccion(idx)} />
-                      </td>
-                      <td className="p-3 font-mono text-xs">{item.codigo_pdf}</td>
-                      <td className="p-3 font-medium">{item.producto_nombre}</td>
-                      <td className="p-3 text-center font-bold">{item.cantidad}</td>
-                      
-                      <td className="p-3 text-center border-l border-gray-200">
-                        {item.existe_en_bd ? (
-                          <span className="text-emerald-600 font-bold text-xs bg-emerald-100 px-2 py-1 rounded">Inventariado</span>
-                        ) : (
-                          <button 
-                            onClick={() => handleRegistrarEnInventario(idx)}
-                            disabled={guardandoInventario === idx}
-                            className="text-xs font-bold text-blue-600 bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                          >
-                            {guardandoInventario === idx ? 'Guardando...' : '+ Registrar'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <button
+                onClick={() => setItemsDetectados(null)}
+                className="text-2xl text-gray-400 hover:text-red-500"
+                aria-label="Cerrar"
+              >
+                &times;
+              </button>
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                <span className="font-bold text-blue-600">{seleccionados.size}</span> artículos seleccionados para la orden.
+            <div className="p-4 overflow-y-auto flex-1">
+              <datalist id="unidades-comunes">
+                {UNIDADES_COMUNES.map((unidad) => (
+                  <option key={unidad} value={unidad} />
+                ))}
+              </datalist>
+
+              {lineasNoReconocidas.length > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-semibold text-amber-800">
+                    El OCR no pudo interpretar estas líneas. Revísalas para no perder artículos:
+                  </p>
+                  <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                    {lineasNoReconocidas.map((linea, index) => (
+                      <li
+                        key={`${linea}-${index}`}
+                        className="flex items-center justify-between gap-3 text-xs"
+                      >
+                        <span className="font-mono text-amber-900 break-all">{linea}</span>
+                        <button
+                          onClick={() => agregarLineaNoReconocida(linea)}
+                          className="shrink-0 rounded bg-amber-600 px-2 py-1 font-bold text-white hover:bg-amber-700"
+                        >
+                          + Agregar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-sm text-left">
+                  <thead className="bg-gray-100 text-gray-600 border-b border-gray-200">
+                    <tr>
+                      <th className="p-3 w-12 text-center" title="Seleccionar para esta orden">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 cursor-pointer"
+                          checked={todosSeleccionados}
+                          onChange={toggleTodos}
+                        />
+                      </th>
+                      <th className="p-3 w-28">Código</th>
+                      <th className="p-3">Descripción</th>
+                      <th className="p-3 w-24 text-center">Cantidad</th>
+                      <th className="p-3 w-28">Unidad</th>
+                      <th className="p-3 w-36 text-center border-l border-gray-200">
+                        Inventario
+                      </th>
+                      <th className="p-3 w-10" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {itemsDetectados.map((item) => (
+                      <tr
+                        key={item.key}
+                        className={`transition-colors ${
+                          seleccionados.has(item.key)
+                            ? 'bg-blue-50/30'
+                            : 'opacity-60 bg-gray-50'
+                        }`}
+                      >
+                        <td className="p-3 text-center align-top">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 cursor-pointer"
+                            checked={seleccionados.has(item.key)}
+                            onChange={() => toggleSeleccion(item.key)}
+                          />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input
+                            value={item.codigo_pdf}
+                            onChange={(e) =>
+                              actualizarItem(item.key, { codigo_pdf: e.target.value })
+                            }
+                            inputMode="numeric"
+                            placeholder="Código"
+                            className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input
+                            value={item.descripcion_pdf}
+                            onChange={(e) =>
+                              actualizarItem(item.key, {
+                                descripcion_pdf: e.target.value,
+                              })
+                            }
+                            placeholder="Descripción del artículo"
+                            className="w-full rounded border border-gray-300 px-2 py-1 font-medium"
+                          />
+                          {item.sugerencia && (
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-700">
+                              <span>
+                                Sugerencia: {item.sugerencia.nombre} ({item.sugerencia.sku})
+                              </span>
+                              <button
+                                onClick={() => aplicarSugerencia(item)}
+                                className="font-bold text-blue-600 hover:underline"
+                              >
+                                Usar
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2 text-center align-top">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.cantidad}
+                            onChange={(e) =>
+                              actualizarItem(item.key, { cantidad: e.target.value })
+                            }
+                            className="w-20 rounded border border-gray-300 px-2 py-1 text-center font-bold"
+                          />
+                        </td>
+                        <td className="p-2 align-top">
+                          <input
+                            value={item.unidad}
+                            onChange={(e) =>
+                              actualizarItem(item.key, {
+                                unidad: e.target.value.toUpperCase(),
+                              })
+                            }
+                            list="unidades-comunes"
+                            placeholder="CAJA"
+                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs font-semibold"
+                          />
+                        </td>
+                        <td className="p-3 text-center align-top border-l border-gray-200">
+                          {item.existe_en_bd ? (
+                            <span className="text-emerald-600 font-bold text-xs bg-emerald-100 px-2 py-1 rounded">
+                              Inventariado
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleRegistrarEnInventario(item.key)}
+                              disabled={guardandoInventario === item.key}
+                              className="text-xs font-bold text-blue-600 bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                            >
+                              {guardandoInventario === item.key
+                                ? 'Guardando...'
+                                : '+ Registrar'}
+                            </button>
+                          )}
+                        </td>
+                        <td className="p-2 text-center align-top">
+                          <button
+                            onClick={() => eliminarFila(item.key)}
+                            className="text-gray-400 hover:text-red-500"
+                            title="Quitar fila"
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setItemsDetectados(null)} className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg">Cancelar</button>
-                <button onClick={handleConfirmar} disabled={isSaving || seleccionados.size === 0 || guardandoInventario !== null} className="px-6 py-2 bg-gonper-primary text-white font-bold rounded-lg hover:bg-gonper-primary-hover disabled:bg-gray-400">
+
+              {itemsDetectados.length === 0 && (
+                <p className="py-6 text-center text-sm text-gray-500">
+                  No hay filas detectadas. Agrega una fila manualmente o usa una línea de las
+                  que no se pudieron interpretar.
+                </p>
+              )}
+
+              <button
+                onClick={() => agregarFila()}
+                className="mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-gonper-primary hover:text-gonper-primary"
+              >
+                + Agregar fila
+              </button>
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex flex-col md:flex-row gap-3 md:justify-between md:items-center">
+              <div className="text-sm text-gray-600">
+                <span className="font-bold text-blue-600">{seleccionados.size}</span> artículos
+                seleccionados para la orden.
+                {lineasNoReconocidas.length > 0 && (
+                  <span className="ml-2 text-amber-700">
+                    {lineasNoReconocidas.length} línea(s) sin interpretar.
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setItemsDetectados(null)}
+                  className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmar}
+                  disabled={isSaving || seleccionados.size === 0 || guardandoInventario !== null}
+                  className="px-6 py-2 bg-gonper-primary text-white font-bold rounded-lg hover:bg-gonper-primary-hover disabled:bg-gray-400"
+                >
                   {isSaving ? 'Guardando Orden...' : 'Confirmar y Agregar a Orden'}
                 </button>
               </div>

@@ -13,8 +13,8 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
       id, folio, estado, created_at,
       clientes (nombre),
       orden_items (
-        id, cantidad_solicitada, cantidad_surtida, estado_item,
-        productos (nombre, sku, stock_actual)
+        id, cantidad_solicitada, cantidad_surtida, estado_item, unidad,
+        productos (nombre, sku, stock_actual, unidad_medida)
       )
     `)
     .eq('id', id)
@@ -82,6 +82,7 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
             const prod = Array.isArray(item.productos) ? item.productos[0] : item.productos
             const solicitado = Number(item.cantidad_solicitada)
             const stock = Number(prod?.stock_actual) || 0
+            const unidad = item.unidad || prod?.unidad_medida || ''
             
             // Lógica de faltantes
             const aSurtir = Math.min(stock, solicitado)
@@ -103,23 +104,23 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
                 <div className="flex items-center gap-6">
                   <div className="text-center w-16">
                     <p className="text-xs text-gonper-muted mb-1">Solicitado</p>
-                    <p className="font-bold text-lg text-gray-700">{solicitado}</p>
+                    <p className="font-bold text-lg text-gray-700">{solicitado} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
                   </div>
                   <div className="text-center w-16">
                     <p className="text-xs text-gonper-muted mb-1">En Stock</p>
-                    <p className={`font-bold text-lg ${stock === 0 ? 'text-red-500' : 'text-blue-600'}`}>{stock}</p>
+                    <p className={`font-bold text-lg ${stock === 0 ? 'text-red-500' : 'text-blue-600'}`}>{stock} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
                   </div>
                   <div className="text-center w-20 border-l pl-4 border-gray-200">
                     <p className="text-xs text-gonper-muted mb-1">Faltante</p>
                     <p className={`font-bold text-lg ${faltante > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                      {faltante > 0 ? faltante : '0'}
+                      {faltante > 0 ? faltante : '0'} <span className="text-xs font-normal text-gray-500">{unidad}</span>
                     </p>
                   </div>
                   
                   {orden.estado === 'ENTREGADA' || orden.estado === 'PARCIAL' ? (
                     <div className="text-center w-16 border-l pl-4 border-gray-200">
                       <p className="text-xs text-gonper-muted mb-1">Surtido</p>
-                      <p className="font-bold text-lg text-gray-700">{item.cantidad_surtida}</p>
+                      <p className="font-bold text-lg text-gray-700">{item.cantidad_surtida} <span className="text-xs font-normal text-gray-500">{unidad}</span></p>
                     </div>
                   ) : null}
                 </div>

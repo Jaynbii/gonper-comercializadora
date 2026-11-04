@@ -91,6 +91,7 @@ CREATE TABLE public.productos (
     sku TEXT UNIQUE NOT NULL,
     nombre TEXT NOT NULL,
     descripcion TEXT,
+    unidad_medida TEXT,
     categoria_id UUID REFERENCES public.categorias(id) ON DELETE SET NULL,
     stock_actual NUMERIC(10,2) NOT NULL DEFAULT 0,
     stock_minimo NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -127,6 +128,7 @@ CREATE TABLE public.orden_items (
     producto_id UUID REFERENCES public.productos(id) ON DELETE RESTRICT,
     cantidad_solicitada NUMERIC(10,2) NOT NULL,
     cantidad_surtida NUMERIC(10,2) DEFAULT 0,
+    unidad TEXT,
     estado_item estado_item DEFAULT 'SIN_STOCK',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -238,6 +240,7 @@ CREATE POLICY "Solo admin borra ordenes" ON public.ordenes FOR DELETE TO authent
 CREATE POLICY "Lectura orden_items" ON public.orden_items FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Insertar orden_items" ON public.orden_items FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Actualizar orden_items" ON public.orden_items FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authenticated USING (true);
 
 CREATE POLICY "Lectura ordenes_compra" ON public.ordenes_compra FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Insertar ordenes_compra" ON public.ordenes_compra FOR INSERT TO authenticated WITH CHECK (true);
@@ -267,4 +270,20 @@ CREATE POLICY "Permitir lectura" ON storage.objects FOR SELECT TO authenticated 
 -- 7. DATOS INICIALES
 INSERT INTO public.categorias (nombre) VALUES ('Herramientas'), ('Químicos'), ('Insumos'), ('Higiene'), ('Seguridad') ON CONFLICT DO NOTHING;
 INSERT INTO public.clientes (nombre) VALUES ('Mercado Juan Carrasco'), ('Mercado Miguel Hidalgo'), ('Mercado Ricardo Flores Magón'), ('Mercado Cuauhtémoc'), ('Mercado José María Pino Suárez') ON CONFLICT DO NOTHING;
+```
+
+### 2.1 Migración para instalaciones existentes
+
+Si la base ya estaba creada antes de agregar las unidades, ejecuta solo este bloque en el SQL Editor de Supabase. Las columnas son opcionales para no romper los productos ya capturados.
+
+```sql
+-- Unidad fija por SKU y copia (snapshot) de la unidad al momento de la orden.
+ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS unidad_medida TEXT;
+ALTER TABLE public.orden_items ADD COLUMN IF NOT EXISTS unidad TEXT;
+
+-- Necesario para reemplazar las filas de una orden al volver a procesar el OCR.
+DROP POLICY IF EXISTS "Borrar orden_items" ON public.orden_items;
+CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authenticated USING (true);
+```
+
 

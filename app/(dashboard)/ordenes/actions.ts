@@ -2,7 +2,16 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache' // 👈 ¡ESTA LÍNEA ES LA QUE FALTABA!
-import { redirect } from 'next/navigation'
+import { normalizarUnidad } from '@/utils/unidades'
+
+type ItemDetectado = {
+  codigo_pdf: string
+  cantidad: number | string
+  unidad?: string | null
+  producto_nombre?: string
+  descripcion_pdf?: string
+  id_bd?: string | null
+}
 
 export async function obtenerUrlPDF(pdfPath: string) {
   const supabase = await createClient()
@@ -16,40 +25,116 @@ export async function obtenerUrlPDF(pdfPath: string) {
 
 export async function obtenerUrlParaOCR(pdfPath: string) {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autorizado')
+
   const { data, error } = await supabase.storage.from('pdf-facturas').createSignedUrl(pdfPath, 300)
   if (error || !data) throw new Error('No se pudo obtener la URL del PDF para el OCR')
   return data.signedUrl
 }
 
-export async function registrarProductoEnInventario(item: any) {
+export async function registrarProductoEnInventario(item: ItemDetectado) {
   const supabase = await createClient()
-  const { data: existeSku } = await supabase.from('productos').select('*').eq('sku', item.codigo_pdf).maybeSingle()
-  if (existeSku) return existeSku;
 
-  const { data: existeNombre } = await supabase.from('productos').select('*').ilike('nombre', `%${item.producto_nombre}%`).maybeSingle()
-  if (existeNombre) return existeNombre; 
+  const sku = String(item.codigo_pdf ?? '').trim()
+  const nombre = String(item.producto_nombre || item.descripcion_pdf || '').trim()
+  const unidad = normalizarUnidad(item.unidad) || null
 
-  const { data, error } = await supabase.from('productos').insert({
-    sku: item.codigo_pdf, nombre: item.producto_nombre, stock_actual: 0, stock_minimo: 0, precio_unitario: 0
-  }).select().single()
+  if (!sku) throw new Error('El artículo no tiene código (SKU).')
+  if (!nombre) throw new Error('El artículo no tiene descripción.')
 
-  if (error) throw new Error(error.message)
-  return data 
+  // El SKU es la identidad del producto: si ya existe, se reutiliza.
+  const { data: existeSku } = await supabase
+    .from('productos')
+    .select('*')
+    .eq('sku', sku)
+    .maybeSingle()
+  if (existeSku) return existeSku
+
+  const { data, error } = await supabase
+    .from('productos')
+    .insert({
+      sku,
+      nombre,
+      unidad_medida: unidad,
+      stock_actual: 0,
+      stock_minimo: 0,
+      precio_unitario: 0,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    // Si otro usuario registró el mismo SKU mientras tanto, se reutiliza.
+    if (error.code === '23505') {
+      const { data: recienCreado } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('sku', sku)
+        .maybeSingle()
+      if (recienCreado) return recienCreado
+    }
+    throw new Error(error.message)
+  }
+
+  return data
 }
 
-export async function guardarItemsEnOrden(ordenId: string, items: any[]) {
+export async function guardarItemsEnOrden(
+  ordenId: string,
+  items: ItemDetectado[],
+) {
   const supabase = await createClient()
-  const itemsSinId = items.filter(item => !item.id_bd)
-  if (itemsSinId.length > 0) throw new Error(`Artículos no registrados: ${itemsSinId.map(i => i.producto_nombre).join(', ')}`)
 
-  await supabase.from('orden_items').delete().eq('orden_id', ordenId)
-  const itemsAInsertar = items.map(item => ({
-    orden_id: ordenId, producto_id: item.id_bd, cantidad_solicitada: item.cantidad, cantidad_surtida: 0
-  }))
-  const { error } = await supabase.from('orden_items').insert(itemsAInsertar)
-  if (error) throw new Error(`Error de BD: ${error.message}`)
+  const itemsSinId = items.filter((item) => !item.id_bd)
+  if (itemsSinId.length > 0) {
+    throw new Error(
+      `Artículos no registrados: ${itemsSinId
+        .map((i) => i.producto_nombre || i.codigo_pdf)
+        .join(', ')}`,
+    )
+  }
 
-  await supabase.from('ordenes').update({ estado: 'PENDIENTE' }).eq('id', ordenId)
+  const itemsAInsertar = items.map((item) => {
+    const cantidad = Number(item.cantidad)
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      throw new Error(`Cantidad inválida para ${item.producto_nombre || item.codigo_pdf}`)
+    }
+
+    return {
+      orden_id: ordenId,
+      producto_id: item.id_bd,
+      cantidad_solicitada: cantidad,
+      cantidad_surtida: 0,
+      unidad: normalizarUnidad(item.unidad) || null,
+    }
+  })
+
+  const { error: deleteError } = await supabase
+    .from('orden_items')
+    .delete()
+    .eq('orden_id', ordenId)
+  if (deleteError) {
+    throw new Error(`No se pudieron reemplazar los artículos: ${deleteError.message}`)
+  }
+
+  const { error: insertError } = await supabase
+    .from('orden_items')
+    .insert(itemsAInsertar)
+  if (insertError) {
+    throw new Error(`Error de BD: ${insertError.message}`)
+  }
+
+  const { error: updateError } = await supabase
+    .from('ordenes')
+    .update({ estado: 'PENDIENTE' })
+    .eq('id', ordenId)
+  if (updateError) {
+    throw new Error(`Error al actualizar la orden: ${updateError.message}`)
+  }
+
+  revalidatePath('/ordenes')
+  revalidatePath(`/ordenes/${ordenId}`)
   return { success: true }
 }
 

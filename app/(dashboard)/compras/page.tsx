@@ -20,7 +20,7 @@ export default async function ComprasPage() {
     })
   })
 
-  const { data: productos } = await supabase.from('productos').select('id, nombre, sku, stock_actual')
+  const { data: productos } = await supabase.from('productos').select('id, nombre, sku, stock_actual, unidad_medida')
   
   const faltantes = (productos || []).map(prod => {
     const requerido = demandaPorProducto[prod.id] || 0
@@ -42,7 +42,7 @@ export default async function ComprasPage() {
       proveedores (nombre),
       orden_compra_items (
         id, cantidad_solicitada, cantidad_recibida,
-        productos (nombre, sku, id)
+        productos (nombre, sku, id, unidad_medida)
       )
     `).order('created_at', { ascending: false })
   ])

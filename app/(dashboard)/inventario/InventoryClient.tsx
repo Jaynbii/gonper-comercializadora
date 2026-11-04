@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { crearProducto, actualizarProducto, eliminarProducto } from './actions'
+import { UNIDADES_COMUNES } from '@/utils/unidades'
 
 export default function InventoryClient({ 
   productosIniciales, 
@@ -101,7 +102,7 @@ export default function InventoryClient({
                 producto.stock_actual <= producto.stock_minimo ? 'bg-amber-100 text-amber-700' : 
                 'bg-emerald-100 text-emerald-700'
               }`}>
-                Stock: {producto.stock_actual}
+                Stock: {producto.stock_actual} {producto.unidad_medida || ''}
               </span>
               <span className="font-bold text-lg text-gonper-text">${producto.precio_unitario}</span>
             </div>
@@ -116,6 +117,7 @@ export default function InventoryClient({
             <tr className="bg-gonper-bg border-b border-gonper-border text-sm text-gonper-muted">
               <th className="p-4 font-medium">SKU</th>
               <th className="p-4 font-medium">Producto</th>
+              <th className="p-4 font-medium">Unidad</th>
               <th className="p-4 font-medium">Categoría</th>
               <th className="p-4 font-medium text-right">Precio</th>
               <th className="p-4 font-medium text-center">Stock</th>
@@ -127,6 +129,7 @@ export default function InventoryClient({
               <tr key={producto.id} className="hover:bg-gonper-bg/50 transition-colors">
                 <td className="p-4 text-sm font-mono text-gonper-muted">{producto.sku}</td>
                 <td className="p-4 font-medium text-gonper-text">{producto.nombre}</td>
+                <td className="p-4 text-sm text-gonper-muted">{producto.unidad_medida || '-'}</td>
                 <td className="p-4 text-sm text-gonper-muted">{producto.categorias?.nombre || '-'}</td>
                 <td className="p-4 text-right font-semibold">${producto.precio_unitario}</td>
                 <td className="p-4 text-center">
@@ -192,20 +195,37 @@ export default function InventoryClient({
                 </div>
               </div>
 
-              {/* 👇 AQUÍ ESTÁ EL CAMBIO: SELECT DE CATEGORÍAS 👇 */}
-              <div>
-                <label className="block text-sm font-medium text-gonper-text mb-1">Categoría (Opcional)</label>
-                <select 
-                  name="categoria_id" 
-                  defaultValue={productoAEditar?.categoria_id || ''} 
-                  className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none bg-white"
-                >
-                  <option value="">Sin categoría</option>
-                  {categorias.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gonper-text mb-1">Unidad de medida</label>
+                  <input
+                    name="unidad_medida"
+                    list="unidades-comunes"
+                    defaultValue={productoAEditar?.unidad_medida || ''}
+                    className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none"
+                    placeholder="CAJA, LITRO, KILO..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gonper-text mb-1">Categoría (Opcional)</label>
+                  <select 
+                    name="categoria_id" 
+                    defaultValue={productoAEditar?.categoria_id || ''} 
+                    className="w-full px-3 py-2 border border-gonper-border rounded-lg focus:ring-2 focus:ring-gonper-primary focus:outline-none bg-white"
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              <datalist id="unidades-comunes">
+                {UNIDADES_COMUNES.map((unidad) => (
+                  <option key={unidad} value={unidad} />
+                ))}
+              </datalist>
 
               {errorMsg && (
                 <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{errorMsg}</p>

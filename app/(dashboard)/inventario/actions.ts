@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { normalizarUnidad } from '@/utils/unidades'
 
 export async function crearProducto(formData: FormData) {
   const supabase = await createClient()
@@ -9,12 +10,13 @@ export async function crearProducto(formData: FormData) {
   const sku = formData.get('sku') as string
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
+  const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
   const precio_unitario = parseFloat(formData.get('precio_unitario') as string) || 0
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
   const { error } = await supabase.from('productos').insert({
-    sku, nombre, categoria_id: categoria_id || null, precio_unitario, stock_actual, stock_minimo
+    sku, nombre, categoria_id: categoria_id || null, unidad_medida, precio_unitario, stock_actual, stock_minimo
   })
 
   if (error) {
@@ -32,12 +34,13 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const sku = formData.get('sku') as string
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
+  const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
   const precio_unitario = parseFloat(formData.get('precio_unitario') as string) || 0
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
   const { error } = await supabase.from('productos').update({
-    sku, nombre, categoria_id: categoria_id || null, precio_unitario, stock_actual, stock_minimo
+    sku, nombre, categoria_id: categoria_id || null, unidad_medida, precio_unitario, stock_actual, stock_minimo
   }).eq('id', id)
 
   if (error) {

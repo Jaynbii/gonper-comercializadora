@@ -165,7 +165,7 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
                         </td>
 
                         <td className="p-4 text-center font-bold text-red-600 bg-red-50 rounded-md my-2">
-                          {prod.faltante}
+                          {prod.faltante} <span className="text-xs font-normal">{prod.unidad_medida || ''}</span>
                         </td>
 
                         <td className="p-4">
@@ -295,7 +295,7 @@ export default function ComprasClient({ faltantes, proveedores, ordenesCompra }:
                   <div>
                     <p className="font-semibold text-sm">{item.productos?.nombre}</p>
                     <p className="text-xs text-gray-500">
-                      Solicitado: {item.cantidad_solicitada}
+                      Solicitado: {item.cantidad_solicitada} {item.productos?.unidad_medida || ''}
                     </p>
                   </div>
 
