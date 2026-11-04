@@ -1,10 +1,11 @@
 # 🏢 Sistema ERP / OMS / WMS - Gonper Comercializadora
 
 **Última actualización:** Noviembre 2026
-**Estado:** Producción (Desplegado en Vercel)
-**Stack:** Next.js 16 (App Router), React 19, Tailwind CSS v4, Supabase (Auth, Postgres, Storage).
-**Librerías Clave:** `unpdf`, `pdfjs-dist`, `tesseract.js`, `fuse.js`.
-**Filosofía de Seguridad:** Zero Trust (Cero Confianza) con RLS estricto y URLs firmadas.
+**Estado:** Aplicación desplegada en Vercel; confirmar el estado del último deployment antes de asumir que `main` está en producción.
+**Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Supabase (Auth, Postgres, Storage).
+**Librerías clave:** `unpdf`, `pdfjs-dist`, `tesseract.js`, `fuse.js`.
+**Repositorio:** `Jaynbii/gonper-comercializadora`, rama `main`.
+**Configuración:** Server Actions con límite de cuerpo de `10mb`; bucket privado `pdf-facturas`.
 
 ---
 
@@ -18,7 +19,7 @@ El sistema automatiza la recepción de requerimientos (fotos/PDFs enviados por W
 3.  **Órdenes:** Subida de PDFs/Fotos, procesamiento OCR, cotejo inteligente, estados (BORRADOR, PENDIENTE, PARCIAL, ENTREGADA, CANCELADA), visor de PDF seguro y surtido automático (descuento de stock).
 4.  **Clientes:** Directorio de mercados y dependencias de gobierno.
 5.  **Proveedores:** Directorio con catálogo de precios por producto (Relación N:M).
-6.  **Compras (Backend listo):** Tablas preparadas para generar órdenes de compra a proveedores.
+6.  **Compras:** Panel de faltantes consolidados de órdenes activas, selección de proveedor y precio registrado, captura de cantidades, generación de órdenes de compra y recepción de mercancía con actualización de inventario. Desde el detalle de una orden con faltantes existe un botón para abrir el módulo de Compras.
 
 ### Seguridad Implementada:
 *   **RLS (Row Level Security):** Ningún usuario puede ver o modificar datos sin estar autenticado.
@@ -29,7 +30,7 @@ El sistema automatiza la recepción de requerimientos (fotos/PDFs enviados por W
 
 ## 🗄️ 2. Base de Datos (Supabase SQL)
 
-Ejecuta este script completo en el **SQL Editor de Supabase** desde cero para restaurar toda la estructura, tipos, triggers, seguridad y datos iniciales.
+**ADVERTENCIA: este bloque es únicamente para una instalación nueva y vacía. NO lo ejecutes sobre la base de datos de producción ni sobre una instalación existente:** contiene instrucciones `DROP TABLE ... CASCADE` y `DROP TYPE ... CASCADE` que eliminan tablas, relaciones y datos. Para actualizar una instalación existente, crea y ejecuta únicamente migraciones incrementales revisadas y respaldadas.
 
 ```sql
 -- 1. LIMPIEZA INICIAL
@@ -287,3 +288,32 @@ CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authentic
 ```
 
 
+
+
+---
+
+## 3. Flujos operativos actuales
+
+### Recepción y captura de una orden
+1. En **Órdenes**, se crea un requerimiento desde un PDF o imagen.
+2. El archivo se envía mediante la Server Action `subirYProcesarPDF` y se almacena en el bucket privado `pdf-facturas`.
+3. Se registra la orden en `ordenes`, guardando la ruta del archivo en `pdf_path`.
+4. El PDF se procesa desde la lista de órdenes para extraer y cotejar artículos con el catálogo.
+5. En el detalle se comparan cantidades solicitadas, stock disponible y faltantes.
+
+### Surtido y compras
+- El detalle de la orden muestra si el inventario permite surtir todos o parte de los artículos.
+- Cuando hay faltantes y la orden todavía puede surtirse, el botón **Comprar faltantes a Proveedores** lleva al módulo `/compras`.
+- Compras consolida la demanda pendiente de las órdenes activas (`PENDIENTE` y `PARCIAL`), calcula faltantes contra el stock y permite seleccionar proveedores con precios relacionados.
+- Al generar una orden de compra se registra en `ordenes_compra` y `orden_compra_items`.
+- La recepción de mercancía registra entradas y actualiza el inventario mediante las acciones del módulo de Compras.
+
+**Alcance actual:** el botón del detalle navega al módulo general de Compras. El módulo calcula faltantes consolidados; no crea automáticamente una compra exclusiva para una sola orden.
+
+## 4. Consideraciones de seguridad y mantenimiento
+
+- No confiar en el rol enviado por el cliente ni en metadatos editables por el usuario para conceder permisos de administrador. La asignación de roles debe realizarse desde un proceso administrativo confiable.
+- Las políticas RLS efectivas son las que están instaladas en Supabase, no necesariamente las que aparecen en este archivo. Revisar las políticas reales antes de cambiar permisos.
+- Mantener privado el bucket `pdf-facturas`; no sustituirlo por acceso público para resolver errores de carga.
+- Antes de ejecutar SQL en producción, generar respaldo, revisar el alcance de cada sentencia y preferir migraciones incrementales.
+- La documentación describe el código del repositorio; no sustituye la verificación del estado real de Supabase ni del último despliegue de Vercel.
