@@ -23,8 +23,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gonper | Comercializadora",
-  description: "Inventario, requisiciones y compras",
+  title: "SCYTH — Business Operations Platform",
+  description: "SCYTH unifica órdenes, inventario, compras y operaciones.",
 };
 
 export default function RootLayout({
