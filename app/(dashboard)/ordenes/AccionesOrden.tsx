@@ -37,6 +37,9 @@ export default function AccionesOrden({
   const [errorEliminar, setErrorEliminar] = useState('')
 
   const router = useRouter()
+  // Cada orden monta su propio modal en la misma página: el id del formulario
+  // debe ser único o el botón "Guardar" termina enviando el formulario de otra orden.
+  const formId = `orden-form-${orden.id}`
 
   const cerrar = () => {
     if (isEditing || isDeleting) return
@@ -125,7 +128,7 @@ export default function AccionesOrden({
             </button>
             <button
               type="submit"
-              form="orden-form"
+              form={formId}
               disabled={isEditing}
               className="btn btn-primary flex-1 sm:flex-none"
             >
@@ -135,7 +138,7 @@ export default function AccionesOrden({
         }
       >
         <form
-          id="orden-form"
+          id={formId}
           key={`${orden.id}-${isOpen ? 'abierto' : 'cerrado'}`}
           onSubmit={handleEditar}
           className="px-5 py-5"
