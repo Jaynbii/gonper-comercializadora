@@ -1,23 +1,30 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Instrument_Sans, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const sans = Instrument_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sans-ui",
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const serif = Instrument_Serif({
   subsets: ["latin"],
-  variable: "--font-jetbrains",
+  weight: "400",
+  variable: "--font-serif-ui",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono-ui",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Gonper | Sistema de Inventario",
-  description: "Gestión de inventario y órdenes",
+  title: "Gonper | Comercializadora",
+  description: "Inventario, requisiciones y compras",
 };
 
 export default function RootLayout({
@@ -26,11 +33,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // ✅ Las variables de fuente ahora se aplican en <html>
-    <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased">
-        {children}
-      </body>
+    <html
+      lang="es"
+      className={`${sans.variable} ${serif.variable} ${mono.variable}`}
+    >
+      <body>{children}</body>
     </html>
   );
 }

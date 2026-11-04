@@ -1,33 +1,258 @@
 /* app/globals.css */
 @import "tailwindcss";
 
-/* 1. Definimos nuestros colores personalizados */
+/*
+ * Papel y tinta
+ * Base cálida de papel, una sola tinta de marca (verde petróleo) y reglas
+ * finas. Los estados usan tintes apagados para no competir con el contenido.
+ */
 @theme {
-  --color-gonper-bg: #F8FAFC;
-  --color-gonper-surface: #FFFFFF;
-  --color-gonper-border: #E2E8F0;
-  --color-gonper-text: #0F172A;
-  --color-gonper-muted: #64748B;
-  --color-gonper-primary: #0EA5E9;
-  --color-gonper-primary-hover: #0284C7;
-  --color-gonper-success: #10B981;
-  --color-gonper-warning: #F59E0B;
-  --color-gonper-danger: #EF4444;
+  --color-gonper-bg: #f6f4ef;
+  --color-gonper-surface: #ffffff;
+  --color-gonper-surface-muted: #f0ede6;
+  --color-gonper-hover: #f3f0e8;
+  --color-gonper-border: #e3ded3;
+  --color-gonper-text: #1b1a18;
+  --color-gonper-muted: #6e6a61;
+  --color-gonper-primary: #164e41;
+  --color-gonper-primary-hover: #0f3b31;
+  --color-gonper-success: #2c6b4f;
+  --color-gonper-warning: #8a5a12;
+  --color-gonper-danger: #a33b2b;
+
+  --color-gonper-success-bg: #e8f0ea;
+  --color-gonper-success-border: #cfe0d4;
+  --color-gonper-warning-bg: #f6eedc;
+  --color-gonper-warning-border: #e7d6b4;
+  --color-gonper-danger-bg: #f7e8e4;
+  --color-gonper-danger-border: #e9cfc7;
 }
 
-/* 2. ✅ La clave: usamos @theme inline para las fuentes */
 @theme inline {
-  /* Mapeamos las variables de next/font a las utilidades de Tailwind */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif-ui), ui-serif, Georgia, serif;
+  --font-mono: var(--font-mono-ui), ui-monospace, SFMono-Regular, monospace;
 }
 
-/* 3. Estilos base para el cuerpo del documento */
-body {
-  background-color: var(--color-gonper-bg);
-  color: var(--color-gonper-text);
-  font-family: var(--font-sans);
-  /* Asegura que los números en tablas se alineen verticalmente */
-  font-feature-settings: "tnum";
-  font-variant-numeric: tabular-nums;
+:root {
+  --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-fast: cubic-bezier(0.4, 0, 1, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+  --dur-4: 320ms;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-gonper-bg);
+    color: var(--color-gonper-text);
+    font-family: var(--font-sans);
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--color-gonper-primary);
+    color: var(--color-gonper-bg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gonper-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-[6px] border border-gonper-border bg-gonper-surface;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.13em] text-gonper-muted;
+  }
+
+  .btn {
+    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[6px] px-4 text-[13px] font-medium transition-colors duration-[120ms] ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
+  }
+
+  .btn-primary {
+    @apply bg-gonper-primary text-white hover:bg-gonper-primary-hover;
+  }
+
+  .btn-quiet {
+    @apply border border-gonper-border bg-gonper-surface text-gonper-text hover:bg-gonper-surface-muted;
+  }
+
+  .btn-icon {
+    @apply grid h-10 w-10 place-items-center rounded-[6px] text-gonper-muted transition-colors duration-[120ms] ease-out hover:bg-gonper-surface-muted hover:text-gonper-text sm:h-8 sm:w-8;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] font-medium leading-none tracking-[0.01em];
+  }
+
+  .badge::before {
+    content: "";
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background-color: currentColor;
+    opacity: 0.65;
+  }
+}
+
+/* ---- Movimiento ---- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-page {
+  animation: rise 220ms var(--ease-out-quint) both;
+}
+
+.animate-rise {
+  animation: rise 320ms var(--ease-out-quint) both;
+}
+
+.animate-menu {
+  animation: menu-in 160ms var(--ease-out-quint) both;
+  transform-origin: top right;
+}
+
+/* ---- Diálogo nativo: foco atrapado, Escape y backdrop gratis ---- */
+
+dialog.modal-panel {
+  width: min(100vw - 2rem, 46rem);
+  max-width: none;
+  max-height: min(86dvh, 46rem);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--color-gonper-border);
+  border-radius: 10px;
+  background-color: var(--color-gonper-surface);
+  color: inherit;
+  overflow: hidden;
+  box-shadow:
+    0 24px 64px -16px rgb(27 26 24 / 0.28),
+    0 2px 6px rgb(27 26 24 / 0.06);
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity var(--dur-3) var(--ease-out-quint),
+    transform var(--dur-3) var(--ease-out-quint),
+    overlay var(--dur-3) allow-discrete,
+    display var(--dur-3) allow-discrete;
+}
+
+dialog.modal-panel[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  dialog.modal-panel[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+dialog.sheet-panel {
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 86dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--color-gonper-border);
+  border-radius: 14px 14px 0 0;
+  background-color: var(--color-gonper-surface);
+  color: inherit;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -12px 40px -12px rgb(27 26 24 / 0.24);
+  transform: translateY(100%);
+  transition:
+    transform var(--dur-3) var(--ease-out-quint),
+    overlay var(--dur-3) allow-discrete,
+    display var(--dur-3) allow-discrete;
+}
+
+dialog.sheet-panel[open] {
+  transform: none;
+}
+
+@starting-style {
+  dialog.sheet-panel[open] {
+    transform: translateY(100%);
+  }
+}
+
+dialog.modal-panel::backdrop,
+dialog.sheet-panel::backdrop {
+  background-color: rgb(27 26 24 / 0.42);
+  opacity: 0;
+  transition:
+    opacity var(--dur-3) var(--ease-out-quint),
+    overlay var(--dur-3) allow-discrete,
+    display var(--dur-3) allow-discrete;
+}
+
+dialog.modal-panel[open]::backdrop,
+dialog.sheet-panel[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  dialog.modal-panel[open]::backdrop,
+  dialog.sheet-panel[open]::backdrop {
+    opacity: 0;
+  }
 }
