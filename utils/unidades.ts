@@ -84,6 +84,8 @@ export function normalizarUnidad(valor: string | null | undefined): string {
   const limpio = valor
     .trim()
     .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/[.,;:]+$/, '')
   return ALIAS[limpio] ?? limpio

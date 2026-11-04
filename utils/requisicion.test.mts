@@ -272,11 +272,30 @@ test('no inventa un artículo cuando la fila solo tiene código, cantidad y unid
   assert.deepEqual(lineasNoReconocidas, ['13747 3.00 CAJAS'])
 })
 
+test('recupera la unidad cuando el OCR la duplica al inicio de la descripción', () => {
+  const { items } = parseRequisicion(
+    '36192 1.00 CAJA FPORRON FABULOSO DE 20 LITROS',
+  )
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].unidad, 'PORRON')
+  assert.equal(items[0].descripcion_pdf, 'FABULOSO DE 20 LITROS')
+})
+
+test('no confunde una palabra de la descripción con la unidad', () => {
+  const { items } = parseRequisicion('1234 1 PIEZA CAJA DE HERRAMIENTAS')
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].unidad, 'PIEZA')
+  assert.equal(items[0].descripcion_pdf, 'CAJA DE HERRAMIENTAS')
+})
+
 test('normaliza plurales y abreviaturas de unidades', () => {
   assert.equal(normalizarUnidad('CAJAS'), 'CAJA')
   assert.equal(normalizarUnidad('galones'), 'GALON')
   assert.equal(normalizarUnidad('KGS.'), 'KILO')
   assert.equal(normalizarUnidad('LTS'), 'LITRO')
   assert.equal(normalizarUnidad('PZAS'), 'PIEZA')
+  assert.equal(normalizarUnidad('PORRÓN'), 'PORRON')
   assert.equal(normalizarUnidad(''), '')
 })

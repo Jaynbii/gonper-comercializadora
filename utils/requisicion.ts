@@ -137,6 +137,28 @@ function limpiarDescripcion(texto: string) {
   return limpio.toUpperCase()
 }
 
+/**
+ * El OCR a veces duplica la unidad al inicio de la descripción con una letra
+ * extra ("FPORRON FABULOSO DE 20 LITROS"). Si al quitar esa letra queda una
+ * unidad conocida, se usa como unidad y se retira de la descripción.
+ */
+function separarUnidadAlInicio(descripcion: string, unidad: string) {
+  const [primera, ...resto] = descripcion.split(' ')
+  if (!primera || primera.length < 4 || resto.length === 0) {
+    return { unidad, descripcion }
+  }
+
+  const posible = normalizarUnidad(primera.slice(1))
+  if (
+    !(UNIDADES_COMUNES as readonly string[]).includes(posible) ||
+    normalizarUnidad(primera) === posible
+  ) {
+    return { unidad, descripcion }
+  }
+
+  return { unidad: posible, descripcion: resto.join(' ') }
+}
+
 const SOLO_CODIGO = /^\d{3,8}$/
 const CODIGO_Y_CANTIDAD = /^\d{3,8}\s+\d+(?:[.,]\d{1,3})?$/
 const EMPIEZA_CON_CANTIDAD = /^\d+(?:[.,]\d{1,3})?(?:\s+|$)/
@@ -273,12 +295,19 @@ function parsearBloquesColumnas(lineas: string[]): {
   if (descripciones.length !== codigos.length) return sinResultado
 
   return {
-    items: codigos.map((codigo, posicion) => ({
-      codigo_pdf: codigo,
-      cantidad: cantidades[posicion].cantidad,
-      unidad: cantidades[posicion].unidad,
-      descripcion_pdf: descripciones[posicion],
-    })),
+    items: codigos.map((codigo, posicion) => {
+      const ajuste = separarUnidadAlInicio(
+        descripciones[posicion],
+        cantidades[posicion].unidad,
+      )
+
+      return {
+        codigo_pdf: codigo,
+        cantidad: cantidades[posicion].cantidad,
+        unidad: ajuste.unidad,
+        descripcion_pdf: ajuste.descripcion,
+      }
+    }),
     consumidas: new Set([
       ...indicesCodigos,
       ...indicesCantidades,
@@ -316,8 +345,11 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
 
     const codigo = match[1]
     const cantidad = parseCantidad(match[2])
-    const unidad = normalizarUnidad(match[3] ?? '')
-    const descripcion = limpiarDescripcion(match[4])
+    const descripcionDetectada = limpiarDescripcion(match[4])
+    const { unidad, descripcion } = separarUnidadAlInicio(
+      descripcionDetectada,
+      normalizarUnidad(match[3] ?? ''),
+    )
     const esSoloUnidad =
       !descripcion.includes(' ') &&
       (UNIDADES_COMUNES as readonly string[]).includes(
