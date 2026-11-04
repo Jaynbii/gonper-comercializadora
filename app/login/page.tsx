@@ -1,6 +1,17 @@
 import { ArrowRight } from 'lucide-react'
 import { login } from './actions'
 
+function ScythMark() {
+  return (
+    <span className="grid h-14 w-14 place-items-center rounded-[12px] bg-scyth-acid text-scyth-graphite">
+      <svg viewBox="0 0 32 32" className="h-8 w-8" fill="none" aria-hidden="true">
+        <path d="M7 23.5 17.5 7h7L14 25h-7Z" fill="currentColor" />
+        <path d="M17.5 7 25 7 20.8 13.7" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+      </svg>
+    </span>
+  )
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -15,20 +26,23 @@ export default async function LoginPage({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            'radial-gradient(60rem 40rem at 50% -12%, #fffdf8 0%, transparent 65%), linear-gradient(#164e4108 1px, transparent 1px)',
+            'radial-gradient(60rem 40rem at 50% -12%, #ffffff 0%, transparent 65%), linear-gradient(#171d1908 1px, transparent 1px)',
           backgroundSize: 'auto, 100% 3.25rem',
         }}
       />
 
       <div className="relative w-full max-w-100">
         <div className="flex flex-col items-center text-center">
-          <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary font-serif text-[26px] leading-none text-gonper-bg">
-            G
-          </span>
-          <h1 className="mt-4 font-serif text-[42px] leading-none tracking-[-0.02em]">
-            Gonper
+          <ScythMark />
+          <h1 className="mt-4 text-[34px] font-bold leading-none tracking-[0.16em] text-gonper-text">
+            SCYTH
           </h1>
-          <p className="eyebrow mt-2">Comercializadora</p>
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gonper-muted">
+            Work smarter. Move faster.
+          </p>
+          <p className="mt-1 text-[11px] font-medium tracking-[0.08em] text-gonper-muted">
+            Business Operations Platform
+          </p>
         </div>
 
         <div className="card mt-8 p-6 sm:p-7">
@@ -36,7 +50,7 @@ export default async function LoginPage({
             Ingresa a tu cuenta
           </h2>
           <p className="mt-1 text-[12.5px] text-gonper-muted">
-            Inventario, requerimientos y compras.
+            Órdenes, inventario, compras y operaciones.
           </p>
 
           <form action={login} className="mt-6 flex flex-col gap-4">
@@ -86,8 +100,8 @@ export default async function LoginPage({
           </form>
         </div>
 
-        <p className="mt-6 text-center text-[11px] tracking-[0.02em] text-gonper-muted">
-          Sistema interno · Uso exclusivo de Gonper
+        <p className="mt-6 text-center text-[10px] font-medium uppercase tracking-[0.12em] text-gonper-muted">
+          SCYTH · Business Operations Platform
         </p>
       </div>
     </div>
