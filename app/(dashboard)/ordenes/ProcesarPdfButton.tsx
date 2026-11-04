@@ -129,7 +129,6 @@ export default function ProcesarPdfButton({
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [itemsDetectados, setItemsDetectados] = useState<ItemDetectado[] | null>(null)
-  const [lineasNoReconocidas, setLineasNoReconocidas] = useState<string[]>([])
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [guardandoInventario, setGuardandoInventario] = useState<string | null>(null)
 
@@ -207,7 +206,6 @@ export default function ProcesarPdfButton({
     setIsLoading(true)
     setStatusMsg('Iniciando lectura...')
     setItemsDetectados(null)
-    setLineasNoReconocidas([])
 
     try {
       let textoCompleto = cacheTexto.get(pdfPath) ?? ''
@@ -252,9 +250,7 @@ export default function ProcesarPdfButton({
         sugerencia: item.sugerencia,
       }))
 
-      setLineasNoReconocidas(result.lineasNoReconocidas)
-
-      if (detectados.length === 0 && result.lineasNoReconocidas.length === 0) {
+      if (detectados.length === 0) {
         alert('No se detectaron productos válidos en el archivo.')
         return
       }
@@ -393,11 +389,6 @@ export default function ProcesarPdfButton({
     setSeleccionados((prev) => new Set(prev).add(nueva.key))
   }
 
-  const agregarLineaNoReconocida = (linea: string) => {
-    agregarFila(linea)
-    setLineasNoReconocidas((prev) => prev.filter((item) => item !== linea))
-  }
-
   const eliminarFila = (key: string) => {
     setItemsDetectados((prev) => prev?.filter((item) => item.key !== key) ?? null)
     setSeleccionados((prev) => {
@@ -432,7 +423,6 @@ export default function ProcesarPdfButton({
     try {
       await guardarItemsEnOrden(ordenId, itemsParaGuardar)
       setItemsDetectados(null)
-      setLineasNoReconocidas([])
       setIsSaving(false)
       router.refresh()
     } catch (error) {
@@ -485,30 +475,6 @@ export default function ProcesarPdfButton({
                   <option key={unidad} value={unidad} />
                 ))}
               </datalist>
-
-              {lineasNoReconocidas.length > 0 && (
-                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-sm font-semibold text-amber-800">
-                    El OCR no pudo interpretar estas líneas. Revísalas para no perder artículos:
-                  </p>
-                  <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-                    {lineasNoReconocidas.map((linea, index) => (
-                      <li
-                        key={`${linea}-${index}`}
-                        className="flex items-center justify-between gap-3 text-xs"
-                      >
-                        <span className="font-mono text-amber-900 break-all">{linea}</span>
-                        <button
-                          onClick={() => agregarLineaNoReconocida(linea)}
-                          className="shrink-0 rounded bg-amber-600 px-2 py-1 font-bold text-white hover:bg-amber-700"
-                        >
-                          + Agregar
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
 
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px] text-sm text-left">
@@ -662,11 +628,6 @@ export default function ProcesarPdfButton({
               <div className="text-sm text-gray-600">
                 <span className="font-bold text-blue-600">{seleccionados.size}</span> artículos
                 seleccionados para la orden.
-                {lineasNoReconocidas.length > 0 && (
-                  <span className="ml-2 text-amber-700">
-                    {lineasNoReconocidas.length} línea(s) sin interpretar.
-                  </span>
-                )}
               </div>
               <div className="flex gap-3 justify-end">
                 <button
