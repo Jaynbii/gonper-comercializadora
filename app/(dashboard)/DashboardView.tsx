@@ -135,7 +135,7 @@ export default function DashboardView({
       >
         <section className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-gonper-border px-5 py-3.5">
-            <h2 className="text-[13px] font-semibold">Últimas órdenes</h2>
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Últimas órdenes</h2>
             <Link
               href="/ordenes"
               className="inline-flex items-center gap-1 text-[12px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
@@ -188,8 +188,8 @@ export default function DashboardView({
 
         <section className="card flex flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-gonper-border px-5 py-3.5">
-            <h2 className="text-[13px] font-semibold">Requiere atención</h2>
-            <span className="text-[11px] text-gonper-muted">
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Requiere atención</h2>
+            <span className="text-[11.5px] font-medium text-gonper-muted">
               {conFaltante.length} con faltante
             </span>
           </div>

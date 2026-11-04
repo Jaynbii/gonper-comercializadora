@@ -70,12 +70,12 @@ export default function Modal({
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="text-[15px] font-semibold tracking-[-0.01em]"
+              className="text-[17px] font-semibold tracking-[-0.02em]"
             >
               {title}
             </h2>
             {description && (
-              <p className="mt-1 text-[12.5px] text-gonper-muted">{description}</p>
+              <p className="mt-1 text-[13px] text-gonper-muted">{description}</p>
             )}
           </div>
           <button
