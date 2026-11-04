@@ -1,8 +1,15 @@
-
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+
+  //  ESTA ES LA ÚNICA LÍNEA NUEVA AÑADIDA 
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
+  //  FIN DEL CAMBIO 
 
   turbopack: {
     resolveAlias: {

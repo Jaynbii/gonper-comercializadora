@@ -28,7 +28,7 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="hidden w-[236px] shrink-0 flex-col border-r border-gonper-border bg-gonper-surface md:flex">
+      <aside className="hidden w-59 shrink-0 flex-col border-r border-gonper-border bg-gonper-surface md:flex">
         <div className="flex h-16 shrink-0 items-center gap-2 border-b border-gonper-border px-5">
           <span className="font-serif text-[24px] leading-none tracking-[-0.01em]">
             Gonper
@@ -45,14 +45,14 @@ export default function Sidebar() {
                 key={item.path}
                 href={item.path}
                 aria-current={activo ? 'page' : undefined}
-                className={`flex items-center gap-3 rounded-[6px] px-3 py-2.5 text-[13px] font-medium transition-colors duration-[120ms] ${
+                className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-120 ${
                   activo
                     ? 'bg-gonper-primary text-white'
                     : 'text-gonper-muted hover:bg-gonper-hover hover:text-gonper-text'
                 }`}
               >
                 <Icono
-                  className={`h-[17px] w-[17px] ${
+                  className={`h-4.25 w-4.25 ${
                     activo ? 'text-white' : 'text-gonper-muted'
                   }`}
                   strokeWidth={activo ? 2 : 1.75}
@@ -73,7 +73,7 @@ export default function Sidebar() {
       </aside>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-gonper-border bg-gonper-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        <div className="grid h-[66px] grid-cols-6">
+        <div className="grid h-16.5 grid-cols-6">
           {MENU.map((item) => {
             const activo = esActivo(item.path)
             const Icono = item.icon
@@ -83,17 +83,17 @@ export default function Sidebar() {
                 key={item.path}
                 href={item.path}
                 aria-current={activo ? 'page' : undefined}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-[120ms] ${
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-120 ${
                   activo ? 'text-gonper-primary' : 'text-gonper-muted'
                 }`}
               >
                 <span
-                  className={`grid h-6 w-9 place-items-center rounded-full transition-colors duration-[120ms] ${
+                  className={`grid h-6 w-9 place-items-center rounded-full transition-colors duration-120 ${
                     activo ? 'bg-gonper-primary text-white' : ''
                   }`}
                 >
                   <Icono
-                    className="h-[17px] w-[17px]"
+                    className="h-4.25 w-4.25"
                     strokeWidth={activo ? 2.1 : 1.75}
                   />
                 </span>

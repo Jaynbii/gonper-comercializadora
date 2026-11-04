@@ -20,7 +20,7 @@ export default async function LoginPage({
         }}
       />
 
-      <div className="relative w-full max-w-[400px]">
+      <div className="relative w-full max-w-100">
         <div className="flex flex-col items-center text-center">
           <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary font-serif text-[26px] leading-none text-gonper-bg">
             G
@@ -49,7 +49,7 @@ export default async function LoginPage({
                 className="field"
                 name="email"
                 type="email"
-                placeholder="admin@gonper.com"
+                placeholder="email@provider.com"
                 autoComplete="email"
                 required
               />

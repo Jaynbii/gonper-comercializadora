@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft, Package, TriangleAlert } from 'lucide-react'
+import { ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 
@@ -90,16 +90,21 @@ export default async function OrdenDetallePage({
     (item) => Number(productoDe(item)?.stock_actual) > 0,
   )
 
+  // 👇 NUEVA VARIABLE: Detecta si falta al menos un artículo por surtir 👇
+  const hayFaltantes = items.some(
+    (item) => Number(productoDe(item)?.stock_actual) < Number(item.cantidad_solicitada)
+  )
+
   const puedeSurtir =
     orden.estado !== 'ENTREGADA' &&
     orden.estado !== 'PARCIAL' &&
     orden.estado !== 'CANCELADA'
 
   return (
-    <div className="mx-auto max-w-[980px] pb-6">
+    <div className="mx-auto max-w-245 pb-6">
       <Link
         href="/ordenes"
-        className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
+        className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-120 hover:text-gonper-primary"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
         Volver a órdenes
@@ -125,22 +130,37 @@ export default async function OrdenDetallePage({
         </div>
 
         <div className="mt-5 flex flex-col gap-3 border-t border-gonper-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-          {puedeSurtir ? (
-            hayStockParcial ? (
-              <BotonSurtir ordenId={orden.id} esParcial={!hayStockTotal} />
+          
+          {/* 👇 CONTENEDOR DE BOTONES MODIFICADO 👇 */}
+          <div className="flex flex-col gap-2.5 w-full sm:w-auto">
+            {puedeSurtir ? (
+              hayStockParcial ? (
+                <BotonSurtir ordenId={orden.id} esParcial={!hayStockTotal} />
+              ) : (
+                <Badge tono="danger">
+                  <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  Sin stock para surtir
+                </Badge>
+              )
             ) : (
-              <Badge tono="danger">
-                <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Sin stock para surtir
-              </Badge>
-            )
-          ) : (
-            <p className="text-[12.5px] text-gonper-muted">
-              {orden.estado === 'CANCELADA'
-                ? 'Esta orden está cancelada.'
-                : 'Esta orden ya fue surtida.'}
-            </p>
-          )}
+              <p className="text-[12.5px] text-gonper-muted">
+                {orden.estado === 'CANCELADA'
+                  ? 'Esta orden está cancelada.'
+                  : 'Esta orden ya fue surtida.'}
+              </p>
+            )}
+
+            {/* 👇 NUEVO BOTÓN AGREGADO AQUÍ 👇 */}
+            {puedeSurtir && hayFaltantes && (
+              <Link
+                href="/compras"
+                className="flex items-center justify-center gap-2 w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-[13px]"
+              >
+                <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
+                Comprar faltantes a Proveedores
+              </Link>
+            )}
+          </div>
 
           {puedeSurtir && hayStockParcial && (
             <p className="text-[11.5px] leading-relaxed text-gonper-muted">
