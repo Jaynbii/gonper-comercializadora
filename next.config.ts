@@ -3,13 +3,19 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
 
+<<<<<<< HEAD
   //  ESTA ES LA ÚNICA LÍNEA NUEVA AÑADIDA 
+=======
+>>>>>>> c07f084fcb50d02cf561eac5b731e3872e9f66ea
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
     },
   },
+<<<<<<< HEAD
   //  FIN DEL CAMBIO 
+=======
+>>>>>>> c07f084fcb50d02cf561eac5b731e3872e9f66ea
 
   turbopack: {
     resolveAlias: {
