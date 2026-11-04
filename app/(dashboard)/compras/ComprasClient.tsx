@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   ReceiptText,
   Truck,
   X,
+  ArrowUpRight,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
@@ -45,6 +47,14 @@ type ItemCompra = {
   } | null
 }
 
+type Requisicion = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  clientes?: { nombre: string } | null
+}
+
 type OrdenCompra = {
   id: string
   folio: string
@@ -74,10 +84,12 @@ export default function ComprasClient({
   faltantes,
   proveedores,
   ordenesCompra,
+  requisiciones,
 }: {
   faltantes: Faltante[]
   proveedores: Proveedor[]
   ordenesCompra: OrdenCompra[]
+  requisiciones: Requisicion[]
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
@@ -326,6 +338,62 @@ export default function ComprasClient({
           </button>
         </div>
       )}
+
+      <section className="mt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[14px] font-semibold tracking-[-0.01em]">
+              Requisiciones pendientes de surtir
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-gonper-muted">
+              Acceso directo a las órdenes de tus clientes.
+            </p>
+          </div>
+          <Badge tono={requisiciones.length > 0 ? 'warning' : 'success'}>
+            {requisiciones.length}
+          </Badge>
+        </div>
+
+        {requisiciones.length === 0 ? (
+          <div className="card px-4 py-5">
+            <p className="text-[12.5px] text-gonper-muted">
+              No hay requisiciones pendientes de surtir.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            {requisiciones.map((requisicion) => (
+              <article
+                key={requisicion.id}
+                className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-[13.5px] font-semibold">
+                      {requisicion.folio}
+                    </h2>
+                    <Badge tono="warning">
+                      {requisicion.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-[12px] text-gonper-muted">
+                    {requisicion.clientes?.nombre || 'Cliente desconocido'}
+                    {' · '}
+                    {fecha.format(new Date(requisicion.created_at))}
+                  </p>
+                </div>
+                <Link
+                  href={`/ordenes/${requisicion.id}`}
+                  className="btn btn-quiet shrink-0"
+                >
+                  Abrir requisición
+                  <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       {tab === 'sugerencias' && (
         <div key="sugerencias" className="animate-fade mt-4">
