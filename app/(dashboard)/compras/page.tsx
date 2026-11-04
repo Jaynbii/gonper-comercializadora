@@ -85,7 +85,12 @@ export default async function ComprasPage() {
         id, cantidad_solicitada, cantidad_recibida,
         productos (nombre, sku, id, unidad_medida)
       )
-    `).order('created_at', { ascending: false })
+    `).order('created_at', { ascending: false }),
+    supabase
+      .from('ordenes')
+      .select('id, folio, estado, created_at, clientes (nombre)')
+      .in('estado', ['PENDIENTE', 'PARCIAL'])
+      .order('created_at', { ascending: false })
   ])
 
   // 3. Unir proveedores con sus precios manualmente
