@@ -154,7 +154,7 @@ export default async function OrdenDetallePage({
             {puedeSurtir && hayFaltantes && (
               <Link
                 href="/compras"
-                className="flex items-center justify-center gap-2 w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-[13px]"
+                className="btn btn-primary w-full sm:w-auto"
               >
                 <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
                 Comprar faltantes a Proveedores
