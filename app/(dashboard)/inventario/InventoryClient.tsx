@@ -155,7 +155,7 @@ export default function InventoryClient({
   }
 
   return (
-    <div className="mx-auto max-w-[1180px] pb-6">
+    <div className="mx-auto max-w-295 pb-6">
       <header className="flex items-end justify-between gap-4">
         <div>
           <p className="text-[11.5px] font-medium text-gonper-muted">
@@ -241,7 +241,7 @@ export default function InventoryClient({
 
               <div className="mt-3 flex items-end justify-between gap-4 border-t border-gonper-border pt-3">
                 <div>
-                  <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                  <p className="text-[10.5px] font-medium uppercase tracking-widest text-gonper-muted">
                     Stock
                   </p>
                   <p className="mt-1 text-[18px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-gonper-text">
@@ -255,7 +255,7 @@ export default function InventoryClient({
                 </div>
 
                 <div className="text-right">
-                  <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                  <p className="text-[10.5px] font-medium uppercase tracking-widest text-gonper-muted">
                     Precio
                   </p>
                   <p className="mt-1 text-[14px] font-semibold tabular-nums text-gonper-text">
@@ -290,10 +290,10 @@ export default function InventoryClient({
       </div>
 
       {/* Vista escritorio */}
-      <div className="mt-5 hidden overflow-hidden rounded-[8px] border border-gonper-border bg-gonper-surface md:block">
+      <div className="mt-5 hidden overflow-hidden rounded-lg border border-gonper-border bg-gonper-surface md:block">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+            <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-widest text-gonper-muted">
               <th className="px-5 py-3 font-medium">SKU</th>
               <th className="px-5 py-3 font-medium">Producto</th>
               <th className="px-5 py-3 font-medium">Unidad</th>
@@ -312,7 +312,7 @@ export default function InventoryClient({
               return (
                 <tr
                   key={producto.id}
-                  className="transition-colors duration-[120ms] hover:bg-gonper-hover"
+                  className="transition-colors duration-120 hover:bg-gonper-hover"
                 >
                   <td className="px-5 py-3 font-mono text-[11.5px] text-gonper-muted">
                     {producto.sku}
@@ -428,15 +428,14 @@ export default function InventoryClient({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="field-label" htmlFor="sku">
-                SKU
+                SKU (Automático)
               </label>
               <input
                 id="sku"
                 name="sku"
-                required
-                defaultValue={productoAEditar?.sku || ''}
-                className="field"
-                placeholder="ART-001"
+                readOnly
+                defaultValue={productoAEditar ? productoAEditar.sku : 'Se generará automáticamente'}
+                className="field cursor-not-allowed bg-gonper-bg text-gonper-muted"
               />
             </div>
 
@@ -543,7 +542,7 @@ export default function InventoryClient({
           </datalist>
 
           {errorMsg && (
-            <p className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+            <p className="mt-4 rounded-md border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
               {errorMsg}
             </p>
           )}
@@ -585,7 +584,7 @@ export default function InventoryClient({
             requisiciones.
           </p>
           {errorEliminar && (
-            <p className="mt-3 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+            <p className="mt-3 rounded-md border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
               {errorEliminar}
             </p>
           )}
