@@ -574,7 +574,7 @@ export default function ProcesarPdfButton({
           {errorRevision && (
             <p
               role="alert"
-              className="mt-3 flex items-start gap-2 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger"
+              className="mt-3 flex items-start gap-2 rounded-md border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger"
             >
               <AlertCircle
                 className="mt-0.5 h-3.5 w-3.5 shrink-0"
@@ -586,24 +586,24 @@ export default function ProcesarPdfButton({
 
           {itemsDetectados && itemsDetectados.length > 0 ? (
             <>
-              <div className="mt-3 hidden overflow-hidden rounded-[6px] border border-gonper-border md:block">
+              <div className="mt-3 hidden overflow-hidden rounded-md border border-gonper-border md:block">
                 <table className="w-full table-fixed border-collapse text-left">
                   <thead>
-                    <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                    <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-widest text-gonper-muted">
                       <th className="w-11 px-2 py-2.5 text-center font-medium">
                         <span className="sr-only">Seleccionar</span>
                       </th>
-                      <th className="w-[6.5rem] px-2 py-2.5 font-medium">
+                      <th className="w-26 px-2 py-2.5 font-medium">
                         Código
                       </th>
                       <th className="px-2 py-2.5 font-medium">Descripción</th>
                       <th className="w-20 px-2 py-2.5 text-center font-medium">
                         Cant.
                       </th>
-                      <th className="w-[6.5rem] px-2 py-2.5 font-medium">
+                      <th className="w-26 px-2 py-2.5 font-medium">
                         Unidad
                       </th>
-                      <th className="w-[8.5rem] px-2 py-2.5 text-center font-medium">
+                      <th className="w-34 px-2 py-2.5 text-center font-medium">
                         Inventario
                       </th>
                       <th className="w-10 px-2 py-2.5">
@@ -618,7 +618,7 @@ export default function ProcesarPdfButton({
                       return (
                         <tr
                           key={item.key}
-                          className={`align-top transition-colors duration-[120ms] ${
+                          className={`align-top transition-colors duration-120 ${
                             seleccionado
                               ? 'bg-gonper-primary/[0.035]'
                               : 'bg-gonper-bg/40 opacity-60'
@@ -756,7 +756,7 @@ export default function ProcesarPdfButton({
                   return (
                     <div
                       key={item.key}
-                      className={`rounded-[6px] border p-3 transition-colors duration-[120ms] ${
+                      className={`rounded-md border p-3 transition-colors duration-120 ${
                         seleccionado
                           ? 'border-gonper-border bg-gonper-surface'
                           : 'border-gonper-border bg-gonper-bg/50 opacity-65'
@@ -911,7 +911,7 @@ export default function ProcesarPdfButton({
               </div>
             </>
           ) : (
-            <div className="mt-3 rounded-[6px] border border-dashed border-gonper-border px-4 py-10 text-center">
+            <div className="mt-3 rounded-md border border-dashed border-gonper-border px-4 py-10 text-center">
               <ScanText
                 className="mx-auto h-6 w-6 text-gonper-muted"
                 strokeWidth={1.5}

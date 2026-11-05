@@ -14,49 +14,27 @@ export type ResultadoParseo = {
 
 const UNIDADES = patronUnidades()
 
-/**
- * Una fila del documento tiene la forma:
- *   CODIGO  CANTIDAD  [UNIDAD]  DESCRIPCION  [PRECIO]  [IMPORTE]
- * El código y la cantidad pueden aparecer en cualquier parte de la línea
- * (el OCR a veces pega el encabezado con la primera fila).
- */
-const FILA = new RegExp(
+// 1. Patrón Original (Requisiciones Municipales)
+const FILA_REQUISICION = new RegExp(
   `(?:^|\\D)(\\d{3,8})\\s+(\\d+(?:[.,]\\d{1,3})?)\\s+((?:${UNIDADES})[.,]?\\s+)?((?!\\d).+)$`,
   'i',
 )
 
+// 2. Patrón Factura SAT / Tabla (Ej: "1 XBX - Caja 14111704 - PAPEL...")
+const FILA_SAT = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s*-\s*([A-Za-z]+)\s+(\d{3,8})\s*-\s*(.+)$/i
+
+// 3. Patrón Factura SAT sin guiones (Por si el OCR los omite)
+const FILA_SAT_SIN_GUIONES = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s+([A-Za-z]+)\s+(\d{3,8})\s+(.+)$/i
+
 const MONEDA_AL_FINAL = /\s+\$?\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\s*$/
 
 const PALABRAS_ENCABEZADO = [
-  'CODIGO',
-  'CANTIDAD',
-  'UNIDAD',
-  'DESCRIPCION',
-  'PRECIO',
-  'IMPORTE',
-  'SUBTOTAL',
-  'TOTAL',
-  'TOTALES',
-  'IVA',
-  'RFC',
-  'FECHA',
-  'FOLIO',
-  'REQUISICION',
-  'REQUISICIONES',
-  'DEPARTAMENTO',
-  'PROVEEDOR',
-  'PROYECTO',
-  'FONDOS',
-  'POLIZA',
-  'MAZATLAN',
-  'PAGINA',
-  'OFICIO',
-  'PARTIDA',
-  'ANEXO',
-  'OBSERVACIONES',
-  'FIRMA',
-  'SELLO',
-  'CONDICIONES',
+  'CODIGO', 'CANTIDAD', 'UNIDAD', 'DESCRIPCION', 'PRECIO', 'IMPORTE',
+  'SUBTOTAL', 'TOTAL', 'TOTALES', 'IVA', 'RFC', 'FECHA', 'FOLIO',
+  'REQUISICION', 'REQUISICIONES', 'DEPARTAMENTO', 'PROVEEDOR', 'PROYECTO',
+  'FONDOS', 'POLIZA', 'MAZATLAN', 'PAGINA', 'OFICIO', 'PARTIDA', 'ANEXO',
+  'OBSERVACIONES', 'FIRMA', 'SELLO', 'CONDICIONES', 'CLIENTE', 'EXPEDIDO',
+  'EMISION', 'REGIMEN', 'DOMICILIO', 'METODO', 'FORMA', 'TIMBRADO', 'SELLO DIGITAL'
 ]
 
 const PALABRAS_ENCABEZADO_REGEX = new RegExp(
@@ -80,7 +58,6 @@ function parseCantidad(valor: string): number {
   const limpio = valor.trim()
 
   if (limpio.includes(',') && limpio.includes('.')) {
-    // "2,209.80" es formato de miles; "2.209,80" es formato europeo.
     if (limpio.lastIndexOf(',') < limpio.lastIndexOf('.')) {
       return Number(limpio.replace(/,/g, ''))
     }
@@ -89,7 +66,6 @@ function parseCantidad(valor: string): number {
 
   if (limpio.includes(',')) {
     const decimales = limpio.split(',')[1] ?? ''
-    // "1,000" se interpreta como mil; "3,00" como tres.
     return decimales.length === 3
       ? Number(limpio.replace(',', ''))
       : Number(limpio.replace(',', '.'))
@@ -100,54 +76,35 @@ function parseCantidad(valor: string): number {
 
 function quitarPreciosFinales(texto: string) {
   let limpio = texto.replace(/\s+/g, ' ').trim()
-
-  // Se quitan únicamente los importes al final de la descripción. Nunca se
-  // corta en el primer decimal porque hay descripciones como "BOLSA 1.5 KG"
-  // o "JUMBO 12/200 MTS".
   for (let i = 0; i < 2; i++) {
     const siguiente = limpio.replace(MONEDA_AL_FINAL, '').trimEnd()
     if (siguiente === limpio) break
     limpio = siguiente
   }
-
   return limpio
 }
 
-/**
- * Cuando Tesseract conserva los espacios entre columnas, la descripción queda
- * separada de los precios por varios espacios. Si después de ese hueco hay
- * dígitos, la descripción termina ahí.
- */
 function recortarColumnasDePrecio(texto: string) {
   const columnas = texto.split(/\s{2,}/)
   if (columnas.length < 2) return texto
-
   const resto = columnas.slice(1).join(' ')
   return /\d/.test(resto) ? columnas[0] : texto
 }
 
 function limpiarDescripcion(texto: string) {
   let limpio = quitarPreciosFinales(recortarColumnasDePrecio(texto))
-
   limpio = limpio.replace(/^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/u, '')
   limpio = limpio.replace(/[^\p{L}\p{N}\s/#,.+-]/gu, '')
   limpio = limpio.replace(/\s+/g, ' ').trim()
   limpio = limpio.replace(/^[\s/#,.+-]+|[\s/#,.+-]+$/g, '')
-
   return limpio.toUpperCase()
 }
 
-/**
- * El OCR a veces duplica la unidad al inicio de la descripción con una letra
- * extra ("FPORRON FABULOSO DE 20 LITROS"). Si al quitar esa letra queda una
- * unidad conocida, se usa como unidad y se retira de la descripción.
- */
 function separarUnidadAlInicio(descripcion: string, unidad: string) {
   const [primera, ...resto] = descripcion.split(' ')
   if (!primera || primera.length < 4 || resto.length === 0) {
     return { unidad, descripcion }
   }
-
   const posible = normalizarUnidad(primera.slice(1))
   if (
     !(UNIDADES_COMUNES as readonly string[]).includes(posible) ||
@@ -155,55 +112,54 @@ function separarUnidadAlInicio(descripcion: string, unidad: string) {
   ) {
     return { unidad, descripcion }
   }
-
   return { unidad: posible, descripcion: resto.join(' ') }
 }
 
 const SOLO_CODIGO = /^\d{3,8}$/
 const CODIGO_Y_CANTIDAD = /^\d{3,8}\s+\d+(?:[.,]\d{1,3})?$/
 const EMPIEZA_CON_CANTIDAD = /^\d+(?:[.,]\d{1,3})?(?:\s+|$)/
-const COLA_DE_UNIDAD = new RegExp(
-  `^\\d{3,8}\\s+\\d+(?:[.,]\\d{1,3})?\\s+(?:${UNIDADES})[.,]?$`,
-  'i',
-)
+const COLA_DE_UNIDAD = new RegExp(`^\\d{3,8}\\s+\\d+(?:[.,]\\d{1,3})?\\s+(?:${UNIDADES})[.,]?$`, 'i')
+const ES_SOLO_NUMERO = /^\d+(?:[.,]\d+)?$/
+const ES_UNIDAD_SAT = /^[A-Z0-9]+\s*-\s*[A-Za-z]+$/
+const ES_CODIGO_DESC_SAT = /^\d{3,8}\s*-\s*(.+)$/
 
-/**
- * Une filas que el OCR partió en dos o tres líneas, por ejemplo:
- *   "13747 3.00"
- *   "CAJAS PAPEL PARA MANOS EN ROLLO 736.60 2,209.80"
- */
 function unirLineasPartidas(lineas: string[]) {
   let actual = lineas
-
   for (let pasada = 0; pasada < 3; pasada++) {
     const unidas: string[] = []
     let huboCambio = false
-
     for (let i = 0; i < actual.length; i++) {
       const linea = actual[i]
       const siguiente = actual[i + 1]
+      const subsiguiente = actual[i + 2]
 
       const seParte =
         !!siguiente &&
-        ((SOLO_CODIGO.test(linea) &&
-          !SOLO_CODIGO.test(siguiente) &&
-          EMPIEZA_CON_CANTIDAD.test(siguiente)) ||
+        (
+          (SOLO_CODIGO.test(linea) && !SOLO_CODIGO.test(siguiente) && EMPIEZA_CON_CANTIDAD.test(siguiente)) ||
           CODIGO_Y_CANTIDAD.test(linea) ||
-          COLA_DE_UNIDAD.test(linea))
+          COLA_DE_UNIDAD.test(linea) ||
+          // Unir formato SAT: "1" + "XBX - Caja" + "14111704 - PAPEL..."
+          (ES_SOLO_NUMERO.test(linea) && ES_UNIDAD_SAT.test(siguiente) && subsiguiente && ES_CODIGO_DESC_SAT.test(subsiguiente)) ||
+          (ES_SOLO_NUMERO.test(linea) && ES_UNIDAD_SAT.test(siguiente))
+        )
 
       if (seParte) {
-        unidas.push(`${linea} ${siguiente}`)
-        i++
+        if (ES_SOLO_NUMERO.test(linea) && ES_UNIDAD_SAT.test(siguiente) && subsiguiente && ES_CODIGO_DESC_SAT.test(subsiguiente)) {
+          unidas.push(`${linea} ${siguiente} ${subsiguiente}`)
+          i += 2
+        } else {
+          unidas.push(`${linea} ${siguiente}`)
+          i++
+        }
         huboCambio = true
       } else {
         unidas.push(linea)
       }
     }
-
     actual = unidas
     if (!huboCambio) break
   }
-
   return actual
 }
 
@@ -218,24 +174,11 @@ function esLineaUtilParaRevision(linea: string) {
 const RE_ENCABEZADO_COLUMNAS = /CODIGO.*CANTIDAD.*UNIDAD.*DESCRIPCION/i
 const RE_FIN_BLOQUE = /\b(SUBTOTAL|TOTAL|IVA|FIRMA|OBSERVACIONES|CONDICIONES)\b/i
 const RE_SOLO_CODIGOS = /^\d{3,8}(?:\s+\d{3,8})*$/
-const RE_CANTIDAD_UNIDAD = new RegExp(
-  `(\\d+(?:[.,]\\d{1,3})?)\\s*((?:${UNIDADES})[.,]?)(?=\\s|$)`,
-  'gi',
-)
+const RE_CANTIDAD_UNIDAD = new RegExp(`(\\d+(?:[.,]\\d{1,3})?)\\s*((?:${UNIDADES})[.,]?)(?=\\s|$)`, 'gi')
 
-/**
- * Algunos OCR entregan la tabla por columnas: primero todos los códigos,
- * luego todas las cantidades con su unidad y al final las descripciones.
- * Este lector reconstruye esas filas antes de intentar el modo línea por línea.
- */
-function parsearBloquesColumnas(lineas: string[]): {
-  items: ItemRequisicion[]
-  consumidas: Set<number>
-} {
+function parsearBloquesColumnas(lineas: string[]): { items: ItemRequisicion[], consumidas: Set<number> } {
   const sinResultado = { items: [], consumidas: new Set<number>() }
-  const indiceEncabezado = lineas.findIndex((linea) =>
-    RE_ENCABEZADO_COLUMNAS.test(sinAcentos(linea)),
-  )
+  const indiceEncabezado = lineas.findIndex((linea) => RE_ENCABEZADO_COLUMNAS.test(sinAcentos(linea)))
   if (indiceEncabezado < 0) return sinResultado
 
   const codigos: string[] = []
@@ -263,13 +206,9 @@ function parsearBloquesColumnas(lineas: string[]): {
     for (const coincidencia of coincidencias) {
       const cantidad = parseCantidad(coincidencia[1])
       if (Number.isFinite(cantidad) && cantidad > 0) {
-        cantidades.push({
-          cantidad,
-          unidad: normalizarUnidad(coincidencia[2]),
-        })
+        cantidades.push({ cantidad, unidad: normalizarUnidad(coincidencia[2]) })
       }
     }
-
     indicesCantidades.push(indice)
     indice++
   }
@@ -296,11 +235,7 @@ function parsearBloquesColumnas(lineas: string[]): {
 
   return {
     items: codigos.map((codigo, posicion) => {
-      const ajuste = separarUnidadAlInicio(
-        descripciones[posicion],
-        cantidades[posicion].unidad,
-      )
-
+      const ajuste = separarUnidadAlInicio(descripciones[posicion], cantidades[posicion].unidad)
       return {
         codigo_pdf: codigo,
         cantidad: cantidades[posicion].cantidad,
@@ -308,18 +243,10 @@ function parsearBloquesColumnas(lineas: string[]): {
         descripcion_pdf: ajuste.descripcion,
       }
     }),
-    consumidas: new Set([
-      ...indicesCodigos,
-      ...indicesCantidades,
-      ...indicesDescripciones,
-    ]),
+    consumidas: new Set([...indicesCodigos, ...indicesCantidades, ...indicesDescripciones]),
   }
 }
 
-/**
- * Convierte el texto crudo del OCR en filas de requerimiento.
- * Es una función pura: no consulta la base de datos ni decide productos.
- */
 export function parseRequisicion(textoCrudo: string): ResultadoParseo {
   const lineasBase = (textoCrudo || '')
     .replace(/\u00a0/g, ' ')
@@ -328,50 +255,43 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
     .filter(Boolean)
 
   const bloque = parsearBloquesColumnas(lineasBase)
-  const lineas = unirLineasPartidas(
-    lineasBase.filter((_, indice) => !bloque.consumidas.has(indice)),
-  )
+  const lineas = unirLineasPartidas(lineasBase.filter((_, indice) => !bloque.consumidas.has(indice)))
 
   const items: ItemRequisicion[] = [...bloque.items]
   const lineasNoReconocidas: string[] = []
 
   for (const linea of lineas) {
-    const match = linea.match(FILA)
+    // 1. Intentar con el formato original (Requisición)
+    let match = linea.match(FILA_REQUISICION)
+    if (match) {
+      const codigo = match[1]
+      const cantidad = parseCantidad(match[2])
+      const descripcionDetectada = limpiarDescripcion(match[4])
+      const { unidad, descripcion } = separarUnidadAlInicio(descripcionDetectada, normalizarUnidad(match[3] ?? ''))
+      const esSoloUnidad = !descripcion.includes(' ') && (UNIDADES_COMUNES as readonly string[]).includes(normalizarUnidad(descripcion))
 
-    if (!match) {
-      if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
-      continue
+      if (Number.isFinite(cantidad) && cantidad > 0 && descripcion.length >= 3 && !esSoloUnidad) {
+        items.push({ codigo_pdf: codigo, cantidad, unidad, descripcion_pdf: descripcion })
+        continue
+      }
     }
 
-    const codigo = match[1]
-    const cantidad = parseCantidad(match[2])
-    const descripcionDetectada = limpiarDescripcion(match[4])
-    const { unidad, descripcion } = separarUnidadAlInicio(
-      descripcionDetectada,
-      normalizarUnidad(match[3] ?? ''),
-    )
-    const esSoloUnidad =
-      !descripcion.includes(' ') &&
-      (UNIDADES_COMUNES as readonly string[]).includes(
-        normalizarUnidad(descripcion),
-      )
+    // 2. Intentar con el formato Factura SAT / Tabla
+    match = linea.match(FILA_SAT) || linea.match(FILA_SAT_SIN_GUIONES)
+    if (match) {
+      const cantidad = parseCantidad(match[1])
+      const unidad = normalizarUnidad(match[2])
+      const codigo = match[3]
+      const descripcion = limpiarDescripcion(match[4])
 
-    if (
-      !Number.isFinite(cantidad) ||
-      cantidad <= 0 ||
-      descripcion.length < 3 ||
-      esSoloUnidad
-    ) {
-      if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
-      continue
+      if (Number.isFinite(cantidad) && cantidad > 0 && descripcion.length >= 3) {
+        items.push({ codigo_pdf: codigo, cantidad, unidad, descripcion_pdf: descripcion })
+        continue
+      }
     }
 
-    items.push({
-      codigo_pdf: codigo,
-      cantidad,
-      unidad,
-      descripcion_pdf: descripcion,
-    })
+    // Si no coincidió con ningún formato, se guarda para revisión manual
+    if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
   }
 
   return { items, lineasNoReconocidas }
