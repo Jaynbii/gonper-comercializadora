@@ -10,6 +10,7 @@ type ProductoDB = {
   sku: string
   nombre: string
   unidad_medida: string | null
+  codigo_sat: string | null // 👈 Agregamos esta propiedad
 }
 
 type Sugerencia = {
@@ -38,22 +39,26 @@ function limpiarParaBusqueda(texto: string) {
 
 export async function procesarTextoOrden(textoCrudo: string) {
   const supabase = await createClient()
+  
+  // 👇 AHORA SELECCIONAMOS EL CODIGO SAT TAMBIÉN
   const { data: productosDB, error: dbError } = await supabase
     .from('productos')
-    .select('id, sku, nombre, unidad_medida')
+    .select('id, sku, nombre, unidad_medida, codigo_sat')
 
   if (dbError) throw new Error('No se pudo conectar a la base de datos')
 
   const productos = (productosDB ?? []) as ProductoDB[]
-  const porSku = new Map(productos.map((producto) => [producto.sku, producto]))
   
-  // Mejoramos Fuse para que busque sobre nombres limpios
+  // Mapas para búsqueda rápida
+  const porSku = new Map(productos.map((producto) => [producto.sku, producto]))
+  const porSat = new Map(productos.filter(p => p.codigo_sat).map((producto) => [producto.codigo_sat, producto]))
+  
   const fuse = new Fuse(productos.map(p => ({
     ...p,
     nombreLimpio: limpiarParaBusqueda(p.nombre)
   })), {
     keys: ['nombreLimpio'],
-    threshold: 0.35, // Más estricto para evitar falsos positivos (0.0 es exacto, 1.0 es cualquier cosa)
+    threshold: 0.35, 
     ignoreLocation: true,
     includeScore: true,
   })
@@ -61,12 +66,15 @@ export async function procesarTextoOrden(textoCrudo: string) {
   const { items, lineasNoReconocidas } = parseRequisicion(textoCrudo)
 
   const detectados = items.map((item) => {
-    // 1. Buscamos coincidencia exacta por SKU
+    // 1. Buscamos coincidencia exacta por CÓDIGO SAT
+    const existentePorSat = porSat.get(item.codigo_pdf)
+    // 2. Si no, buscamos por SKU interno (por si acaso)
     const existentePorSku = porSku.get(item.codigo_pdf)
+    
     let sugerencia: Sugerencia | null = null
-    let productoFinal = existentePorSku
+    let productoFinal = existentePorSat || existentePorSku
 
-    // 2. Si no hay SKU exacto, buscamos por nombre
+    // 3. Si no hay coincidencia por código, buscamos por nombre
     if (!productoFinal) {
       const descripcionLimpia = limpiarParaBusqueda(item.descripcion_pdf)
       const mejor = fuse.search(descripcionLimpia)[0]
