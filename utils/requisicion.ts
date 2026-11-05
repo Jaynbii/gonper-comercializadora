@@ -22,8 +22,6 @@ const FILA_REQUISICION = new RegExp(
 const FILA_SAT = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s*-\s*([A-Za-z]+)\s+(\d{3,8})\s*-\s*(.+)$/i
 const FILA_SAT_SIN_GUIONES = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s+([A-Za-z]+)\s+(\d{3,8})\s+(.+)$/i
 
-const MONEDA_AL_FINAL = /\s+\$?\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\s*$/
-
 const PALABRAS_ENCABEZADO = [
   'CODIGO', 'CANTIDAD', 'UNIDAD', 'DESCRIPCION', 'PRECIO', 'IMPORTE',
   'SUBTOTAL', 'TOTAL', 'TOTALES', 'IVA', 'RFC', 'FECHA', 'FOLIO',

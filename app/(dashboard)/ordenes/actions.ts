@@ -1,7 +1,7 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
-import { revalidatePath } from 'next/cache' // 👈 ¡ESTA LÍNEA ES LA QUE FALTABA!
+import { createClient, generarNuevoSku } from '@/utils/supabase/server' // 👈 Importamos generarNuevoSku
+import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
 
 type ItemDetectado = {
@@ -36,26 +36,34 @@ export async function obtenerUrlParaOCR(pdfPath: string) {
 export async function registrarProductoEnInventario(item: ItemDetectado) {
   const supabase = await createClient()
 
-  const sku = String(item.codigo_pdf ?? '').trim()
+  // 👇 AHORA EL CÓDIGO DEL PDF ES EL CÓDIGO SAT
+  const codigo_sat = String(item.codigo_pdf ?? '').trim()
   const nombre = String(item.producto_nombre || item.descripcion_pdf || '').trim()
   const unidad = normalizarUnidad(item.unidad) || null
 
-  if (!sku) throw new Error('El artículo no tiene código (SKU).')
+  if (!codigo_sat) throw new Error('El artículo no tiene código SAT de referencia.')
   if (!nombre) throw new Error('El artículo no tiene descripción.')
 
-  // El SKU es la identidad del producto: si ya existe, se reutiliza.
-  const { data: existeSku } = await supabase
+  // 🛡️ FRENO DE MANO: Buscamos si el código SAT ya existe en el inventario
+  const { data: existeSat } = await supabase
     .from('productos')
     .select('*')
-    .eq('sku', sku)
+    .eq('codigo_sat', codigo_sat)
     .maybeSingle()
-  if (existeSku) return existeSku
+
+  if (existeSat) {
+    throw new Error(`Este producto ya existe en tu inventario como "${existeSat.nombre}" (${existeSat.sku}). Por favor, usa la sugerencia en lugar de registrar uno nuevo.`)
+  }
+
+  // 🏷️ GENERAMOS EL NUEVO SKU INTERNO (ARTXXXX)
+  const nuevoSku = await generarNuevoSku(supabase)
 
   const { data, error } = await supabase
     .from('productos')
     .insert({
-      sku,
-      nombre,
+      sku: nuevoSku,           // 👈 El código interno ARTXXXX
+      nombre,                  // 👈 El nombre completo de la factura
+      codigo_sat,              // 👈 El código del SAT
       unidad_medida: unidad,
       stock_actual: 0,
       stock_minimo: 0,
@@ -65,12 +73,12 @@ export async function registrarProductoEnInventario(item: ItemDetectado) {
     .single()
 
   if (error) {
-    // Si otro usuario registró el mismo SKU mientras tanto, se reutiliza.
+    // En caso de que alguien más lo haya registrado exactamente al mismo tiempo
     if (error.code === '23505') {
       const { data: recienCreado } = await supabase
         .from('productos')
         .select('*')
-        .eq('sku', sku)
+        .eq('codigo_sat', codigo_sat)
         .maybeSingle()
       if (recienCreado) return recienCreado
     }

@@ -3,11 +3,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
+import { generarNuevoSku } from '@/utils/supabase/server' // 👈 NUEVO IMPORT
 
 export async function crearProducto(formData: FormData) {
   const supabase = await createClient()
 
-  const sku = formData.get('sku') as string
+  // 👇 Quitamos la lectura del SKU del formulario
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
@@ -15,8 +16,17 @@ export async function crearProducto(formData: FormData) {
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
+  // 👇 GENERAMOS EL SKU AUTOMÁTICAMENTE (ARTXXXX)
+  const sku = await generarNuevoSku(supabase)
+
   const { error } = await supabase.from('productos').insert({
-    sku, nombre, categoria_id: categoria_id || null, unidad_medida, precio_unitario, stock_actual, stock_minimo
+    sku, // Usamos el SKU generado
+    nombre, 
+    categoria_id: categoria_id || null, 
+    unidad_medida, 
+    precio_unitario, 
+    stock_actual, 
+    stock_minimo
   })
 
   if (error) {
@@ -31,7 +41,7 @@ export async function crearProducto(formData: FormData) {
 export async function actualizarProducto(id: string, formData: FormData) {
   const supabase = await createClient()
 
-  const sku = formData.get('sku') as string
+  // 👇 Quitamos también la lectura del SKU
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
@@ -39,12 +49,17 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
+  // 👇 EL SKU YA NO SE ACTUALIZA (es inmutable)
   const { error } = await supabase.from('productos').update({
-    sku, nombre, categoria_id: categoria_id || null, unidad_medida, precio_unitario, stock_actual, stock_minimo
+    nombre, 
+    categoria_id: categoria_id || null, 
+    unidad_medida, 
+    precio_unitario, 
+    stock_actual, 
+    stock_minimo
   }).eq('id', id)
 
   if (error) {
-    if (error.code === '23505') return { error: 'El SKU ya está en uso por otro producto.' }
     return { error: error.message }
   }
 
