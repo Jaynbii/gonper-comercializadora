@@ -26,6 +26,16 @@ function formatearNombre(str: string) {
     .replace(/(^\w|\s\w)/g, (m) => m.toUpperCase())
 }
 
+// Función para limpiar palabras comunes que ensucian la búsqueda
+function limpiarParaBusqueda(texto: string) {
+  return texto
+    .toUpperCase()
+    .replace(/\b(DE|DEL|LA|EL|LOS|LAS|EN|CON|PARA|Y)\b/g, '')
+    .replace(/[.,#/-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export async function procesarTextoOrden(textoCrudo: string) {
   const supabase = await createClient()
   const { data: productosDB, error: dbError } = await supabase
@@ -36,9 +46,14 @@ export async function procesarTextoOrden(textoCrudo: string) {
 
   const productos = (productosDB ?? []) as ProductoDB[]
   const porSku = new Map(productos.map((producto) => [producto.sku, producto]))
-  const fuse = new Fuse(productos, {
-    keys: ['nombre'],
-    threshold: 0.45,
+  
+  // Mejoramos Fuse para que busque sobre nombres limpios
+  const fuse = new Fuse(productos.map(p => ({
+    ...p,
+    nombreLimpio: limpiarParaBusqueda(p.nombre)
+  })), {
+    keys: ['nombreLimpio'],
+    threshold: 0.35, // Más estricto para evitar falsos positivos (0.0 es exacto, 1.0 es cualquier cosa)
     ignoreLocation: true,
     includeScore: true,
   })
@@ -46,34 +61,44 @@ export async function procesarTextoOrden(textoCrudo: string) {
   const { items, lineasNoReconocidas } = parseRequisicion(textoCrudo)
 
   const detectados = items.map((item) => {
-    // El SKU es la identidad. La coincidencia por nombre solo se ofrece como
-    // sugerencia y nunca asigna el producto automáticamente.
-    const existente = porSku.get(item.codigo_pdf)
+    // 1. Buscamos coincidencia exacta por SKU
+    const existentePorSku = porSku.get(item.codigo_pdf)
     let sugerencia: Sugerencia | null = null
+    let productoFinal = existentePorSku
 
-    if (!existente) {
-      const mejor = fuse.search(item.descripcion_pdf)[0]
-      if (mejor && (mejor.score ?? 1) <= 0.45) {
-        sugerencia = {
-          id: mejor.item.id,
-          sku: mejor.item.sku,
-          nombre: mejor.item.nombre,
-          unidad_medida: mejor.item.unidad_medida,
+    // 2. Si no hay SKU exacto, buscamos por nombre
+    if (!productoFinal) {
+      const descripcionLimpia = limpiarParaBusqueda(item.descripcion_pdf)
+      const mejor = fuse.search(descripcionLimpia)[0]
+
+      if (mejor) {
+        const score = mejor.score ?? 1
+        // Si la coincidencia es MUY buena (score <= 0.25), lo auto-vinculamos
+        if (score <= 0.25) {
+          productoFinal = mejor.item
+        } 
+        // Si la coincidencia es buena (score <= 0.35), lo mostramos como sugerencia
+        else if (score <= 0.35) {
+          sugerencia = {
+            id: mejor.item.id,
+            sku: mejor.item.sku,
+            nombre: mejor.item.nombre,
+            unidad_medida: mejor.item.unidad_medida,
+          }
         }
       }
     }
 
-    const nombre = existente?.nombre || formatearNombre(item.descripcion_pdf)
+    const nombre = productoFinal?.nombre || formatearNombre(item.descripcion_pdf)
 
     return {
       codigo_pdf: item.codigo_pdf,
       cantidad: item.cantidad,
-      unidad:
-        normalizarUnidad(existente?.unidad_medida) || item.unidad || '',
+      unidad: normalizarUnidad(productoFinal?.unidad_medida) || item.unidad || '',
       descripcion_pdf: nombre,
       producto_nombre: nombre,
-      existe_en_bd: !!existente,
-      id_bd: existente?.id || null,
+      existe_en_bd: !!productoFinal,
+      id_bd: productoFinal?.id || null,
       sugerencia,
     }
   })
