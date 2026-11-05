@@ -14,16 +14,12 @@ export type ResultadoParseo = {
 
 const UNIDADES = patronUnidades()
 
-// 1. Patrón Original (Requisiciones Municipales)
 const FILA_REQUISICION = new RegExp(
   `(?:^|\\D)(\\d{3,8})\\s+(\\d+(?:[.,]\\d{1,3})?)\\s+((?:${UNIDADES})[.,]?\\s+)?((?!\\d).+)$`,
   'i',
 )
 
-// 2. Patrón Factura SAT / Tabla (Ej: "1 XBX - Caja 14111704 - PAPEL...")
 const FILA_SAT = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s*-\s*([A-Za-z]+)\s+(\d{3,8})\s*-\s*(.+)$/i
-
-// 3. Patrón Factura SAT sin guiones (Por si el OCR los omite)
 const FILA_SAT_SIN_GUIONES = /^(\d+(?:[.,]\d+)?)\s+[A-Z0-9]+\s+([A-Za-z]+)\s+(\d{3,8})\s+(.+)$/i
 
 const MONEDA_AL_FINAL = /\s+\$?\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\s*$/
@@ -74,29 +70,28 @@ function parseCantidad(valor: string): number {
   return Number(limpio)
 }
 
-function quitarPreciosFinales(texto: string) {
-  let limpio = texto.replace(/\s+/g, ' ').trim()
-  for (let i = 0; i < 2; i++) {
-    const siguiente = limpio.replace(MONEDA_AL_FINAL, '').trimEnd()
-    if (siguiente === limpio) break
-    limpio = siguiente
-  }
-  return limpio
-}
-
-function recortarColumnasDePrecio(texto: string) {
-  const columnas = texto.split(/\s{2,}/)
-  if (columnas.length < 2) return texto
-  const resto = columnas.slice(1).join(' ')
-  return /\d/.test(resto) ? columnas[0] : texto
-}
-
+/**
+ * LIMPIEZA AGRESIVA: Corta la descripción en el primer precio decimal que 
+ * encuentre, y elimina cualquier texto basura del SAT que venga después.
+ */
 function limpiarDescripcion(texto: string) {
-  let limpio = quitarPreciosFinales(recortarColumnasDePrecio(texto))
+  let limpio = texto.replace(/\s+/g, ' ').trim()
+
+  // 1. Cortar desde el primer número decimal (ej. 614.00, 635.00) hacia adelante
+  // Esto elimina precios, importes y textos como "02 - Sí Objeto De Impuesto"
+  limpio = limpio.split(/\s+\d+(?:[.,]\d{2,3})\b/)[0]
+
+  // 2. Eliminar basura adicional del SAT por si acaso
+  limpio = limpio.replace(/\b\d{2}\s*-\s*S[ií]\s*objeto\s*de\s*impuesto\b/gi, '')
+  limpio = limpio.replace(/\bIVA\s*:.*$/gi, '')
+  limpio = limpio.replace(/\bIMPORTE\b.*$/gi, '')
+
+  // 3. Limpieza estándar de caracteres
   limpio = limpio.replace(/^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/u, '')
   limpio = limpio.replace(/[^\p{L}\p{N}\s/#,.+-]/gu, '')
   limpio = limpio.replace(/\s+/g, ' ').trim()
   limpio = limpio.replace(/^[\s/#,.+-]+|[\s/#,.+-]+$/g, '')
+
   return limpio.toUpperCase()
 }
 
@@ -139,7 +134,6 @@ function unirLineasPartidas(lineas: string[]) {
           (SOLO_CODIGO.test(linea) && !SOLO_CODIGO.test(siguiente) && EMPIEZA_CON_CANTIDAD.test(siguiente)) ||
           CODIGO_Y_CANTIDAD.test(linea) ||
           COLA_DE_UNIDAD.test(linea) ||
-          // Unir formato SAT: "1" + "XBX - Caja" + "14111704 - PAPEL..."
           (ES_SOLO_NUMERO.test(linea) && ES_UNIDAD_SAT.test(siguiente) && subsiguiente && ES_CODIGO_DESC_SAT.test(subsiguiente)) ||
           (ES_SOLO_NUMERO.test(linea) && ES_UNIDAD_SAT.test(siguiente))
         )
@@ -261,7 +255,6 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
   const lineasNoReconocidas: string[] = []
 
   for (const linea of lineas) {
-    // 1. Intentar con el formato original (Requisición)
     let match = linea.match(FILA_REQUISICION)
     if (match) {
       const codigo = match[1]
@@ -276,7 +269,6 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
       }
     }
 
-    // 2. Intentar con el formato Factura SAT / Tabla
     match = linea.match(FILA_SAT) || linea.match(FILA_SAT_SIN_GUIONES)
     if (match) {
       const cantidad = parseCantidad(match[1])
@@ -290,7 +282,6 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
       }
     }
 
-    // Si no coincidió con ningún formato, se guarda para revisión manual
     if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
   }
 
