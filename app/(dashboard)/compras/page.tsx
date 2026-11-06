@@ -1,5 +1,11 @@
 import { createClient } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
+import {
+  calcularFaltantePorOrden,
+  type FaltantePorOrden,
+  type PrecioProveedor,
+  type ProductoStock,
+} from '@/utils/faltantesPorOrden'
 
 type Relacion<T> = T | T[] | null
 
@@ -14,6 +20,15 @@ type ProductoCompra = {
   nombre: string
   sku: string
   unidad_medida: string | null
+}
+
+type OrdenActiva = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  clientes: Relacion<{ nombre: string }>
+  orden_items: ItemActivo[] | null
 }
 
 type RequisicionActiva = {
@@ -41,17 +56,29 @@ type OrdenCompraCruda = {
     | null
 }
 
-export default async function ComprasPage() {
+export default async function ComprasPage({
+  searchParams,
+}: {
+  // ?orden=<id> llega desde el detalle de una orden: abre Compras ya
+  // filtrada a esa orden (vista "Por orden" y card seleccionada).
+  searchParams?: Promise<{ orden?: string | string[] }>
+}) {
   const supabase = await createClient()
+  const params = (await searchParams) || {}
+  const ordenIdInicial = Array.isArray(params.orden)
+    ? params.orden[0]
+    : params.orden
 
   // 1. Calcular faltantes (Órdenes activas vs Stock)
   const { data: ordenesActivas } = await supabase
     .from('ordenes')
-    .select(`orden_items (cantidad_solicitada, cantidad_surtida, producto_id)`)
+    .select(
+      `id, folio, estado, created_at, clientes (nombre), orden_items (cantidad_solicitada, cantidad_surtida, producto_id)`,
+    )
     .in('estado', ['PENDIENTE', 'PARCIAL'])
 
   const demandaPorProducto: Record<string, number> = {}
-  ordenesActivas?.forEach(orden => {
+  ;(ordenesActivas as unknown as OrdenActiva[] | null)?.forEach((orden) => {
     orden.orden_items?.forEach((item: ItemActivo) => {
       const pendiente = Number(item.cantidad_solicitada) - Number(item.cantidad_surtida)
       if (pendiente > 0) {
@@ -61,7 +88,7 @@ export default async function ComprasPage() {
   })
 
   const { data: productos } = await supabase.from('productos').select('id, nombre, sku, stock_actual, unidad_medida')
-  
+
   const faltantes = (productos || []).map(prod => {
     const requerido = demandaPorProducto[prod.id] || 0
     const stock = Number(prod.stock_actual) || 0
@@ -102,12 +129,74 @@ export default async function ComprasPage() {
     }
   })
 
+  // 4. Faltante por orden (Fase 1): una card por orden activa, con su
+  // proveedor sugerido (el más barato con precio registrado) y su
+  // costo estimado. El surtido parcial se preserva: el % incluye lo
+  // ya surtido y lo que hay en stock.
+  const nombreProveedor = new Map<string, string>(
+    (rawProveedores || []).map((p: { id: string; nombre: string }) => [p.id, p.nombre]),
+  )
+  const preciosPorProducto = new Map<string, PrecioProveedor[]>()
+  for (const rel of rawRelaciones || []) {
+    const precio = Number(rel.precio_unitario)
+    if (!Number.isFinite(precio) || precio <= 0) continue
+    const lista = preciosPorProducto.get(rel.producto_id) || []
+    lista.push({
+      proveedorId: rel.proveedor_id,
+      proveedorNombre: nombreProveedor.get(rel.proveedor_id) || 'Proveedor',
+      precioUnitario: precio,
+    })
+    preciosPorProducto.set(rel.producto_id, lista)
+  }
+
+  const productosMap = new Map<string, ProductoStock>(
+    (productos || []).map((p) => [
+      p.id,
+      {
+        id: p.id,
+        nombre: p.nombre,
+        sku: p.sku,
+        unidadMedida: p.unidad_medida,
+        stockActual: Number(p.stock_actual) || 0,
+      },
+    ]),
+  )
+
+  const nombreCliente = (clientes: Relacion<{ nombre: string }>) =>
+    Array.isArray(clientes)
+      ? clientes[0]?.nombre || 'Cliente desconocido'
+      : clientes?.nombre || 'Cliente desconocido'
+
+  const faltantesPorOrden: FaltantePorOrden[] = (
+    (ordenesActivas as unknown as OrdenActiva[] | null) || []
+  )
+    .map((orden) =>
+      calcularFaltantePorOrden({
+        ordenId: orden.id,
+        folio: orden.folio,
+        clienteNombre: nombreCliente(orden.clientes),
+        estado: orden.estado,
+        createdAt: orden.created_at,
+        items: (orden.orden_items || []).map((item) => ({
+          productoId: item.producto_id,
+          cantidadSolicitada: Number(item.cantidad_solicitada) || 0,
+          cantidadSurtida: Number(item.cantidad_surtida) || 0,
+        })),
+        productos: productosMap,
+        preciosPorProducto,
+      }),
+    )
+    // Las más antiguas primero: son las que Alex y su jefe priorizan cada mañana.
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+
   return (
-    <ComprasClient 
-      faltantes={faltantes} 
-      proveedores={proveedores || []} 
+    <ComprasClient
+      faltantes={faltantes}
+      proveedores={proveedores || []}
       ordenesCompra={normalizarOrdenes(ordenesCompra)}
       requisiciones={normalizarRequisiciones(requisicionesCrudas)}
+      faltantesPorOrden={faltantesPorOrden}
+      ordenIdInicial={ordenIdInicial}
     />
   )
 }

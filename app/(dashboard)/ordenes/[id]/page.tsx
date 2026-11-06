@@ -90,10 +90,19 @@ export default async function OrdenDetallePage({
     (item) => Number(productoDe(item)?.stock_actual) > 0,
   )
 
-  // 👇 NUEVA VARIABLE: Detecta si falta al menos un artículo por surtir 👇
-  const hayFaltantes = items.some(
-    (item) => Number(productoDe(item)?.stock_actual) < Number(item.cantidad_solicitada)
-  )
+  // 👇 Faltante real: lo que queda por surtir después de lo ya
+  // surtido y del stock disponible. Así una orden PARCIAL también
+  // puede ir a Compras por lo que le falta (Fase 1).
+  const hayFaltantes = items.some((item) => {
+    const producto = productoDe(item)
+    const pendiente =
+      Number(item.cantidad_solicitada) - (Number(item.cantidad_surtida) || 0)
+    const aSurtir = Math.min(Number(producto?.stock_actual) || 0, pendiente)
+    return pendiente - aSurtir > 0
+  })
+
+  const puedeIrACompras =
+    orden.estado !== 'ENTREGADA' && orden.estado !== 'CANCELADA'
 
   const puedeSurtir =
     orden.estado !== 'ENTREGADA' &&
@@ -150,14 +159,15 @@ export default async function OrdenDetallePage({
               </p>
             )}
 
-            {/* 👇 NUEVO BOTÓN AGREGADO AQUÍ 👇 */}
-            {puedeSurtir && hayFaltantes && (
+            {/* Fase 1: lleva a Compras ya filtrado a ESTA orden
+                (?orden=<id>), no al faltante general. */}
+            {puedeIrACompras && hayFaltantes && (
               <Link
-                href="/compras"
+                href={`/compras?orden=${orden.id}`}
                 className="btn btn-primary w-full sm:w-auto"
               >
                 <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
-                Comprar faltantes a Proveedores
+                Ir a Compras por el faltante de esta orden
               </Link>
             )}
           </div>

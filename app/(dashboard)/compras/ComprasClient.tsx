@@ -17,6 +17,10 @@ import EmptyState from '@/components/ui/EmptyState'
 import PageHeader from '@/components/ui/PageHeader'
 import { Badge } from '@/components/EstadoBadge'
 import { generarOrdenCompra, recibirMercancia } from './actions'
+import {
+  consolidarFaltantesSeleccionados,
+  type FaltantePorOrden,
+} from '@/utils/faltantesPorOrden'
 
 type Proveedor = {
   id: string
@@ -80,19 +84,214 @@ const fecha = new Intl.DateTimeFormat('es-MX', {
   year: 'numeric',
 })
 
+function PorOrdenCards({
+  ordenes,
+  seleccionadas,
+  onToggle,
+}: {
+  ordenes: FaltantePorOrden[]
+  seleccionadas: string[]
+  onToggle: (ordenId: string) => void
+}) {
+  if (ordenes.length === 0) {
+    return (
+      <div className="card mt-4">
+        <EmptyState
+          icon={<CheckCircle2 className="h-6 w-6" strokeWidth={1.5} />}
+          title="Sin órdenes activas"
+          description="No hay requisiciones pendientes o parciales por surtir."
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="stagger mt-4 grid grid-cols-1 gap-3">
+      {ordenes.map((orden) => {
+        const seleccionada = seleccionadas.includes(orden.ordenId)
+        return (
+          <article
+            key={orden.ordenId}
+            className={`card p-4 ${
+              seleccionada ? 'ring-2 ring-gonper-primary' : ''
+            }`}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+                    {orden.clienteNombre}
+                  </h2>
+                  <Badge tono={orden.estado === 'PARCIAL' ? 'warning' : 'warning'}>
+                    {orden.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
+                  </Badge>
+                  <span className="font-mono text-[11.5px] text-gonper-muted">
+                    {orden.folio}
+                  </span>
+                </div>
+                <p className="mt-1 text-[12px] text-gonper-muted">
+                  {fecha.format(new Date(orden.createdAt))} · Se puede surtir
+                  el{' '}
+                  <span className="font-semibold text-gonper-text">
+                    {orden.porcentajeSurtible}%
+                  </span>{' '}
+                  con el stock actual
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium">
+                  <input
+                    type="checkbox"
+                    checked={seleccionada}
+                    onChange={() => onToggle(orden.ordenId)}
+                    aria-label={`Seleccionar orden ${orden.folio} para comprar su faltante`}
+                  />
+                  Elegir para comprar
+                </label>
+                <Link
+                  href={`/ordenes/${orden.ordenId}`}
+                  className="btn btn-primary shrink-0"
+                >
+                  Ir a surtir esta orden
+                  <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
+                </Link>
+              </div>
+            </div>
+
+            {orden.faltantes.length === 0 ? (
+              <p className="mt-3 border-t border-gonper-border pt-3 text-[12.5px] text-gonper-success">
+                Sin faltantes: esta orden se puede surtir completa con el
+                stock actual.
+              </p>
+            ) : (
+              <>
+                <ul className="mt-3 space-y-2 border-t border-gonper-border pt-3">
+                  {orden.faltantes.map((item) => (
+                    <li
+                      key={item.productoId}
+                      className="flex flex-col gap-1 text-[12.5px] sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="min-w-0">
+                        <span className="font-medium">{item.nombre}</span>{' '}
+                        <span className="text-gonper-muted">
+                          · Faltan {numero.format(item.faltante)}{' '}
+                          {item.unidadMedida || ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-gonper-muted">
+                        {item.proveedorSugerido
+                          ? `${item.proveedorSugerido.proveedorNombre} · ${moneda.format(item.proveedorSugerido.precioUnitario)} c/u`
+                          : 'sin precio, pedir por WhatsApp'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 border-t border-gonper-border pt-2 text-right text-[12px] text-gonper-muted">
+                  Costo estimado del faltante{' '}
+                  <span className="text-[13px] font-semibold tabular-nums text-gonper-text">
+                    {moneda.format(orden.costoEstimadoTotal)}
+                  </span>
+                  {orden.tieneSinPrecio && (
+                    <span className="block text-[11.5px]">
+                      Hay artículos sin precio registrado: el total es parcial.
+                    </span>
+                  )}
+                </p>
+              </>
+            )}
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function ComprasClient({
   faltantes,
   proveedores,
   ordenesCompra,
   requisiciones,
+  faltantesPorOrden,
+  ordenIdInicial,
 }: {
   faltantes: Faltante[]
   proveedores: Proveedor[]
   ordenesCompra: OrdenCompra[]
   requisiciones: Requisicion[]
+  faltantesPorOrden: FaltantePorOrden[]
+  ordenIdInicial?: string
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
+
+  // Fase 1 — Vista por orden: si se llega con ?orden=<id> (desde el
+  // detalle de una orden), se abre directamente en "Por orden" con
+  // esa card seleccionada.
+  const ordenInicialValida =
+    ordenIdInicial &&
+    faltantesPorOrden.some((orden) => orden.ordenId === ordenIdInicial)
+      ? ordenIdInicial
+      : undefined
+  const [vista, setVista] = useState<'general' | 'por-orden'>(
+    ordenInicialValida ? 'por-orden' : 'general',
+  )
+  const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<string[]>(
+    ordenInicialValida ? [ordenInicialValida] : [],
+  )
+
+  const toggleOrdenSeleccionada = (ordenId: string) => {
+    setErrorMsg('')
+    setOrdenesSeleccionadas((prev) => {
+      if (prev.includes(ordenId)) {
+        return prev.filter((id) => id !== ordenId)
+      }
+      if (prev.length >= 2) {
+        setErrorMsg(
+          'Solo puedes elegir hasta 2 órdenes a la vez para no comprar de más.',
+        )
+        return prev
+      }
+      return [...prev, ordenId]
+    })
+    // La selección cambia el faltante consolidado, así que se limpian
+    // los productos ya elegidos para comprar y se vuelve a elegir.
+    setItemsSeleccionados({})
+  }
+
+  // Fase 1 — El faltante consolidado se recalcula solo para las
+  // órdenes seleccionadas (máx. 2). El stock se descuenta una sola
+  // vez por producto, no una vez por orden.
+  const faltantesAMostrar: Faltante[] = (() => {
+    if (ordenesSeleccionadas.length === 0) return faltantes
+    const seleccionadas = faltantesPorOrden.filter((orden) =>
+      ordenesSeleccionadas.includes(orden.ordenId),
+    )
+    const productosMap = new Map(
+      seleccionadas
+        .flatMap((orden) => orden.demanda)
+        .map((d) => [d.productoId, d.enStock] as const),
+    )
+    const consolidado = consolidarFaltantesSeleccionados({
+      ordenes: seleccionadas.map((orden) => ({
+        items: orden.demanda.map((d) => ({
+          productoId: d.productoId,
+          cantidadSolicitada: d.pendiente,
+          cantidadSurtida: 0,
+        })),
+      })),
+      productos: new Map(
+        [...productosMap.entries()].map(([id, stockActual]) => [
+          id,
+          { id, nombre: '', sku: '', unidadMedida: null, stockActual },
+        ]),
+      ),
+    })
+    const porId = new Map(consolidado.map((f) => [f.productoId, f.faltante]))
+    return faltantes
+      .filter((f) => porId.has(f.id))
+      .map((f) => ({ ...f, faltante: porId.get(f.id) ?? f.faltante }))
+  })()
 
   const [itemsSeleccionados, setItemsSeleccionados] = useState<
     Record<string, { proveedorId: string; cantidad: number; precio: number }>
@@ -261,8 +460,8 @@ export default function ComprasClient({
   return (
     <div className="mx-auto max-w-[1180px] pb-6">
       <PageHeader
-        eyebrow={`${faltantes.length} ${
-          faltantes.length === 1 ? 'producto por reponer' : 'productos por reponer'
+        eyebrow={`${faltantesAMostrar.length} ${
+          faltantesAMostrar.length === 1 ? 'producto por reponer' : 'productos por reponer'
         }`}
         title="Compras"
       />
@@ -285,7 +484,7 @@ export default function ComprasClient({
                 : 'bg-gonper-surface-muted text-gonper-muted'
             }`}
           >
-            {faltantes.length}
+            {faltantesAMostrar.length}
           </span>
         </button>
 
@@ -397,7 +596,74 @@ export default function ComprasClient({
 
       {tab === 'sugerencias' && (
         <div key="sugerencias" className="animate-fade mt-4">
-          {faltantes.length === 0 ? (
+          {/* Fase 1 — General: faltante consolidado de todas las órdenes.
+              Por orden: una card por orden activa para elegir cuáles
+              surtir hoy (máx. 2 seleccionadas). */}
+          <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setVista('general')}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+                vista === 'general'
+                  ? 'bg-gonper-primary text-white'
+                  : 'text-gonper-muted hover:text-gonper-text'
+              }`}
+            >
+              General
+            </button>
+            <button
+              type="button"
+              onClick={() => setVista('por-orden')}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+                vista === 'por-orden'
+                  ? 'bg-gonper-primary text-white'
+                  : 'text-gonper-muted hover:text-gonper-text'
+              }`}
+            >
+              Por orden
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
+                  vista === 'por-orden'
+                    ? 'bg-white/15 text-white'
+                    : 'bg-gonper-surface-muted text-gonper-muted'
+                }`}
+              >
+                {faltantesPorOrden.length}
+              </span>
+            </button>
+          </div>
+
+          {ordenesSeleccionadas.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3.5 py-3 text-[12.5px] text-gonper-warning sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                Faltante calculado solo para{' '}
+                <span className="font-semibold">
+                  {ordenesSeleccionadas.length === 1
+                    ? '1 orden seleccionada'
+                    : '2 órdenes seleccionadas'}
+                </span>
+                . Cambia a la vista General para comprar solo eso.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrdenesSeleccionadas([])
+                  setItemsSeleccionados({})
+                }}
+                className="btn btn-quiet shrink-0"
+              >
+                Limpiar selección
+              </button>
+            </div>
+          )}
+
+          {vista === 'por-orden' ? (
+            <PorOrdenCards
+              ordenes={faltantesPorOrden}
+              seleccionadas={ordenesSeleccionadas}
+              onToggle={toggleOrdenSeleccionada}
+            />
+          ) : faltantesAMostrar.length === 0 ? (
             <div className="card">
               <EmptyState
                 icon={<CheckCircle2 className="h-6 w-6" strokeWidth={1.5} />}
@@ -408,7 +674,7 @@ export default function ComprasClient({
           ) : (
             <>
               <div className="stagger grid grid-cols-1 gap-3 md:hidden">
-                {faltantes.map((producto) => {
+                {faltantesAMostrar.map((producto) => {
                   const seleccion = itemsSeleccionados[producto.id]
                   const opciones = proveedores.filter((proveedor) =>
                     (proveedor.producto_proveedores || []).some(
@@ -525,7 +791,7 @@ export default function ComprasClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gonper-border">
-                    {faltantes.map((producto) => {
+                    {faltantesAMostrar.map((producto) => {
                       const seleccion = itemsSeleccionados[producto.id]
                       const opciones = proveedores.filter((proveedor) =>
                         (proveedor.producto_proveedores || []).some(

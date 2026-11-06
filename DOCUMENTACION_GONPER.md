@@ -303,12 +303,17 @@ CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authentic
 
 ### Surtido y compras
 - El detalle de la orden muestra si el inventario permite surtir todos o parte de los artículos.
-- Cuando hay faltantes y la orden todavía puede surtirse, el botón **Comprar faltantes a Proveedores** lleva al módulo `/compras`.
-- Compras consolida la demanda pendiente de las órdenes activas (`PENDIENTE` y `PARCIAL`), calcula faltantes contra el stock y permite seleccionar proveedores con precios relacionados.
+- Cuando hay faltantes, el botón **Ir a Compras por el faltante de esta orden** lleva a `/compras?orden=<id>`, que abre Compras en la vista "Por orden" con esa orden ya seleccionada. También aparece en órdenes PARCIALES: el faltante se calcula como lo que queda por surtir después de lo ya surtido y del stock.
+- Compras tiene dos vistas en la pestaña Sugerencias, con interruptor **General | Por orden**:
+  - **General:** faltante consolidado de todas las órdenes activas (`PENDIENTE` y `PARCIAL`), como antes.
+  - **Por orden:** una card por orden activa con cliente, folio, % que ya se puede surtir con el stock actual, lista de faltantes de esa orden, proveedor sugerido (el más barato con precio registrado en `producto_proveedores`) y costo estimado total del faltante. Si un producto no tiene precio registrado, se muestra como "sin precio, pedir por WhatsApp" y no se inventa un costo.
+- Se pueden seleccionar hasta 2 cards. Al hacerlo, el faltante consolidado de la vista General se recalcula solo para esas órdenes, descontando el stock una sola vez por producto, para no comprar de más para las demás órdenes. La selección se puede limpiar con "Limpiar selección".
+- Desde cada card, el botón **Ir a surtir esta orden** lleva al detalle de esa orden para liberarla/surtirla.
+- El surtido parcial se preserva: si piden 10 y hay 6, se surten 6 y la orden queda PARCIAL. La lógica de `surtirOrden()` no cambió en esta fase.
 - Al generar una orden de compra se registra en `ordenes_compra` y `orden_compra_items`.
 - La recepción de mercancía registra entradas y actualiza el inventario mediante las acciones del módulo de Compras.
 
-**Alcance actual:** el botón del detalle navega al módulo general de Compras. El módulo calcula faltantes consolidados; no crea automáticamente una compra exclusiva para una sola orden.
+**Alcance actual (Fase 1):** el botón del detalle ya no va al faltante general, va filtrado a esa orden. El módulo mantiene el faltante consolidado general y agrega el desglose por orden; no crea automáticamente una compra exclusiva para una sola orden, pero al seleccionar 1 o 2 órdenes el consolidado se limita a ellas antes de generar la compra.
 
 ## 4. Consideraciones de seguridad y mantenimiento
 
