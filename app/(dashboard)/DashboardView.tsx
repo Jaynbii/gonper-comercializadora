@@ -68,7 +68,7 @@ export default function DashboardView({
           </h1>
         </div>
 
-        <Link href="/ordenes/nueva" className="btn btn-primary self-start sm:self-auto">
+        <Link href="/ordenes/nueva" className="btn btn-primary w-full justify-center self-start sm:w-auto sm:self-auto">
           <Plus className="h-4 w-4" strokeWidth={2} />
           Nueva requisición
         </Link>
@@ -83,7 +83,7 @@ export default function DashboardView({
           className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
-            <p className="min-h-[2.7em] text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
+            <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
               Requisiciones activas
             </p>
             <ArrowUpRight
@@ -107,7 +107,7 @@ export default function DashboardView({
           className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
-            <p className="min-h-[2.7em] text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
+            <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
               Stock bajo mínimo
             </p>
             <ArrowUpRight

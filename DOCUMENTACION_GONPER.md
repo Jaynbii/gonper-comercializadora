@@ -331,6 +331,24 @@ CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authentic
 - **Pestaña "Órdenes de compra":** las compras se muestran en cards claras, agrupadas por requisición ("Para REQ-0003 · Aseo Urbano", con enlace "Ver requisición") y un grupo "Sin requisición" al final. Cada card muestra proveedor, folio COM destacado, fecha, estado, nº de productos, total estimado, "Para REQ-... · cliente" cuando aplica, y el botón **Recibir** bien visible (primario) cuando está Pendiente.
 - **Anti-duplicado:** antes de generar compras por requisición, el diálogo avisa si esa requisición ya tiene órdenes de compra Pendientes. Y el servidor bloquea la generación si ya existe una orden Pendiente para esa requisición, ese proveedor y los mismos artículos con las mismas cantidades (`esMismaCompra` en `utils/faltantesPorOrden.ts`, con tests): no se genera otra en silencio. Para comprar lo mismo a propósito hay que usar la vista General (sin requisición). Las 7 órdenes de compra Pendientes duplicadas que ya existen en producción (MazLimpio $29,690 x3 y Grupo Mach $180 x4) NO se borran ni se modifican con este cambio: se revisan aparte.
 
+### Revisión mobile first + correcciones (Fase 1c, después de 1c ampliada)
+
+La app es 100% mobile first: todo lo de este PR se diseña primero para 360-390px de ancho, sin scroll horizontal, con cards de 1 columna y botones a lo ancho en móvil. En la revisión se corrigió:
+- **Acciones de la card "Por requisición":** el checkbox "Elegir para comprar" y el botón "Ir a surtir esta requisición" iban en una sola fila y a 360px el botón se salía de la card (medido: llegaba a 473px en una pantalla de 390px). Ahora van apilados a lo ancho en móvil y en fila solo en escritorio. El botón "Comprar faltante de esta requisición" también es a lo ancho en móvil.
+- **Barra inferior de móvil:** la etiqueta "Requisiciones" no cabía en su celda de ~60px a 360px; en móvil se muestra "Requis." (con el nombre completo en el menú de escritorio y en el aria-label).
+- **Toggles y botones táctiles:** los interruptores Sugerencias | Órdenes de compra y General | Por requisición ahora tienen mínimo 44px de alto táctil. Los botones "Limpiar selección", "Surtir requisición" (detalle), "Nueva requisición" (Dashboard) y "Ver requisición" (grupo de compras) son a lo ancho en móvil.
+- **Dashboard:** las etiquetas de las 3 estadísticas ("Requisiciones activas", etc.) pueden partirse en varias líneas sin salirse de su celda a 360px.
+- **Diálogos:** el diálogo de compra, el de Recibir y el de confirmación de surtir usan el Modal existente (ancho `100vw - 2rem`, alto máximo 86dvh, scroll interno, botones del pie a lo ancho en móvil). Las tablas de escritorio siguen ocultas en móvil y se sustituyen por cards.
+- Verificado con Chromium headless a 390px en local (`/login`, sin scroll horizontal y sin elementos fuera de ancho) y con el CSS real compilado para la card corregida. Las pantallas con datos reales (Compras con requisiciones) no se pudieron verificar en un navegador real en local porque necesitan sesión y Supabase: queda pendiente probarlo en el preview de Vercel desde un teléfono.
+
+### Corrección: "Ver faltante" no hacía nada estando ya en Compras
+
+El botón **Ver faltante** de las cards de "Requisiciones pendientes de surtir" es ahora un botón (no un Link): cambia a la vista "Por requisición", selecciona esa requisición, actualiza la URL a `/compras?orden=<id>` y baja hasta las cards. Antes era un Link a la misma ruta con otro parámetro y el estado del cliente no se actualizaba, así que parecía no hacer nada.
+
+### Comprar+recibir: la compra también sube el stock
+
+En el diálogo **Comprar faltante de esta requisición** hay un checkbox **"Ya recibí la mercancía, subir stock"**, activado por defecto porque en la operación el proveedor entrega al momento. Si está activado, tras generar cada orden de compra se llama a `recibirMercancia` con las cantidades solicitadas (la RPC existente, transaccional): el stock sube de inmediato y la orden queda como Recibida, para poder surtir la requisición. Si recibir falla, la compra queda generada pero NO se marca como recibida y se muestra el error, para recibirla después desde la pestaña "Órdenes de compra". Si el checkbox está desactivado, la compra queda Pendiente como antes. `generarOrdenCompra` ahora devuelve el id de la orden y sus artículos (id + producto + cantidad) para poder recibirlos, y `recibirMercancia` marca la orden como RECIBIDA cuando la recepción fue completa. La lógica de construir los ítems de recepción vive en `construirItemsRecepcion` (`utils/faltantesPorOrden.ts`, con tests). `surtirOrden()` no se tocó.
+
 ### Migración de folios viejos (solo después de fusionar el PR)
 
 Archivo: `supabase/migrations/20261106000000_renombrar_folios_requisiciones_viejas.sql`. Muse no tiene acceso a la base de producción: Alex debe revisarla y correrla él mismo en el SQL Editor de Supabase, solo después de fusionar el PR.

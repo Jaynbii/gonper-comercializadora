@@ -8,6 +8,7 @@ import {
   agruparCompraPorProveedor,
   esMismaCompra,
   agruparComprasPorRequisicion,
+  construirItemsRecepcion,
 } from './faltantesPorOrden.ts'
 
 const productos = new Map([
@@ -231,5 +232,40 @@ test('agruparComprasPorRequisicion: un grupo por requisición y "Sin requisició
   assert.deepEqual(
     grupos.map((g) => g.ordenes.map((o) => o.id)),
     [['c1', 'c3'], ['c4'], ['c2', 'c5']],
+  )
+})
+
+test('construirItemsRecepcion: recibe por lo solicitado, solo artículos de la orden generada', () => {
+  const generados = [
+    { id: 'item-1', producto_id: 'a', cantidad_solicitada: 10 },
+    { id: 'item-2', producto_id: 'b', cantidad_solicitada: 5 },
+  ]
+  assert.deepEqual(
+    construirItemsRecepcion(generados, [
+      { productoId: 'a', cantidad: 10 },
+      { productoId: 'b', cantidad: 5 },
+    ]),
+    [
+      { id: 'item-1', producto_id: 'a', cantidad_recibida: 10 },
+      { id: 'item-2', producto_id: 'b', cantidad_recibida: 5 },
+    ],
+  )
+  // Sin el ítem generado no se recibe nada (no se inventa un id).
+  assert.deepEqual(
+    construirItemsRecepcion(generados, [{ productoId: 'z', cantidad: 3 }]),
+    [],
+  )
+  // Cantidad 0 o negativa no se recibe.
+  assert.deepEqual(
+    construirItemsRecepcion(generados, [
+      { productoId: 'a', cantidad: 0 },
+      { productoId: 'b', cantidad: -2 },
+    ]),
+    [],
+  )
+  // Sin ítems generados no hay nada que recibir.
+  assert.deepEqual(
+    construirItemsRecepcion([], [{ productoId: 'a', cantidad: 10 }]),
+    [],
   )
 })

@@ -156,9 +156,14 @@ export async function generarOrdenCompra(
   }))
 
   // Guarda todos los artículos de la orden de compra.
-  const { error: itemsError } = await supabase
+  // Se devuelven con su id para que el flujo comprar+recibir pueda
+  // llamar a recibirMercancia con ellos (la RPC pide el id de cada
+  // orden_compra_items). Si la devolución falla, la compra ya existe
+  // pero no se puede recibir en el mismo paso: se avisa con error.
+  const { data: itemsGuardados, error: itemsError } = await supabase
     .from('orden_compra_items')
     .insert(itemsAInsertar)
+    .select('id, producto_id, cantidad_solicitada')
 
   // Informa si ocurrió un error al guardar los artículos.
   if (itemsError) {
@@ -168,10 +173,18 @@ export async function generarOrdenCompra(
   // Actualiza la información visible de la sección de compras.
   revalidatePath('/compras')
 
-  // Devuelve el resultado de la operación y el folio generado.
+  // Devuelve el resultado de la operación, el folio generado y la
+  // orden con sus artículos (id + producto + cantidad), para
+  // comprar+recibir y para mostrar el resultado sin otra consulta.
   return {
     success: true,
-    folio
+    folio,
+    id: ordenData.id,
+    items: (itemsGuardados || []).map((item) => ({
+      id: item.id,
+      producto_id: item.producto_id,
+      cantidad_solicitada: Number(item.cantidad_solicitada) || 0,
+    })),
   }
 }
 
@@ -247,6 +260,40 @@ export async function recibirMercancia(
   // Informa cualquier error devuelto por la función SQL.
   if (error) {
     throw new Error(`Error al recibir mercancía: ${error.message}`)
+  }
+
+  // Si la recepción fue completa (todo lo solicitado ya está
+  // recibido), la orden queda como RECIBIDA. La RPC es la que sube
+  // el stock; este paso solo actualiza el estado para que la card
+  // ya no ofrezca "Recibir" y el flujo comprar+recibir deje la
+  // orden marcada como recibida. Es best-effort: si falla, la
+  // recepción (stock) ya quedó registrada y solo se registra el
+  // error, no se revierte nada.
+  try {
+    const { data: itemsOrden } = await supabase
+      .from('orden_compra_items')
+      .select('cantidad_solicitada, cantidad_recibida')
+      .eq('orden_compra_id', ordenCompraId)
+    const completa =
+      Array.isArray(itemsOrden) &&
+      itemsOrden.length > 0 &&
+      itemsOrden.every(
+        (item) =>
+          Number(item.cantidad_recibida) >=
+          Number(item.cantidad_solicitada),
+      )
+    if (completa) {
+      const { error: estadoError } = await supabase
+        .from('ordenes_compra')
+        .update({ estado: 'RECIBIDA' })
+        .eq('id', ordenCompraId)
+        .eq('estado', 'PENDIENTE')
+      if (estadoError) {
+        console.error('No se pudo marcar la orden como RECIBIDA:', estadoError)
+      }
+    }
+  } catch (e) {
+    console.error('No se pudo marcar la orden como RECIBIDA:', e)
   }
 
   // Actualiza las secciones que muestran compras, inventario y requisiciones.

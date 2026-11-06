@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -22,6 +22,7 @@ import {
   agruparCompraPorProveedor,
   agruparComprasPorRequisicion,
   consolidarFaltantesSeleccionados,
+  construirItemsRecepcion,
   type FaltantePorOrden,
 } from '@/utils/faltantesPorOrden'
 
@@ -152,10 +153,14 @@ function PorOrdenCards({
                 </p>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
-                <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium">
+              {/* Mobile first: acciones apiladas a lo ancho en móvil; en
+                  escritorio vuelven a ir en fila. Antes iban en una sola
+                  fila y a 360px el botón "Ir a surtir" se salía de la card. */}
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:items-center">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12.5px] font-medium">
                   <input
                     type="checkbox"
+                    className="h-5 w-5 shrink-0 accent-[#164e41]"
                     checked={seleccionada}
                     onChange={() => onToggle(orden.ordenId)}
                     aria-label={`Seleccionar requisición ${orden.folio} para comprar su faltante`}
@@ -164,7 +169,7 @@ function PorOrdenCards({
                 </label>
                 <Link
                   href={`/ordenes/${orden.ordenId}`}
-                  className="btn btn-primary shrink-0"
+                  className="btn btn-primary w-full justify-center sm:w-auto sm:shrink-0"
                 >
                   Ir a surtir esta requisición
                   <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
@@ -185,7 +190,7 @@ function PorOrdenCards({
                       key={item.productoId}
                       className="flex flex-col gap-1 text-[12.5px] sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <span className="min-w-0">
+                      <span className="min-w-0 break-words">
                         <span className="font-medium">{item.nombre}</span>{' '}
                         <span className="text-gonper-muted">
                           · Faltan {numero.format(item.faltante)}{' '}
@@ -220,7 +225,7 @@ function PorOrdenCards({
                     type="button"
                     onClick={() => onComprar(orden)}
                     disabled={comprandoId === orden.ordenId}
-                    className="btn btn-primary shrink-0"
+                    className="btn btn-primary w-full justify-center sm:w-auto sm:shrink-0"
                   >
                     <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
                     {comprandoId === orden.ordenId
@@ -247,9 +252,11 @@ function PorOrdenCards({
 function RequisicionesPendientesCards({
   requisiciones,
   faltantesPorOrden,
+  onVerFaltante,
 }: {
   requisiciones: Requisicion[]
   faltantesPorOrden: FaltantePorOrden[]
+  onVerFaltante: (ordenId: string) => void
 }) {
   const detallePorId = new Map(
     faltantesPorOrden.map((orden) => [orden.ordenId, orden]),
@@ -320,12 +327,18 @@ function RequisicionesPendientesCards({
                 Abrir requisición
                 <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
               </Link>
-              <Link
-                href={`/compras?orden=${requisicion.id}`}
+              {/* "Ver faltante" es un botón, no un Link: estando ya en
+                  /compras, un Link a /compras?orden=<id> no remontaba
+                  el componente y el estado quedaba en la requisición
+                  anterior (parecía no hacer nada). El botón llama a
+                  onVerFaltante, que cambia vista + selección. */}
+              <button
+                type="button"
+                onClick={() => onVerFaltante(requisicion.id)}
                 className="btn btn-quiet w-full justify-center"
               >
                 Ver faltante
-              </Link>
+              </button>
             </div>
           </article>
         )
@@ -366,6 +379,24 @@ export default function ComprasClient({
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<string[]>(
     ordenInicialValida ? [ordenInicialValida] : [],
   )
+
+  // Corrección "Ver faltante": ComprasClient se monta una sola vez y
+  // el useState inicial no se actualiza cuando cambia ?orden=<id>
+  // estando ya en /compras (el Link de "Ver faltante" navega a la
+  // misma ruta con otro parámetro, así que el estado quedaba en la
+  // requisición anterior y parecía que el botón no hacía nada). La
+  // sincronización se hace en el evento verFaltante (abajo), no en
+  // un efecto: llamar a setState dentro de un efecto es un
+  // anti-patrón de React y lo rechaza el lint. Este efecto solo
+  // hace scroll hasta las cards cuando cambia la requisición.
+  const porRequisicionRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!ordenInicialValida) return
+    porRequisicionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [ordenInicialValida])
 
   const toggleOrdenSeleccionada = (ordenId: string) => {
     setErrorMsg('')
@@ -426,6 +457,25 @@ export default function ComprasClient({
   const [generandoProveedor, setGenerandoProveedor] = useState<string | null>(
     null,
   )
+
+  // "Ver faltante" estando ya en /compras: cambia a la vista
+  // "Por requisición", selecciona esa requisición y baja hasta sus
+  // cards. También actualiza la URL (?orden=<id>) para que se pueda
+  // compartir y el botón Atrás funcione. Es un evento, no un efecto.
+  const verFaltante = (ordenId: string) => {
+    setErrorMsg('')
+    setTab('sugerencias')
+    setVista('por-orden')
+    setOrdenesSeleccionadas([ordenId])
+    setItemsSeleccionados({})
+    router.push(`/compras?orden=${ordenId}`)
+    window.setTimeout(() => {
+      porRequisicionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 60)
+  }
 
   const [ordenActiva, setOrdenActiva] = useState<OrdenCompra | null>(null)
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<
@@ -544,6 +594,14 @@ export default function ComprasClient({
   >(null)
   const [errorCompra, setErrorCompra] = useState('')
 
+  // Comprar+recibir: en la operación de Alex el proveedor entrega al
+  // momento, así que por defecto la compra también se recibe y el
+  // stock sube de inmediato (si no, Confirmar solo genera órdenes
+  // Pendientes y al ir a surtir sigue diciendo que no hay stock).
+  // Desactivado, queda como antes: Pendiente, para recibir después
+  // desde la pestaña "Órdenes de compra".
+  const [recibirAlComprar, setRecibirAlComprar] = useState(true)
+
   const compraRequisicion = requisicionAComprar
     ? agruparCompraPorProveedor(requisicionAComprar.faltantes)
     : null
@@ -580,6 +638,7 @@ export default function ComprasClient({
     setMensaje('')
 
     const generadas: string[] = []
+    const recibidas: string[] = []
     const errores: string[] = []
     for (const grupo of grupos) {
       try {
@@ -594,6 +653,40 @@ export default function ComprasClient({
           requisicionAComprar.ordenId,
         )
         generadas.push(`${grupo.proveedorNombre} (${res.folio})`)
+
+        // Comprar+recibir: si el checkbox está activado, la mercancía
+        // se recibe en el mismo paso con la RPC existente
+        // (transaccional, sube el stock). Si recibir falla, la compra
+        // YA quedó generada pero NO se marca como recibida: se avisa
+        // con error y queda Pendiente para recibirla después desde la
+        // pestaña "Órdenes de compra".
+        if (recibirAlComprar) {
+          const itemsRecepcion = construirItemsRecepcion(
+            res.items ?? [],
+            grupo.items.map((item) => ({
+              productoId: item.productoId,
+              cantidad: item.cantidad,
+            })),
+          )
+          if (itemsRecepcion.length === 0) {
+            errores.push(
+              `${grupo.proveedorNombre}: la compra se generó (${res.folio}) pero no se pudo recibir porque la orden no devolvió sus artículos. Recíbela desde la pestaña "Órdenes de compra".`,
+            )
+          } else {
+            try {
+              await recibirMercancia(res.id, itemsRecepcion)
+              recibidas.push(`${grupo.proveedorNombre} (${res.folio})`)
+            } catch (errorRecibir) {
+              const detalle =
+                errorRecibir instanceof Error
+                  ? errorRecibir.message
+                  : 'No se pudo recibir la mercancía.'
+              errores.push(
+                `${grupo.proveedorNombre}: la compra se generó (${res.folio}) pero NO se recibió ni subió el stock: ${detalle} Recíbela desde la pestaña "Órdenes de compra".`,
+              )
+            }
+          }
+        }
       } catch (error) {
         const detalle =
           error instanceof Error
@@ -614,8 +707,12 @@ export default function ComprasClient({
               .map((item) => item.nombre)
               .join(', ')}): pídelos por WhatsApp.`
           : ''
+      const avisoRecibido =
+        recibidas.length > 0
+          ? ` Mercancía recibida y stock actualizado (${recibidas.join(', ')}): ya puedes surtir esta requisición.`
+          : ''
       setMensaje(
-        `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoSinPrecio}`,
+        `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoRecibido}${avisoSinPrecio}`,
       )
       router.refresh()
     }
@@ -698,7 +795,7 @@ export default function ComprasClient({
         <button
           type="button"
           onClick={() => setTab('sugerencias')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+          className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'sugerencias'
               ? 'bg-gonper-primary text-white'
               : 'text-gonper-muted hover:text-gonper-text'
@@ -719,7 +816,7 @@ export default function ComprasClient({
         <button
           type="button"
           onClick={() => setTab('ordenes')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+          className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'ordenes'
               ? 'bg-gonper-primary text-white'
               : 'text-gonper-muted hover:text-gonper-text'
@@ -791,12 +888,13 @@ export default function ComprasClient({
           <RequisicionesPendientesCards
             requisiciones={requisiciones}
             faltantesPorOrden={faltantesPorOrden}
+            onVerFaltante={verFaltante}
           />
         )}
       </section>
 
       {tab === 'sugerencias' && (
-        <div key="sugerencias" className="animate-fade mt-4">
+        <div key="sugerencias" ref={porRequisicionRef} className="animate-fade mt-4 scroll-mt-4">
           {/* Fase 1 — General: faltante consolidado de todas las requisiciones.
               Por requisición: una card por requisición activa para elegir cuáles
               surtir hoy (máx. 2 seleccionadas). */}
@@ -804,7 +902,7 @@ export default function ComprasClient({
             <button
               type="button"
               onClick={() => setVista('general')}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+              className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
                 vista === 'general'
                   ? 'bg-gonper-primary text-white'
                   : 'text-gonper-muted hover:text-gonper-text'
@@ -815,7 +913,7 @@ export default function ComprasClient({
             <button
               type="button"
               onClick={() => setVista('por-orden')}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-[4px] px-3.5 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none ${
+              className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
                 vista === 'por-orden'
                   ? 'bg-gonper-primary text-white'
                   : 'text-gonper-muted hover:text-gonper-text'
@@ -851,7 +949,7 @@ export default function ComprasClient({
                   setOrdenesSeleccionadas([])
                   setItemsSeleccionados({})
                 }}
-                className="btn btn-quiet shrink-0"
+                className="btn btn-quiet w-full shrink-0 justify-center sm:w-auto"
               >
                 Limpiar selección
               </button>
@@ -896,12 +994,14 @@ export default function ComprasClient({
                             {producto.sku}
                           </p>
                         </div>
-                        <Badge tono="warning">
-                          Faltan {numero.format(producto.faltante)}
-                          {producto.unidad_medida
-                            ? ` ${producto.unidad_medida}`
-                            : ''}
-                        </Badge>
+                        <span className="shrink-0">
+                          <Badge tono="warning">
+                            Faltan {numero.format(producto.faltante)}
+                            {producto.unidad_medida
+                              ? ` ${producto.unidad_medida}`
+                              : ''}
+                          </Badge>
+                        </span>
                       </div>
 
                       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1153,7 +1253,7 @@ export default function ComprasClient({
                         </p>
                         <Link
                           href={`/ordenes/${grupo.requisicion.id}`}
-                          className="btn btn-quiet shrink-0"
+                          className="btn btn-quiet w-full justify-center sm:w-auto sm:shrink-0"
                         >
                           Ver requisición
                           <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
@@ -1300,6 +1400,31 @@ export default function ComprasClient({
               artículos que tienen precio registrado.
             </p>
 
+            {/* Comprar+recibir: activado por defecto porque en la
+                operación el proveedor entrega al momento. Si se
+                desactiva, la compra queda Pendiente para recibirla
+                después desde la pestaña "Órdenes de compra". */}
+            <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-2.5 rounded-[6px] border border-gonper-border bg-gonper-bg/50 px-3 py-2.5">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 shrink-0 accent-[#164e41]"
+                checked={recibirAlComprar}
+                disabled={comprandoRequisicionId !== null}
+                onChange={(e) => setRecibirAlComprar(e.target.checked)}
+                aria-label="Ya recibí la mercancía, subir stock"
+              />
+              <span className="text-[12.5px]">
+                <span className="font-semibold">
+                  Ya recibí la mercancía, subir stock
+                </span>
+                <span className="block text-gonper-muted">
+                  Al confirmar, además de generar la compra se registra la
+                  recepción y el stock sube de inmediato, para poder surtir
+                  esta requisición.
+                </span>
+              </span>
+            </label>
+
             {comprasPendientesRequisicion.length > 0 && (
               <div className="mt-4 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3 py-2 text-[12.5px] text-gonper-warning">
                 <p className="font-semibold">
@@ -1346,7 +1471,7 @@ export default function ComprasClient({
                             key={item.productoId}
                             className="flex items-center justify-between gap-3 text-[12.5px]"
                           >
-                            <span className="min-w-0">
+                            <span className="min-w-0 break-words">
                               <span className="font-medium">{item.nombre}</span>{' '}
                               <span className="text-gonper-muted">
                                 · {numero.format(item.cantidad)} ×{' '}

@@ -32,7 +32,7 @@ export default function FaltantesStat({
         className="group w-full px-4 py-4 text-left transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="min-h-[2.7em] text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
+          <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
             Faltantes
           </p>
           <ArrowUpRight

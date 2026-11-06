@@ -244,6 +244,46 @@ export function esMismaCompra(
   return clave(a) === clave(b)
 }
 
+// Comprar+recibir (revisión mobile first): construye los ítems para
+// `recibirMercancia` a partir de una orden de compra recién generada
+// y de los artículos que se pidieron en ella. La recepción es por lo
+// solicitado: cantidad_recibida = cantidad pedida. Solo entran los
+// artículos que existen en la orden generada y con cantidad > 0; si
+// la orden no trae sus ítems (p. ej. la columna aún no existe en
+// producción), no se recibe nada y el llamador debe avisar.
+export type ItemOrdenCompraGenerada = {
+  id: string
+  producto_id: string
+  cantidad_solicitada: number
+}
+
+export type ItemRecepcionCompra = {
+  id: string
+  producto_id: string
+  cantidad_recibida: number
+}
+
+export function construirItemsRecepcion(
+  itemsGenerados: ItemOrdenCompraGenerada[],
+  itemsPedidos: { productoId: string; cantidad: number }[],
+): ItemRecepcionCompra[] {
+  const porProducto = new Map(
+    itemsGenerados.map((item) => [item.producto_id, item]),
+  )
+  const resultado: ItemRecepcionCompra[] = []
+  for (const pedido of itemsPedidos) {
+    const generado = porProducto.get(pedido.productoId)
+    const cantidad = Number(pedido.cantidad) || 0
+    if (!generado || cantidad <= 0) continue
+    resultado.push({
+      id: generado.id,
+      producto_id: generado.producto_id,
+      cantidad_recibida: cantidad,
+    })
+  }
+  return resultado
+}
+
 // Agrupado de órdenes de compra por requisición (Fase 1c ampliada):
 // un grupo por requisición vinculada, en orden de primera aparición,
 // y al final el grupo "Sin requisición" (null) para las compras viejas

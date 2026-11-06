@@ -43,7 +43,7 @@ export default function BotonSurtir({
           setErrorMsg('')
           setConfirmOpen(true)
         }}
-        className={`btn ${
+        className={`btn w-full sm:w-auto ${
           esParcial
             ? 'border border-gonper-warning-border bg-gonper-warning-bg text-gonper-warning hover:bg-gonper-warning-bg/70'
             : 'btn-primary'
