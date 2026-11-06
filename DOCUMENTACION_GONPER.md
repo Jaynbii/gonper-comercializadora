@@ -15,7 +15,7 @@ El sistema automatiza la recepción de requisiciones (fotos/PDFs enviados por Wh
 
 ### Módulos Implementados:
 1.  **Dashboard:** Tarjetas de métricas, acceso rápido a subir requisición y proyección de demanda (faltantes vs stock).
-2.  **Inventario:** CRUD de productos, asignación de categorías, control de stock y precios.
+2.  **Inventario:** CRUD de productos, asignación de categorías y control de stock. Sin precio: el precio lo manda el proveedor (ver Proveedores) y en Inventario solo se duplicaba, así que ya no se muestra en la tabla ni en las cards ni en el formulario de crear/editar, y `crearProducto`/`actualizarProducto` ya no lo escriben. La columna `productos.precio_unitario` sigue en la base de datos (no se borra). Inventario tiene filtros por categoría y por stock, que se combinan con la búsqueda.
 3.  **Requisiciones:** Subida de PDFs/Fotos, procesamiento OCR, cotejo inteligente, estados (BORRADOR, PENDIENTE, PARCIAL, ENTREGADA, CANCELADA), visor de PDF seguro y surtido automático (descuento de stock).
 4.  **Clientes:** Directorio de mercados y dependencias de gobierno.
 5.  **Proveedores:** Directorio con catálogo de precios por producto (Relación N:M).
@@ -375,6 +375,11 @@ Corrección:
 - **Una PARCIAL ya se puede volver a surtir desde su detalle:** antes el botón solo aparecía para PENDIENTE, así que REQ-0003, que Alex puso en PARCIAL en Supabase, ya no se podía completar cuando llegara stock para los 3 artículos. Ahora el botón aparece también en PARCIAL (como "Surtir parcialmente" si no hay stock total), y solo se oculta si no hay stock para nada.
 - **Qué hacer con REQ-0003:** en su estado actual solo se podrá surtir de nuevo cuando los 3 artículos pendientes tengan stock (recibiendo mercancía). Alex ya la puso en PARCIAL, así que cuando llegue ese stock, el botón de surtir aparecerá en su detalle y solo surtirá lo pendiente.
 - Tests nuevos en `utils/surtir.test.mts`: `surtirConCliente` con el estado confirmado de REQ-0003 (devuelve el error real, no lanza, no escribe nada), con stock (devuelve PARCIAL), con RPC existente (no usa el respaldo), con error real de la RPC (lo devuelve sin reintentar), con todo ya surtido, y detección de RPC inexistente con el error PGRST202 exacto.
+
+### Inventario: sin precio y filtros por categoría y stock
+
+- **Sin precio en Inventario:** el precio lo manda el proveedor y en Inventario solo se duplicaba. Se quitó la columna Precio de la tabla de escritorio, el precio de la card móvil y el campo Precio del modal de crear/editar. `crearProducto`/`actualizarProducto` ya no leen ni escriben `precio_unitario`. La columna `productos.precio_unitario` sigue en la base de datos (no hay migración de borrado). Los precios de Proveedores (`producto_proveedores`) y de Compras NO se tocan: esos sí son la fuente del precio.
+- **Filtros:** Inventario solo tenía buscador por nombre/SKU. Ahora tiene dos filas de botones que se combinan con la búsqueda y filtran tanto la tabla como las cards móviles: por categoría ("Todas" + un botón por categoría) y por stock (Todos / Bajo stock / Sin stock / Disponible). Definiciones, mismas que la etiqueta de stock que ya existía (`estadoStock`): Sin stock = stock <= 0; Bajo stock = 0 < stock <= stock mínimo (en el mínimo ya es bajo); Disponible = stock > stock mínimo. El encabezado muestra "N de M productos" cuando hay algún filtro o búsqueda activa. Si no hay productos con el filtro, se muestra "No hay productos con este filtro". Lógica pura en `utils/inventario.ts` (`filtrarInventario`, `clasificarStock`), con tests en `utils/inventario.test.mts`. Botones táctiles de 44px, en móvil con scroll horizontal si no caben, sin desbordar a 360-390px.
 
 ### Migración de folios viejos (solo después de fusionar el PR)
 

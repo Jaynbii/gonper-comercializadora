@@ -5,13 +5,17 @@ import { Package, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { crearProducto, actualizarProducto, eliminarProducto } from './actions'
 import { UNIDADES_COMUNES } from '@/utils/unidades'
+import { filtrarInventario, type FiltroStock } from '@/utils/inventario'
 
 type Producto = {
   id: string
   sku: string
   nombre: string
   unidad_medida: string | null
-  precio_unitario: number | string
+  // Sin precio_unitario a propósito: el precio lo manda el proveedor
+  // (producto_proveedores) y en Inventario solo se duplicaba.
+  // La columna sigue en la base de datos; aquí ya no se muestra
+  // ni se edita.
   stock_actual: number | string
   stock_minimo: number | string
   categoria_id: string | null
@@ -22,16 +26,12 @@ const numero = new Intl.NumberFormat('es-MX', {
   maximumFractionDigits: 2,
 })
 
-const moneda = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'MXN',
-})
-
-const normalizar = (valor: string) =>
-  valor
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
+const FILTROS_STOCK: { id: FiltroStock; etiqueta: string }[] = [
+  { id: 'todos', etiqueta: 'Todos' },
+  { id: 'bajo', etiqueta: 'Bajo stock' },
+  { id: 'sin', etiqueta: 'Sin stock' },
+  { id: 'disponible', etiqueta: 'Disponible' },
+]
 
 function nombreCategoria(producto: Producto) {
   const categoria = Array.isArray(producto.categorias)
@@ -72,6 +72,8 @@ export default function InventoryClient({
   categorias: { id: string; nombre: string }[]
 }) {
   const [busqueda, setBusqueda] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>('todas')
+  const [filtroStock, setFiltroStock] = useState<FiltroStock>('todos')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [productoAEditar, setProductoAEditar] = useState<Producto | null>(null)
   const [productoAEliminar, setProductoAEliminar] = useState<Producto | null>(
@@ -82,13 +84,14 @@ export default function InventoryClient({
   const [errorMsg, setErrorMsg] = useState('')
   const [errorEliminar, setErrorEliminar] = useState('')
 
-  const termino = normalizar(busqueda.trim())
+  const hayFiltrosActivos =
+    busqueda.trim() !== '' || categoriaFiltro !== 'todas' || filtroStock !== 'todos'
 
-  const productosFiltrados = productosIniciales.filter(
-    (producto) =>
-      normalizar(producto.nombre).includes(termino) ||
-      normalizar(producto.sku).includes(termino),
-  )
+  const productosFiltrados = filtrarInventario(productosIniciales, {
+    termino: busqueda,
+    categoriaId: categoriaFiltro,
+    filtroStock,
+  })
 
   const abrirCrear = () => {
     setProductoAEditar(null)
@@ -159,9 +162,18 @@ export default function InventoryClient({
       <header className="flex items-end justify-between gap-4">
         <div>
           <p className="text-[11.5px] font-medium text-gonper-muted">
-            {productosIniciales.length}{' '}
-            {productosIniciales.length === 1 ? 'producto' : 'productos'} en
-            catálogo
+            {hayFiltrosActivos ? (
+              <>
+                {productosFiltrados.length} de {productosIniciales.length}{' '}
+                {productosIniciales.length === 1 ? 'producto' : 'productos'}
+              </>
+            ) : (
+              <>
+                {productosIniciales.length}{' '}
+                {productosIniciales.length === 1 ? 'producto' : 'productos'}{' '}
+                en catálogo
+              </>
+            )}
           </p>
           <h1 className="mt-2 text-[26px] font-semibold leading-none tracking-[-0.03em] sm:text-[30px]">
             Inventario
@@ -192,6 +204,71 @@ export default function InventoryClient({
           onChange={(e) => setBusqueda(e.target.value)}
           aria-label="Buscar producto"
         />
+      </div>
+
+      {/* Filtros por stock y por categoría (se combinan con la búsqueda) */}
+      <div className="mt-4 space-y-2">
+        <div
+          className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="group"
+          aria-label="Filtrar por stock"
+        >
+          {FILTROS_STOCK.map((filtro) => {
+            const activo = filtroStock === filtro.id
+            return (
+              <button
+                key={filtro.id}
+                type="button"
+                onClick={() => setFiltroStock(filtro.id)}
+                aria-pressed={activo}
+                className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
+                  activo
+                    ? 'border-gonper-primary bg-gonper-primary text-white'
+                    : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
+                }`}
+              >
+                {filtro.etiqueta}
+              </button>
+            )
+          })}
+        </div>
+
+        <div
+          className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="group"
+          aria-label="Filtrar por categoría"
+        >
+          <button
+            type="button"
+            onClick={() => setCategoriaFiltro('todas')}
+            aria-pressed={categoriaFiltro === 'todas'}
+            className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
+              categoriaFiltro === 'todas'
+                ? 'border-gonper-primary bg-gonper-primary text-white'
+                : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
+            }`}
+          >
+            Todas
+          </button>
+          {categorias.map((categoria) => {
+            const activo = categoriaFiltro === categoria.id
+            return (
+              <button
+                key={categoria.id}
+                type="button"
+                onClick={() => setCategoriaFiltro(categoria.id)}
+                aria-pressed={activo}
+                className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
+                  activo
+                    ? 'border-gonper-primary bg-gonper-primary text-white'
+                    : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
+                }`}
+              >
+                {categoria.nombre}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Vista móvil */}
@@ -253,15 +330,6 @@ export default function InventoryClient({
                     )}
                   </p>
                 </div>
-
-                <div className="text-right">
-                  <p className="text-[10.5px] font-medium uppercase tracking-widest text-gonper-muted">
-                    Precio
-                  </p>
-                  <p className="mt-1 text-[14px] font-semibold tabular-nums text-gonper-text">
-                    {moneda.format(Number(producto.precio_unitario))}
-                  </p>
-                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-2">
@@ -281,8 +349,8 @@ export default function InventoryClient({
             <Package className="mx-auto h-6 w-6 text-gonper-muted" strokeWidth={1.5} />
             <p className="mt-3 text-[14px] font-medium">Sin resultados</p>
             <p className="mt-1 text-[12.5px] text-gonper-muted">
-              {busqueda
-                ? 'Prueba con otro nombre o SKU.'
+              {hayFiltrosActivos
+                ? 'No hay productos con este filtro.'
                 : 'Agrega tu primer producto al catálogo.'}
             </p>
           </div>
@@ -298,7 +366,6 @@ export default function InventoryClient({
               <th className="px-5 py-3 font-medium">Producto</th>
               <th className="px-5 py-3 font-medium">Unidad</th>
               <th className="px-5 py-3 font-medium">Categoría</th>
-              <th className="px-5 py-3 text-right font-medium">Precio</th>
               <th className="px-5 py-3 text-center font-medium">Stock</th>
               <th className="px-5 py-3 text-center font-medium">Acciones</th>
             </tr>
@@ -327,9 +394,6 @@ export default function InventoryClient({
                   </td>
                   <td className="px-5 py-3 text-[12.5px] text-gonper-muted">
                     {nombreCategoria(producto)}
-                  </td>
-                  <td className="px-5 py-3 text-right text-[13px] font-semibold tabular-nums text-gonper-text">
-                    {moneda.format(Number(producto.precio_unitario))}
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex flex-col items-center gap-1">
@@ -376,8 +440,8 @@ export default function InventoryClient({
           <div className="border-t border-gonper-border px-6 py-12 text-center">
             <p className="text-[14px] font-medium">Sin resultados</p>
             <p className="mt-1 text-[12.5px] text-gonper-muted">
-              {busqueda
-                ? 'Prueba con otro nombre o SKU.'
+              {hayFiltrosActivos
+                ? 'No hay productos con este filtro.'
                 : 'Agrega tu primer producto al catálogo.'}
             </p>
           </div>
@@ -470,21 +534,6 @@ export default function InventoryClient({
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="field-label" htmlFor="precio_unitario">
-                Precio unitario
-              </label>
-              <input
-                id="precio_unitario"
-                name="precio_unitario"
-                type="number"
-                step="0.01"
-                required
-                defaultValue={productoAEditar?.precio_unitario ?? '0'}
-                className="field"
-              />
-            </div>
-
-            <div>
               <label className="field-label" htmlFor="stock_minimo">
                 Stock mínimo
               </label>
@@ -546,6 +595,11 @@ export default function InventoryClient({
               {errorMsg}
             </p>
           )}
+
+          <p className="mt-4 text-[12px] text-gonper-muted">
+            El precio no se gestiona aquí: lo define el proveedor, en
+            Proveedores.
+          </p>
         </form>
       </Modal>
 

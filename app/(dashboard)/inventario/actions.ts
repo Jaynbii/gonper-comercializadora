@@ -12,7 +12,9 @@ export async function crearProducto(formData: FormData) {
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
-  const precio_unitario = parseFloat(formData.get('precio_unitario') as string) || 0
+  // Sin precio_unitario a propósito: el precio lo manda el proveedor
+  // (producto_proveedores) y en Inventario solo se duplicaba. La
+  // columna sigue en la base de datos; aquí ya no se escribe.
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
@@ -24,7 +26,6 @@ export async function crearProducto(formData: FormData) {
     nombre, 
     categoria_id: categoria_id || null, 
     unidad_medida, 
-    precio_unitario, 
     stock_actual, 
     stock_minimo
   })
@@ -45,7 +46,7 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
-  const precio_unitario = parseFloat(formData.get('precio_unitario') as string) || 0
+  // Sin precio_unitario: ver crearProducto.
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
@@ -54,7 +55,6 @@ export async function actualizarProducto(id: string, formData: FormData) {
     nombre, 
     categoria_id: categoria_id || null, 
     unidad_medida, 
-    precio_unitario, 
     stock_actual, 
     stock_minimo
   }).eq('id', id)
