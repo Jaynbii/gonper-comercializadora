@@ -2,7 +2,7 @@
 'use server'
 
 // Importa el cliente de Supabase para ejecutar operaciones desde el servidor.
-import { createClient } from '@/utils/supabase/server'
+import { createClient, esUsuarioAdmin } from '@/utils/supabase/server'
 
 // Permite actualizar las rutas afectadas después de modificar información.
 import { revalidatePath } from 'next/cache'
@@ -291,3 +291,81 @@ export async function recibirMercancia(
 
   return { success: true, data }
 }
+
+// Elimina una orden de compra (solo admin, solo si está PENDIENTE).
+//
+// Como `surtirOrden()` y `recibirMercancia()`: DEVUELVE el
+// resultado, nunca lanza. En producción Next.js redacta el mensaje
+// real de un error lanzado por una Server Action ("Minified React
+// error #441"); los valores devueltos llegan tal cual al teléfono.
+//
+// Solo PENDIENTE: una orden RECIBIDA ya subió el stock al recibirla
+// y borrarla no lo bajaría, así que quedaría el inventario inflado
+// sin rastro de la compra. Los artículos se borran en cascada
+// (`orden_compra_items.orden_compra_id` REFERENCES ... ON DELETE
+// CASCADE). La RLS "Admin modifica ordenes_compra" FOR ALL USING
+// (public.is_admin()) es la que manda al final: un no-admin no
+// puede borrar aunque llegara aquí.
+export async function eliminarOrdenCompra(
+  ordenCompraId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: 'No autorizado' }
+  }
+
+  if (!ordenCompraId) {
+    return { success: false, error: 'Datos de compra inválidos' }
+  }
+
+  if (!(await esUsuarioAdmin(supabase))) {
+    return {
+      success: false,
+      error: 'Solo un administrador puede eliminar órdenes de compra.',
+    }
+  }
+
+  const { data: orden, error: lecturaError } = await supabase
+    .from('ordenes_compra')
+    .select('id, folio, estado')
+    .eq('id', ordenCompraId)
+    .single()
+
+  if (lecturaError || !orden) {
+    return {
+      success: false,
+      error: 'No se encontró la orden de compra.',
+    }
+  }
+
+  if (orden.estado !== 'PENDIENTE') {
+    return {
+      success: false,
+      error: `La orden ${orden.folio} ya está recibida y no se puede eliminar: el stock ya subió al recibirla y borrarla no lo bajaría.`,
+    }
+  }
+
+  const { error: borradoError } = await supabase
+    .from('ordenes_compra')
+    .delete()
+    .eq('id', ordenCompraId)
+    .eq('estado', 'PENDIENTE')
+
+  if (borradoError) {
+    return {
+      success: false,
+      error: `No se pudo eliminar la orden de compra: ${borradoError.message}`,
+    }
+  }
+
+  revalidatePath('/compras')
+
+  return { success: true }
+}
+

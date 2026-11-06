@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createClient, esUsuarioAdmin } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
 import {
   calcularFaltantePorOrden,
@@ -68,6 +68,12 @@ export default async function ComprasPage({
   const ordenIdInicial = Array.isArray(params.orden)
     ? params.orden[0]
     : params.orden
+
+  // ¿El usuario actual es admin? Solo el admin ve la opción de
+  // eliminar órdenes de compra (anidada en el menú "..." de la
+  // card). El servidor vuelve a comprobarlo en eliminarOrdenCompra;
+  // esto solo decide si se muestra la opción.
+  const esAdmin = await esUsuarioAdmin(supabase)
 
   // 1. Calcular faltantes (Requisiciones activas vs Stock)
   const { data: ordenesActivas } = await supabase
@@ -235,6 +241,7 @@ export default async function ComprasPage({
       requisiciones={normalizarRequisiciones(requisicionesCrudas)}
       faltantesPorOrden={faltantesPorOrden}
       ordenIdInicial={ordenIdInicial}
+      esAdmin={esAdmin}
     />
   )
 }

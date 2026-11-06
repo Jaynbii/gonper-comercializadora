@@ -6,23 +6,27 @@ import Link from 'next/link'
 import {
   AlertCircle,
   CheckCircle2,
+  MoreHorizontal,
   Package,
   ReceiptText,
   ShoppingCart,
+  Trash2,
   Truck,
   X,
   ArrowUpRight,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import EmptyState from '@/components/ui/EmptyState'
 import PageHeader from '@/components/ui/PageHeader'
 import { Badge } from '@/components/EstadoBadge'
-import { generarOrdenCompra, recibirMercancia } from './actions'
+import { eliminarOrdenCompra, generarOrdenCompra, recibirMercancia } from './actions'
 import {
   agruparCompraPorProveedor,
   agruparComprasPorRequisicion,
   consolidarFaltantesSeleccionados,
   construirItemsRecepcion,
+  puedeEliminarOrdenCompra,
   type FaltantePorOrden,
 } from '@/utils/faltantesPorOrden'
 
@@ -347,6 +351,80 @@ function RequisicionesPendientesCards({
   )
 }
 
+// Menú "..." de una orden de compra (reutilizable): solo aparece
+// para el admin y solo si la orden está Pendiente. Eliminar va
+// ANIDADO aquí, no como botón visible en la card: la acción
+// principal visible sigue siendo Recibir. El desplegable se abre
+// a la derecha (right-0) para no salirse de la pantalla en móvil,
+// cierra al pulsar fuera, al pulsar Escape o al elegir una opción.
+function MenuOrdenCompra({
+  orden,
+  onEliminar,
+}: {
+  orden: OrdenCompra
+  onEliminar: (orden: OrdenCompra) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!abierto) return
+
+    const alSeñalar = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setAbierto(false)
+      }
+    }
+
+    const alTeclear = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAbierto(false)
+    }
+
+    document.addEventListener('pointerdown', alSeñalar)
+    document.addEventListener('keydown', alTeclear)
+
+    return () => {
+      document.removeEventListener('pointerdown', alSeñalar)
+      document.removeEventListener('keydown', alTeclear)
+    }
+  }, [abierto])
+
+  return (
+    <div ref={menuRef} className="relative ml-auto shrink-0">
+      <button
+        type="button"
+        onClick={() => setAbierto((prev) => !prev)}
+        aria-haspopup="menu"
+        aria-expanded={abierto}
+        aria-label={`Opciones de la orden de compra ${orden.folio}`}
+        className="btn-icon h-11 w-11"
+      >
+        <MoreHorizontal className="h-5 w-5" strokeWidth={1.75} />
+      </button>
+
+      {abierto && (
+        <div
+          role="menu"
+          className="animate-menu absolute right-0 top-full z-50 mt-1 w-56 rounded-[8px] border border-gonper-border bg-gonper-surface p-1 shadow-[0_18px_44px_-14px_rgba(27,26,24,0.24)]"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setAbierto(false)
+              onEliminar(orden)
+            }}
+            className="flex min-h-11 w-full items-center gap-2.5 rounded-[6px] px-2.5 py-2 text-left text-[13px] text-gonper-danger transition-colors duration-[120ms] hover:bg-gonper-danger-bg/60"
+          >
+            <Trash2 className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+            Eliminar orden de compra
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ComprasClient({
   faltantes,
   proveedores,
@@ -354,6 +432,7 @@ export default function ComprasClient({
   requisiciones,
   faltantesPorOrden,
   ordenIdInicial,
+  esAdmin = false,
 }: {
   faltantes: Faltante[]
   proveedores: Proveedor[]
@@ -361,6 +440,7 @@ export default function ComprasClient({
   requisiciones: Requisicion[]
   faltantesPorOrden: FaltantePorOrden[]
   ordenIdInicial?: string
+  esAdmin?: boolean
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
@@ -483,6 +563,37 @@ export default function ComprasClient({
   >({})
   const [isReceiving, setIsReceiving] = useState(false)
   const [errorRecepcion, setErrorRecepcion] = useState('')
+
+  // Eliminar una orden de compra (solo admin, solo Pendiente, desde
+  // el menú "..." de la card). El ConfirmDialog pide confirmación;
+  // la acción del servidor devuelve el resultado, no lanza, para
+  // que el mensaje real llegue al teléfono.
+  const [ordenAEliminar, setOrdenAEliminar] = useState<OrdenCompra | null>(
+    null,
+  )
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+
+  const handleEliminarOrdenCompra = async () => {
+    if (!ordenAEliminar || isDeleting) return
+
+    setIsDeleting(true)
+    setErrorEliminar('')
+
+    const res = await eliminarOrdenCompra(ordenAEliminar.id)
+
+    if (!res.success) {
+      setErrorEliminar(res.error)
+      setIsDeleting(false)
+      return
+    }
+
+    const folio = ordenAEliminar.folio
+    setOrdenAEliminar(null)
+    setIsDeleting(false)
+    setMensaje(`Orden de compra ${folio} eliminada.`)
+    router.refresh()
+  }
 
   const [mensaje, setMensaje] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -1294,6 +1405,21 @@ export default function ComprasClient({
                           <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
                             {orden.folio}
                           </span>
+                          {/* Eliminar va anidado en el menú "...", no como
+                              botón visible: la acción principal de la
+                              card sigue siendo Recibir. Solo admin y
+                              solo si la orden está Pendiente; una
+                              Recibida no se puede borrar porque el
+                              stock ya subió. */}
+                          {puedeEliminarOrdenCompra(orden.estado, esAdmin) && (
+                            <MenuOrdenCompra
+                              orden={orden}
+                              onEliminar={(ordenElegida) => {
+                                setErrorEliminar('')
+                                setOrdenAEliminar(ordenElegida)
+                              }}
+                            />
+                          )}
                         </div>
                         <p className="mt-1 text-[12px] text-gonper-muted">
                           {fecha.format(new Date(orden.created_at))} ·{' '}
@@ -1633,6 +1759,33 @@ export default function ComprasClient({
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!ordenAEliminar}
+        title="Eliminar orden de compra"
+        description="Esta acción no se puede deshacer."
+        pending={isDeleting}
+        error={errorEliminar}
+        onConfirm={handleEliminarOrdenCompra}
+        onClose={() => {
+          if (isDeleting) return
+          setOrdenAEliminar(null)
+          setErrorEliminar('')
+        }}
+      >
+        {ordenAEliminar && (
+          <>
+            ¿Eliminar la orden de compra{' '}
+            <strong className="font-semibold">{ordenAEliminar.folio}</strong>{' '}
+            de{' '}
+            <strong className="font-semibold">
+              {ordenAEliminar.proveedores?.nombre || 'Proveedor'}
+            </strong>
+            ? Sus artículos se eliminan con ella. Esta acción no se puede
+            deshacer.
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   )
 }

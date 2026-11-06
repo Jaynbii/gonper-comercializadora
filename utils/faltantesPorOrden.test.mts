@@ -9,6 +9,7 @@ import {
   esMismaCompra,
   agruparComprasPorRequisicion,
   construirItemsRecepcion,
+  puedeEliminarOrdenCompra,
 } from './faltantesPorOrden.ts'
 
 const productos = new Map([
@@ -268,4 +269,16 @@ test('construirItemsRecepcion: recibe por lo solicitado, solo artículos de la o
     construirItemsRecepcion([], [{ productoId: 'a', cantidad: 10 }]),
     [],
   )
+})
+
+test('puedeEliminarOrdenCompra: solo admin y solo si está Pendiente', () => {
+  // Admin + Pendiente: es el único caso que muestra la opción.
+  assert.equal(puedeEliminarOrdenCompra('PENDIENTE', true), true)
+  // Una Recibida no se borra: el stock ya subió y borrarla no lo bajaría.
+  assert.equal(puedeEliminarOrdenCompra('RECIBIDA', true), false)
+  // Un no-admin no la ve, aunque esté Pendiente (el servidor vuelve a comprobarlo).
+  assert.equal(puedeEliminarOrdenCompra('PENDIENTE', false), false)
+  assert.equal(puedeEliminarOrdenCompra('RECIBIDA', false), false)
+  // Otros estados tampoco se pueden eliminar.
+  assert.equal(puedeEliminarOrdenCompra('CANCELADA', true), false)
 })

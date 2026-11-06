@@ -299,6 +299,23 @@ export type GrupoComprasPorRequisicion<T> = {
   ordenes: T[]
 }
 
+/**
+ * ¿Se puede eliminar una orden de compra desde la app?
+ *
+ * Solo el admin y solo si la orden está PENDIENTE. Una orden
+ * RECIBIDA no se puede borrar: el stock ya subió al recibirla y
+ * borrar la orden no lo bajaría, así que quedaría el inventario
+ * inflado sin rastro de la compra. La comprobación del servidor
+ * (`eliminarOrdenCompra`) vuelve a verificar estado y admin; esto
+ * solo decide si se muestra la opción en la UI.
+ */
+export function puedeEliminarOrdenCompra(
+  estado: string,
+  esAdmin: boolean,
+): boolean {
+  return esAdmin && estado === 'PENDIENTE'
+}
+
 export function agruparComprasPorRequisicion<
   T extends { requisicion?: RequisicionVinculada | null },
 >(ordenes: T[]): GrupoComprasPorRequisicion<T>[] {
