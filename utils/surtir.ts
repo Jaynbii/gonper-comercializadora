@@ -47,11 +47,33 @@
 // El mensaje de "sin stock" ahora además dice cuántos artículos ya
 // están surtidos y cuáles son los que no tienen stock.
 //
+// Tercera vuelta (nov 2026): el surtido fallaba al registrar el
+// movimiento: "new row for relation movimientos_inventario violates
+// check constraint movimientos_inventario_tipo_movimiento_check".
+// El código insertaba tipo_movimiento 'SALIDA_ORDEN', pero en la base
+// real SELECT DISTINCT tipo_movimiento solo devuelve 'ENTRADA' (los
+// movimientos de recibir mercancía, que sí funcionan). La base real
+// usa valores cortos: ENTRADA / SALIDA, no los de la documentación
+// inicial (ENTRADA_COMPRA / SALIDA_ORDEN / AJUSTE_MANUAL). Por eso
+// el movimiento de surtido es 'SALIDA' (ver TIPO_MOVIMIENTO_SALIDA
+// abajo y la migración
+// supabase/migrations/20261106030000_ampliar_tipos_movimiento_inventario.sql,
+// que amplía el CHECK para aceptar también los valores largos).
+//
 // Reglas de negocio (no cambiar sin acordarlo con Alex):
 // - El surtido PARCIAL se preserva: piden 10, hay 6, se surten 6 y la
 //   requisición queda PARCIAL. Transaccional NO significa
 //   todo-o-nada en negocio, sino que los writes de UN surtido van
 //   juntos o no van.
+
+// Valores reales de movimientos_inventario.tipo_movimiento en la
+// base de producción (confirmado en Supabase 2026-11-06: el único
+// valor que existe hoy es 'ENTRADA'). El surtido registra 'SALIDA';
+// recibir mercancía registra 'ENTRADA'. NO usar 'SALIDA_ORDEN' ni
+// 'ENTRADA_COMPRA': la base real los rechaza con el CHECK
+// movimientos_inventario_tipo_movimiento_check.
+export const TIPO_MOVIMIENTO_SALIDA = 'SALIDA' as const
+export const TIPO_MOVIMIENTO_ENTRADA = 'ENTRADA' as const
 
 export type SurtirItemEntrada = {
   id: string
@@ -416,7 +438,7 @@ export async function surtirConCliente(
           .from('movimientos_inventario')
           .insert({
             producto_id: item.productoId,
-            tipo_movimiento: 'SALIDA_ORDEN',
+            tipo_movimiento: TIPO_MOVIMIENTO_SALIDA,
             cantidad: item.cantidadASurtir,
             motivo: 'Surtido de requisición',
             orden_id: ordenId,

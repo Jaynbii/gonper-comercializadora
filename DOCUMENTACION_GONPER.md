@@ -156,7 +156,18 @@ CREATE TABLE public.orden_compra_items (
 CREATE TABLE public.movimientos_inventario (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     producto_id UUID REFERENCES public.productos(id) ON DELETE CASCADE,
-    tipo_movimiento TEXT NOT NULL CHECK (tipo_movimiento IN ('ENTRADA_COMPRA', 'SALIDA_ORDEN', 'AJUSTE_MANUAL')),
+    tipo_movimiento TEXT NOT NULL CHECK (tipo_movimiento IN ('ENTRADA', 'SALIDA', 'AJUSTE', 'ENTRADA_COMPRA', 'SALIDA_ORDEN', 'AJUSTE_MANUAL')),
+    -- Valores reales en la base de producción (confirmado en Supabase
+    -- 2026-11-06: SELECT DISTINCT tipo_movimiento solo devuelve
+    -- 'ENTRADA'): la base usa valores cortos ENTRADA / SALIDA.
+    -- Recibir mercancía registra 'ENTRADA' y surtir registra 'SALIDA'.
+    -- El CHECK de este SQL inicial decía solo los valores largos
+    -- ('ENTRADA_COMPRA', 'SALIDA_ORDEN', 'AJUSTE_MANUAL') y por eso
+    -- el surtido fallaba con "violates check constraint
+    -- movimientos_inventario_tipo_movimiento_check". La migración
+    -- supabase/migrations/20261106030000_ampliar_tipos_movimiento_inventario.sql
+    -- amplía el CHECK para aceptar los seis valores. Este SQL inicial
+    -- NO debe correrse en producción (tiene DROP TABLE CASCADE).
     cantidad NUMERIC(10,2) NOT NULL,
     motivo TEXT,
     orden_id UUID REFERENCES public.ordenes(id) ON DELETE SET NULL,
@@ -375,6 +386,18 @@ Corrección:
 - **Una PARCIAL ya se puede volver a surtir desde su detalle:** antes el botón solo aparecía para PENDIENTE, así que REQ-0003, que Alex puso en PARCIAL en Supabase, ya no se podía completar cuando llegara stock para los 3 artículos. Ahora el botón aparece también en PARCIAL (como "Surtir parcialmente" si no hay stock total), y solo se oculta si no hay stock para nada.
 - **Qué hacer con REQ-0003:** en su estado actual solo se podrá surtir de nuevo cuando los 3 artículos pendientes tengan stock (recibiendo mercancía). Alex ya la puso en PARCIAL, así que cuando llegue ese stock, el botón de surtir aparecerá en su detalle y solo surtirá lo pendiente.
 - Tests nuevos en `utils/surtir.test.mts`: `surtirConCliente` con el estado confirmado de REQ-0003 (devuelve el error real, no lanza, no escribe nada), con stock (devuelve PARCIAL), con RPC existente (no usa el respaldo), con error real de la RPC (lo devuelve sin reintentar), con todo ya surtido, y detección de RPC inexistente con el error PGRST202 exacto.
+
+### Tercera vuelta: "Error al registrar el movimiento" — el CHECK de tipo_movimiento rechazaba SALIDA_ORDEN
+
+El surtido seguía fallando en el preview, pero ahora el diálogo ya mostraba el mensaje real (gracias a que el error se devuelve, no se lanza): "Error al registrar el movimiento: new row for relation \"movimientos_inventario\" violates check constraint \"movimientos_inventario_tipo_movimiento_check\"".
+
+Causa exacta, confirmada por Alex en Supabase: `SELECT DISTINCT tipo_movimiento FROM movimientos_inventario` devuelve SOLO `'ENTRADA'` (los movimientos de recibir mercancía, que sí funcionan). La base real usa valores cortos `ENTRADA` / `SALIDA`, no los de la documentación inicial (`ENTRADA_COMPRA`, `SALIDA_ORDEN`, `AJUSTE_MANUAL`). El código insertaba `'SALIDA_ORDEN'` y el CHECK lo rechazaba. La definición exacta del CHECK en la base real sigue sin confirmarse con `pg_get_constraintdef`, pero el rechazo de `'SALIDA_ORDEN'` y la existencia de `'ENTRADA'` lo demuestran. Ningún otro lugar del código lee o filtra movimientos por `'SALIDA_ORDEN'` o `'ENTRADA_COMPRA'` (verificado por búsqueda en todo el repo): solo el insert del surtido y la RPC.
+
+Corrección:
+- **El surtido registra `'SALIDA'`** (contraparte de `'ENTRADA'`), en la vía de respaldo (`utils/surtir.ts`, constantes `TIPO_MOVIMIENTO_SALIDA` / `TIPO_MOVIMIENTO_ENTRADA`) y en la RPC `surtir_orden` (migración `20261106020000_surtir_orden_rpc.sql`, que aún no se ha corrido en producción, así que editarla es seguro). Este cambio funciona en el preview **sin correr ninguna migración nueva**, porque `'SALIDA'` es el valor que la base ya debería aceptar por simetría con `'ENTRADA'`.
+- **Migración nueva `supabase/migrations/20261106030000_ampliar_tipos_movimiento_inventario.sql`** (para correr en Supabase solo después de fusionar el PR): sustituye el CHECK por uno que acepta los seis valores (`ENTRADA`, `SALIDA`, `AJUSTE`, `ENTRADA_COMPRA`, `SALIDA_ORDEN`, `AJUSTE_MANUAL`), para que ni el código viejo ni el nuevo fallen. Es idempotente (`DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT`). Si `'SALIDA'` no estuviera permitido, el surtido seguirá fallando con el mismo error de CHECK y habrá que correr esta migración o corregir el CHECK con los valores exactos de `pg_get_constraintdef`.
+- **Ojo con la requisición de la captura:** el intento fallido pudo haber descontado stock y marcado artículos como surtidos antes de fallar el movimiento (la vía de respaldo escribe en secuencia: stock, artículo, movimiento), dejando la requisición sin marcar como surtida. Hay que revisar esa requisición en Supabase antes de reintentarlo, como ya pasó con REQ-0003.
+- Tests nuevos en `utils/surtir.test.mts`: el movimiento de surtido se inserta con `tipo_movimiento: 'SALIDA'` (y no `'SALIDA_ORDEN'`), y las constantes valen `'SALIDA'` / `'ENTRADA'`.
 
 ### Inventario: sin precio y filtros por categoría y stock
 

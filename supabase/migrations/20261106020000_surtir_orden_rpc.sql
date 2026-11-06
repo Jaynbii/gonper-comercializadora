@@ -20,10 +20,18 @@
 --     PARCIAL. Volver a surtir una PARCIAL solo surte lo que falta.
 --   - Descuenta el stock, actualiza cantidad_surtida (SUMANDO lo ya
 --     surtido, no sobrescribiéndolo) y estado_item, registra el
---     movimiento SALIDA_ORDEN solo si se surtió algo, y marca la
+--     movimiento SALIDA solo si se surtió algo, y marca la
 --     requisición ENTREGADA si se cubrió todo lo pendiente o PARCIAL
 --     si no. Si no se puede surtir nada, lanza excepción y no escribe
 --     nada.
+--   - El movimiento es 'SALIDA', no 'SALIDA_ORDEN': en la base real
+--     SELECT DISTINCT tipo_movimiento solo devuelve 'ENTRADA' (los
+--     movimientos de recibir, que sí funcionan); la base usa valores
+--     cortos ENTRADA / SALIDA y el CHECK rechazaba 'SALIDA_ORDEN'
+--     ("violates check constraint
+--     movimientos_inventario_tipo_movimiento_check"). Ver la
+--     migración 20261106030000, que amplía el CHECK para aceptar
+--     también los valores largos por compatibilidad.
 --   - Devuelve 'ENTREGADA' o 'PARCIAL'.
 --
 -- DEFENSAS DE ESQUEMA
@@ -155,7 +163,7 @@ BEGIN
     INSERT INTO public.movimientos_inventario
       (producto_id, tipo_movimiento, cantidad, motivo, orden_id, usuario_id)
     VALUES
-      (r.producto_id, 'SALIDA_ORDEN', v_a_surtir, 'Surtido de requisición', p_orden_id, auth.uid());
+      (r.producto_id, 'SALIDA', v_a_surtir, 'Surtido de requisición', p_orden_id, auth.uid());
   END LOOP;
 
   IF NOT v_hay_items THEN

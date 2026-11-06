@@ -6,6 +6,8 @@ import {
   esErrorFuncionInexistente,
   mensajeErrorSurtir,
   surtirConCliente,
+  TIPO_MOVIMIENTO_SALIDA,
+  TIPO_MOVIMIENTO_ENTRADA,
 } from './surtir.ts'
 
 // Datos que imitan REQ-0003 (Aseo Urbano): 150/150, 100/100, 19.5 con
@@ -267,6 +269,32 @@ test('surtirConCliente con RPC inexistente y stock disponible surte por el respa
   assert.ok(cliente.escrituras.some((w) => w.startsWith('update productos')))
   assert.ok(cliente.escrituras.some((w) => w.startsWith('insert movimientos_inventario')))
   assert.ok(cliente.escrituras.some((w) => w.includes('"estado":"PARCIAL"')))
+})
+
+test('el movimiento de surtido se registra con tipo_movimiento SALIDA, no SALIDA_ORDEN', async () => {
+  // Tercera vuelta del #441 (nov 2026): la base real rechazaba
+  // 'SALIDA_ORDEN' con el CHECK
+  // movimientos_inventario_tipo_movimiento_check; en la base solo
+  // existe 'ENTRADA' (recibir), así que el surtido usa 'SALIDA'.
+  assert.equal(TIPO_MOVIMIENTO_SALIDA, 'SALIDA')
+  assert.equal(TIPO_MOVIMIENTO_ENTRADA, 'ENTRADA')
+  const cliente = clienteMock({
+    rpcError: errorRpcInexistente,
+    items: [
+      { id: 'a', producto_id: 'p1', cantidad_solicitada: 10, cantidad_surtida: 0, productos: { nombre: 'Papel', stock_actual: 10 } },
+    ],
+  })
+  const resultado = await surtirConCliente(cliente, 'orden-1', 'usuario-1')
+  assert.deepEqual(resultado, { success: true, estado: 'ENTREGADA' })
+  const insertsMovimiento = cliente.escrituras.filter((w) =>
+    w.startsWith('insert movimientos_inventario'),
+  )
+  assert.equal(insertsMovimiento.length, 1)
+  const valores = JSON.parse(
+    insertsMovimiento[0].slice('insert movimientos_inventario '.length),
+  ) as { tipo_movimiento?: string }
+  assert.equal(valores.tipo_movimiento, 'SALIDA')
+  assert.notEqual(valores.tipo_movimiento, 'SALIDA_ORDEN')
 })
 
 test('surtirConCliente con la RPC existente no usa el respaldo', async () => {
