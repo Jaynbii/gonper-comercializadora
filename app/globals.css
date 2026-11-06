@@ -2,30 +2,37 @@
 @import "tailwindcss";
 
 /*
- * Papel y tinta
- * Base cálida de papel, una sola tinta de marca (verde petróleo) y reglas
- * finas. Los estados usan tintes apagados para no competir con el contenido.
+ * Marfil y teal (propuesta "vivo", paleta del reel de Sergio Rovira)
+ * Fondo Warm Ivory #FFFBEB, tarjetas blancas, Teal #0F766E SOLO como
+ * acento (botones, enlaces, estados activos, detalles) y Orange #F97316
+ * solo para lo urgente o lo que falta. Sobrio, para usuarios de 38+:
+ * sin degradados brillantes, buen contraste, texto legible.
  */
 @theme {
-  --color-gonper-bg: #f6f4ef;
+  --color-gonper-bg: #fffbeb;
   --color-gonper-surface: #ffffff;
-  --color-gonper-surface-muted: #f0ede6;
-  --color-gonper-hover: #f3f0e8;
-  --color-gonper-border: #e3ded3;
-  --color-gonper-text: #1b1a18;
-  --color-gonper-muted: #5c5850;
-  --color-gonper-primary: #164e41;
-  --color-gonper-primary-hover: #0f3b31;
-  --color-gonper-success: #2c6b4f;
-  --color-gonper-warning: #8a5a12;
+  --color-gonper-surface-muted: #faf3dd;
+  --color-gonper-hover: #f7eed3;
+  --color-gonper-border: #e7dfc8;
+  --color-gonper-text: #1c1917;
+  --color-gonper-muted: #57534e;
+  --color-gonper-primary: #0f766e;
+  --color-gonper-primary-hover: #0b5e57;
+  --color-gonper-success: #0f766e;
+  --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 
-  --color-gonper-success-bg: #e8f0ea;
-  --color-gonper-success-border: #cfe0d4;
-  --color-gonper-warning-bg: #f6eedc;
-  --color-gonper-warning-border: #e7d6b4;
+  --color-gonper-success-bg: #e6f4f1;
+  --color-gonper-success-border: #bfe0da;
+  --color-gonper-warning-bg: #ffedd5;
+  --color-gonper-warning-border: #fdba74;
   --color-gonper-danger-bg: #f7e8e4;
   --color-gonper-danger-border: #e9cfc7;
+
+  /* Profundidad sobria: 3 niveles de elevación, sombras suaves. */
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.05), 0 6px 20px -8px rgb(28 25 23 / 0.12);
+  --shadow-raise: 0 2px 4px rgb(28 25 23 / 0.06), 0 16px 36px -12px rgb(28 25 23 / 0.18);
+  --shadow-pop: 0 24px 64px -16px rgb(28 25 23 / 0.28), 0 2px 6px rgb(28 25 23 / 0.06);
 }
 
 @theme inline {
@@ -82,7 +89,7 @@
 
 @layer components {
   .card {
-    @apply rounded-[6px] border border-gonper-border bg-gonper-surface;
+    @apply rounded-[10px] border border-gonper-border bg-gonper-surface shadow-card;
   }
 
   .eyebrow {
@@ -90,11 +97,11 @@
   }
 
   .btn {
-    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[6px] px-4 text-[13px] font-medium transition-colors duration-[120ms] ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
+    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] font-medium transition-[color,background-color,border-color,transform,box-shadow] duration-[120ms] ease-out active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
   }
 
   .btn-primary {
-    @apply bg-gonper-primary text-white hover:bg-gonper-primary-hover;
+    @apply bg-gonper-primary text-white shadow-card hover:bg-gonper-primary-hover;
   }
 
   .btn-quiet {
@@ -102,7 +109,7 @@
   }
 
   .btn-icon {
-    @apply grid h-10 w-10 place-items-center rounded-[6px] text-gonper-muted transition-colors duration-[120ms] ease-out hover:bg-gonper-surface-muted hover:text-gonper-text sm:h-8 sm:w-8;
+    @apply grid h-10 w-10 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-[120ms] ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-95 sm:h-8 sm:w-8;
   }
 
   .badge {
@@ -120,11 +127,127 @@
   }
 
   .field {
-    @apply h-11 w-full rounded-[6px] border border-gonper-border bg-gonper-surface px-3 text-[14px] text-gonper-text transition-colors duration-[120ms] placeholder:text-gonper-muted/70 hover:border-gonper-muted/45 focus:border-gonper-primary focus:outline-none focus:ring-2 focus:ring-gonper-primary/15 sm:h-10;
+    @apply h-11 w-full rounded-[10px] border border-gonper-border bg-gonper-surface px-3 text-[14px] text-gonper-text transition-[border-color,box-shadow,background-size] duration-[120ms] placeholder:text-gonper-muted/70 hover:border-gonper-muted/45 focus:border-gonper-primary focus:outline-none focus:ring-2 focus:ring-gonper-primary/15 sm:h-10;
   }
 
   .field-label {
     @apply mb-1.5 block text-[12.5px] font-medium text-gonper-text;
+  }
+
+  /*
+   * Búsqueda con línea que crece al enfocar (reel "Search" de
+   * ui_motion_prompts). Solo CSS sobre el input: no cambia el marcado.
+   * La línea también se queda visible mientras haya texto escrito.
+   */
+  input[type="search"].field {
+    background-image: linear-gradient(var(--color-gonper-primary), var(--color-gonper-primary));
+    background-size: 0% 2px;
+    background-repeat: no-repeat;
+    background-position: left bottom;
+  }
+
+  input[type="search"].field:focus,
+  input[type="search"].field:not(:placeholder-shown) {
+    background-size: 100% 2px;
+  }
+
+  /*
+   * Checkbox animado: la palomita se dibuja al marcar (reel "Checkbox"
+   * de ui_motion_prompts). Uso: input nativo con clase "peer sr-only"
+   * seguido de un <span class="check-box" aria-hidden> con un SVG de
+   * palomita dentro. El input real sigue siendo el que manda (onChange,
+   * disabled, aria-label intactos); el span es solo visual.
+   */
+  .check-box {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 6px;
+    border: 1.5px solid var(--color-gonper-border);
+    background-color: var(--color-gonper-surface);
+    transition:
+      background-color var(--dur-2) var(--ease-out-quint),
+      border-color var(--dur-2) var(--ease-out-quint),
+      transform var(--dur-1) ease-out;
+  }
+
+  .check-box svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .check-box svg path {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    transition: stroke-dashoffset var(--dur-3) var(--ease-out-quint) 40ms;
+  }
+
+  .peer:checked + .check-box {
+    background-color: var(--color-gonper-primary);
+    border-color: var(--color-gonper-primary);
+  }
+
+  .peer:checked + .check-box svg path {
+    stroke-dashoffset: 0;
+  }
+
+  .peer:active + .check-box {
+    transform: scale(0.92);
+  }
+
+  .peer:focus-visible + .check-box {
+    outline: 2px solid var(--color-gonper-primary);
+    outline-offset: 2px;
+  }
+
+  .peer:disabled + .check-box {
+    opacity: 0.5;
+  }
+
+  /*
+   * Etiqueta flotante (reel "Text Field" de ui_motion_prompts).
+   * Utilidad para formularios nuevos: el campo lleva placeholder=" " y
+   * la etiqueta va DESPUÉS del input dentro de .float-field. No se
+   * retrofiteó en los formularios existentes porque sus placeholders
+   * llevan ejemplos útiles ("Mercado Municipal", "CAJA, LITRO, KILO").
+   */
+  .float-field {
+    position: relative;
+  }
+
+  .float-field .field {
+    height: 3.25rem;
+    padding-top: 1.05rem;
+    padding-bottom: 0.3rem;
+  }
+
+  .float-field label {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0 0.25rem;
+    border-radius: 4px;
+    background-color: var(--color-gonper-surface);
+    color: var(--color-gonper-muted);
+    font-size: 14px;
+    pointer-events: none;
+    transition: all var(--dur-2) var(--ease-out-quint);
+  }
+
+  .float-field .field:focus + label,
+  .float-field .field:not(:placeholder-shown) + label {
+    top: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-gonper-primary);
   }
 }
 
@@ -215,13 +338,11 @@ dialog.modal-panel {
   margin: auto;
   padding: 0;
   border: 1px solid var(--color-gonper-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background-color: var(--color-gonper-surface);
   color: inherit;
   overflow: hidden;
-  box-shadow:
-    0 24px 64px -16px rgb(27 26 24 / 0.28),
-    0 2px 6px rgb(27 26 24 / 0.06);
+  box-shadow: var(--shadow-pop);
   opacity: 0;
   transform: translateY(10px) scale(0.985);
   transition:
@@ -263,7 +384,7 @@ dialog.sheet-panel {
   color: inherit;
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom);
-  box-shadow: 0 -12px 40px -12px rgb(27 26 24 / 0.24);
+  box-shadow: var(--shadow-raise);
   transform: translateY(100%);
   transition:
     transform var(--dur-3) var(--ease-out-quint),
