@@ -216,7 +216,7 @@ BEGIN
     CASE WHEN v_total_surtido = v_total_pendiente THEN 'ENTREGADA' ELSE 'PARCIAL' END;
 
   UPDATE public.ordenes
-  SET estado = v_estado_final
+  SET estado = v_estado_final::estado_orden
   WHERE id = p_orden_id;
 
   RETURN v_estado_final;
