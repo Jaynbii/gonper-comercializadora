@@ -52,17 +52,23 @@ export async function subirYProcesarPDF(formData: FormData) {
     // 5. Crear la requisición en la base de datos guardando SOLO LA RUTA (pdf_path)
     let folio = generarFolioRequisicion(consecutivo)
     let insertado = false
+    let ordenId: string | null = null
     let dbError: { code?: string; message: string } | null = null
     for (let intento = 0; intento < 5 && !insertado; intento++) {
-      const { error } = await supabase.from('ordenes').insert({
-        folio,
-        cliente_id,
-        pdf_path: nombreArchivo, // 👈 Aquí se guarda la ruta del archivo
-        estado: 'BORRADOR',
-        created_by: user.id,
-      })
+      const { data, error } = await supabase
+        .from('ordenes')
+        .insert({
+          folio,
+          cliente_id,
+          pdf_path: nombreArchivo, // 👈 Aquí se guarda la ruta del archivo
+          estado: 'BORRADOR',
+          created_by: user.id,
+        })
+        .select('id')
+        .single()
       if (!error) {
         insertado = true
+        ordenId = data?.id ?? null
         break
       }
       // 23505 = folio duplicado (único): probar el siguiente número.
@@ -83,9 +89,11 @@ export async function subirYProcesarPDF(formData: FormData) {
       }
     }
 
-    // 6. Refrescar la lista de requisiciones para que aparezca la nueva
+    // 6. Refrescar la lista de requisiciones para que aparezca la nueva.
+    // Se devuelve id y folio para que la UI pueda guiar el siguiente
+    // paso: la lista muestra un banner y resalta la requisición nueva.
     revalidatePath('/ordenes')
-    return { success: true }
+    return { success: true, ordenId, folio }
 
   } catch (err: unknown) {
     console.error('Error inesperado:', err)

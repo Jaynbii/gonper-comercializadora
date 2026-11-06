@@ -452,7 +452,11 @@ export default function ProcesarPdfButton({
     try {
       await guardarItemsEnOrden(ordenId, itemsParaGuardar)
       setItemsDetectados(null)
-      router.refresh()
+      // No dejar al usuario en la lista sin saber qué sigue: llevarlo
+      // al detalle de la requisición, donde ve el cotejo y puede
+      // surtir o ir a Compras por lo que falta. El detalle mismo,
+      // con los artículos ya listados, es la confirmación.
+      router.push(`/ordenes/${ordenId}`)
     } catch (error) {
       setErrorRevision(mensajeDeError(error))
     } finally {

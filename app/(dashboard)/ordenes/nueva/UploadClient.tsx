@@ -74,6 +74,10 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
     if (result?.error) {
       setErrorMsg(result.error)
       setIsUploading(false)
+    } else if (result && 'ordenId' in result && result.ordenId) {
+      // Guiar el siguiente paso: la lista muestra un banner y resalta
+      // la requisición recién creada para pulsar "Leer archivo".
+      router.push(`/ordenes?nueva=${result.ordenId}`)
     } else {
       router.push('/ordenes')
     }

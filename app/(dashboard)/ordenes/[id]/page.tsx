@@ -207,8 +207,14 @@ export default async function OrdenDetallePage({
               Esta orden todavía no tiene artículos
             </p>
             <p className="mt-1 text-[12px] text-gonper-muted">
-              Procesa el PDF desde la lista de requisiciones para capturarlos.
+              Lee el archivo para capturar sus artículos.
             </p>
+            <Link
+              href="/ordenes"
+              className="mt-3 inline-flex min-h-11 items-center text-[13px] font-medium text-gonper-primary hover:underline"
+            >
+              Leer el archivo
+            </Link>
           </div>
         ) : (
           <>
