@@ -189,11 +189,49 @@ export default async function ComprasPage({
     // Las más antiguas primero: son las que Alex y su jefe priorizan cada mañana.
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
+  // 5. Vínculo compra -> requisición (Fase 1c ampliada). La columna
+  // requisition_id solo existe después de correr la migración
+  // 20261106010000_add_requisition_id_to_ordenes_compra.sql: si la
+  // consulta falla (columna aún no existe), la página sigue cargando
+  // y las compras se muestran como "Sin requisición".
+  const vinculos = new Map<string, string>()
+  const { data: links, error: linksError } = await supabase
+    .from('ordenes_compra')
+    .select('id, requisition_id')
+  if (!linksError && links) {
+    for (const link of links as unknown as {
+      id: string
+      requisition_id: string | null
+    }[]) {
+      if (link.requisition_id) vinculos.set(link.id, link.requisition_id)
+    }
+  }
+  const infoRequisicion = new Map<
+    string,
+    { folio: string; clienteNombre: string }
+  >()
+  if (vinculos.size > 0) {
+    const { data: reqsVinculadas } = await supabase
+      .from('ordenes')
+      .select('id, folio, clientes (nombre)')
+      .in('id', [...new Set(vinculos.values())])
+    for (const req of (reqsVinculadas as unknown as {
+      id: string
+      folio: string
+      clientes: Relacion<{ nombre: string }>
+    }[] | null) || []) {
+      infoRequisicion.set(req.id, {
+        folio: req.folio,
+        clienteNombre: nombreCliente(req.clientes),
+      })
+    }
+  }
+
   return (
     <ComprasClient
       faltantes={faltantes}
       proveedores={proveedores || []}
-      ordenesCompra={normalizarOrdenes(ordenesCompra)}
+      ordenesCompra={normalizarOrdenes(ordenesCompra, vinculos, infoRequisicion)}
       requisiciones={normalizarRequisiciones(requisicionesCrudas)}
       faltantesPorOrden={faltantesPorOrden}
       ordenIdInicial={ordenIdInicial}
@@ -203,19 +241,38 @@ export default async function ComprasPage({
 
 // Supabase entrega las relaciones como arreglos cuando no hay tipos
 // generados. La interfaz del cliente usa el primer elemento.
-function normalizarOrdenes(ordenes: OrdenCompraCruda[] | null) {
-  return (ordenes || []).map((orden) => ({
-    ...orden,
-    proveedores: Array.isArray(orden.proveedores)
-      ? orden.proveedores[0] ?? null
-      : orden.proveedores,
-    orden_compra_items: (orden.orden_compra_items || []).map((item) => ({
-      ...item,
-      productos: Array.isArray(item.productos)
-        ? item.productos[0] ?? null
-        : item.productos,
-    })),
-  }))
+function normalizarOrdenes(
+  ordenes: OrdenCompraCruda[] | null,
+  vinculos: Map<string, string>,
+  infoRequisicion: Map<string, { folio: string; clienteNombre: string }>,
+) {
+  return (ordenes || []).map((orden) => {
+    const requisicionId = vinculos.get(orden.id)
+    const info = requisicionId
+      ? infoRequisicion.get(requisicionId)
+      : undefined
+    return {
+      ...orden,
+      // Para qué requisición es esta compra (null = vieja o general).
+      requisicion:
+        requisicionId && info
+          ? {
+              id: requisicionId,
+              folio: info.folio,
+              clienteNombre: info.clienteNombre,
+            }
+          : null,
+      proveedores: Array.isArray(orden.proveedores)
+        ? orden.proveedores[0] ?? null
+        : orden.proveedores,
+      orden_compra_items: (orden.orden_compra_items || []).map((item) => ({
+        ...item,
+        productos: Array.isArray(item.productos)
+          ? item.productos[0] ?? null
+          : item.productos,
+      })),
+    }
+  })
 }
 function normalizarRequisiciones(ordenes: RequisicionActiva[] | null) {
   return (ordenes || []).map((orden) => ({

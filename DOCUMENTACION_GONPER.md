@@ -138,6 +138,7 @@ CREATE TABLE public.ordenes_compra (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     folio TEXT UNIQUE NOT NULL,
     proveedor_id UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
+    requisition_id UUID REFERENCES public.ordenes(id) ON DELETE SET NULL,
     estado TEXT DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'ENVIADA', 'RECIBIDA', 'CANCELADA')),
     total_estimado NUMERIC(10,2) DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -323,6 +324,12 @@ CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authentic
 ### Fase 1c: requisiciones pendientes en cards
 
 - En Compras, la sección **Requisiciones pendientes de surtir** ya no es una lista de filas horizontales: es una cuadrícula de cards (1 columna en móvil, 2 en tablet, 3 en escritorio), con el mismo estilo que las cards de "Por requisición". Cada card muestra cliente, folio destacado, fecha, estado (Pendiente/Parcial), % que ya se puede surtir con el stock actual, nº de artículos con faltante y costo estimado del faltante (datos reutilizados de `faltantesPorOrden`, sin consultas nuevas). Cada card tiene **Abrir requisición** (al detalle) y **Ver faltante** (abre la vista "Por requisición" filtrada a esa requisición, `/compras?orden=<id>`). El contador y el estado vacío cuando no hay requisiciones se mantienen.
+
+### Fase 1c ampliada: cada orden de compra vinculada a su requisición
+
+- **Vínculo:** `ordenes_compra.requisition_id` (UUID, nullable, `REFERENCES ordenes(id) ON DELETE SET NULL`). Lo añade la migración `supabase/migrations/20261106010000_add_requisition_id_to_ordenes_compra.sql`, que se corre en el SQL Editor de Supabase solo después de fusionar el PR (idempotente, con índice). Las compras viejas y las generadas desde la vista General quedan con NULL y se muestran como "Sin requisición". `generarOrdenCompra` acepta un `requisitionId` opcional y lo guarda; el flujo "Comprar faltante de esta requisición" lo pasa. Si la app se despliega antes de correr la migración, Compras sigue cargando y las compras se generan sin vínculo.
+- **Pestaña "Órdenes de compra":** las compras se muestran en cards claras, agrupadas por requisición ("Para REQ-0003 · Aseo Urbano", con enlace "Ver requisición") y un grupo "Sin requisición" al final. Cada card muestra proveedor, folio COM destacado, fecha, estado, nº de productos, total estimado, "Para REQ-... · cliente" cuando aplica, y el botón **Recibir** bien visible (primario) cuando está Pendiente.
+- **Anti-duplicado:** antes de generar compras por requisición, el diálogo avisa si esa requisición ya tiene órdenes de compra Pendientes. Y el servidor bloquea la generación si ya existe una orden Pendiente para esa requisición, ese proveedor y los mismos artículos con las mismas cantidades (`esMismaCompra` en `utils/faltantesPorOrden.ts`, con tests): no se genera otra en silencio. Para comprar lo mismo a propósito hay que usar la vista General (sin requisición). Las 7 órdenes de compra Pendientes duplicadas que ya existen en producción (MazLimpio $29,690 x3 y Grupo Mach $180 x4) NO se borran ni se modifican con este cambio: se revisan aparte.
 
 ### Migración de folios viejos (solo después de fusionar el PR)
 

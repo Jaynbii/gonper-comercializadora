@@ -20,6 +20,7 @@ import { Badge } from '@/components/EstadoBadge'
 import { generarOrdenCompra, recibirMercancia } from './actions'
 import {
   agruparCompraPorProveedor,
+  agruparComprasPorRequisicion,
   consolidarFaltantesSeleccionados,
   type FaltantePorOrden,
 } from '@/utils/faltantesPorOrden'
@@ -69,6 +70,12 @@ type OrdenCompra = {
   created_at: string
   proveedores?: { nombre: string } | null
   orden_compra_items?: ItemCompra[]
+  // Para qué requisición se generó (null = vieja o general).
+  requisicion?: {
+    id: string
+    folio: string
+    clienteNombre: string
+  } | null
 }
 
 const moneda = new Intl.NumberFormat('es-MX', {
@@ -541,6 +548,17 @@ export default function ComprasClient({
     ? agruparCompraPorProveedor(requisicionAComprar.faltantes)
     : null
 
+  // Fase 1c ampliada — aviso previo: compras Pendientes que ya existen
+  // para esta requisición, para que Alex las vea antes de confirmar.
+  // El bloqueo del duplicado exacto lo hace el servidor.
+  const comprasPendientesRequisicion = requisicionAComprar
+    ? ordenesCompra.filter(
+        (orden) =>
+          orden.estado === 'PENDIENTE' &&
+          orden.requisicion?.id === requisicionAComprar.ordenId,
+      )
+    : []
+
   const abrirCompraRequisicion = (orden: FaltantePorOrden) => {
     if (orden.faltantes.length === 0) return
     setErrorCompra('')
@@ -572,6 +590,8 @@ export default function ComprasClient({
             cantidad: item.cantidad,
             precio: item.precioUnitario,
           })),
+          // Fase 1c ampliada: vincular la compra a esta requisición.
+          requisicionAComprar.ordenId,
         )
         generadas.push(`${grupo.proveedorNombre} (${res.folio})`)
       } catch (error) {
@@ -597,10 +617,11 @@ export default function ComprasClient({
       setMensaje(
         `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoSinPrecio}`,
       )
-      setRequisicionAComprar(null)
       router.refresh()
     }
     if (errores.length > 0) {
+      // Se deja el diálogo abierto para que el aviso (p. ej. el
+      // bloqueo por duplicado) se vea; si no hay errores, se cierra.
       setErrorCompra(
         (generadas.length > 0
           ? 'Se generaron algunas compras. '
@@ -608,6 +629,8 @@ export default function ComprasClient({
           'Errores: ' +
           errores.join(' | '),
       )
+    } else if (generadas.length > 0) {
+      setRequisicionAComprar(null)
     }
   }
 
@@ -1111,63 +1134,114 @@ export default function ComprasClient({
               />
             </div>
           ) : (
-            <div className="stagger grid grid-cols-1 gap-3">
-              {ordenesCompra.map((orden) => (
-                <article key={orden.id} className="card p-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
-                          {orden.proveedores?.nombre || 'Proveedor'}
-                        </h2>
-                        <Badge
-                          tono={
-                            orden.estado === 'RECIBIDA' ? 'success' : 'warning'
-                          }
-                        >
-                          {orden.estado === 'RECIBIDA'
-                            ? 'Recibida'
-                            : 'Pendiente'}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-[12px] text-gonper-muted">
-                        <span className="font-semibold text-gonper-text">
-                          {orden.folio}
-                        </span>{' '}
-                        · {fecha.format(new Date(orden.created_at))}
-                      </p>
-                      <p className="mt-1 text-[12px] text-gonper-muted">
-                        Orden de compra interna ·{' '}
-                        {orden.orden_compra_items?.length || 0}{' '}
-                        {orden.orden_compra_items?.length === 1
-                          ? 'producto'
-                          : 'productos'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 sm:justify-end">
-                      <div className="text-left sm:text-right">
-                        <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
-                          Total estimado
+            // Fase 1c ampliada — Órdenes de compra en cards claras,
+            // agrupadas por la requisición para la que se generaron
+            // ("Para REQ-... · cliente"); las viejas y las generadas
+            // desde la vista General van en el grupo "Sin requisición".
+            <div className="space-y-5">
+              {agruparComprasPorRequisicion(ordenesCompra).map((grupo) => (
+                <section key={grupo.requisicion?.id ?? 'sin-requisicion'}>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    {grupo.requisicion ? (
+                      <>
+                        <p className="text-[14px] font-semibold tracking-[-0.01em]">
+                          Para{' '}
+                          <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+                            {grupo.requisicion.folio}
+                          </span>{' '}
+                          · {grupo.requisicion.clienteNombre}
                         </p>
-                        <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
-                          {moneda.format(Number(orden.total_estimado))}
-                        </p>
-                      </div>
-
-                      {orden.estado === 'PENDIENTE' && (
-                        <button
-                          type="button"
-                          onClick={() => abrirRecepcion(orden)}
-                          className="btn btn-quiet"
+                        <Link
+                          href={`/ordenes/${grupo.requisicion.id}`}
+                          className="btn btn-quiet shrink-0"
                         >
-                          <Truck className="h-4 w-4" strokeWidth={1.75} />
-                          Recibir
-                        </button>
-                      )}
-                    </div>
+                          Ver requisición
+                          <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[14px] font-semibold tracking-[-0.01em]">
+                          Sin requisición
+                        </p>
+                        <p className="text-[11.5px] text-gonper-muted">
+                          Compras viejas o generadas desde la vista General,
+                          sin requisición vinculada.
+                        </p>
+                      </>
+                    )}
+                    <Badge tono="warning">{grupo.ordenes.length}</Badge>
                   </div>
-                </article>
+
+                  <div className="stagger grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {grupo.ordenes.map((orden) => (
+                      <article key={orden.id} className="card flex flex-col p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+                            {orden.proveedores?.nombre || 'Proveedor'}
+                          </h2>
+                          <Badge
+                            tono={
+                              orden.estado === 'RECIBIDA' ? 'success' : 'warning'
+                            }
+                          >
+                            {orden.estado === 'RECIBIDA'
+                              ? 'Recibida'
+                              : 'Pendiente'}
+                          </Badge>
+                          <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+                            {orden.folio}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] text-gonper-muted">
+                          {fecha.format(new Date(orden.created_at))} ·{' '}
+                          {orden.orden_compra_items?.length || 0}{' '}
+                          {orden.orden_compra_items?.length === 1
+                            ? 'producto'
+                            : 'productos'}
+                        </p>
+                        {orden.requisicion ? (
+                          <p className="mt-1 text-[12.5px]">
+                            Para{' '}
+                            <Link
+                              href={`/ordenes/${orden.requisicion.id}`}
+                              className="font-semibold text-gonper-primary hover:underline"
+                            >
+                              {orden.requisicion.folio}
+                            </Link>{' '}
+                            · {orden.requisicion.clienteNombre}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-[12.5px] text-gonper-muted">
+                            Sin requisición vinculada
+                          </p>
+                        )}
+
+                        <div className="mt-auto flex items-end justify-between gap-3 border-t border-gonper-border pt-3">
+                          <div>
+                            <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+                              Total estimado
+                            </p>
+                            <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
+                              {moneda.format(Number(orden.total_estimado))}
+                            </p>
+                          </div>
+
+                          {orden.estado === 'PENDIENTE' && (
+                            <button
+                              type="button"
+                              onClick={() => abrirRecepcion(orden)}
+                              className="btn btn-primary shrink-0"
+                            >
+                              <Truck className="h-4 w-4" strokeWidth={1.75} />
+                              Recibir
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
@@ -1225,6 +1299,30 @@ export default function ComprasClient({
               Se genera una orden de compra por proveedor, solo con los
               artículos que tienen precio registrado.
             </p>
+
+            {comprasPendientesRequisicion.length > 0 && (
+              <div className="mt-4 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3 py-2 text-[12.5px] text-gonper-warning">
+                <p className="font-semibold">
+                  Ya hay{' '}
+                  {comprasPendientesRequisicion.length === 1
+                    ? 'una orden de compra pendiente'
+                    : `${comprasPendientesRequisicion.length} órdenes de compra pendientes`}{' '}
+                  para esta requisición:
+                </p>
+                <ul className="mt-1 list-disc pl-4">
+                  {comprasPendientesRequisicion.map((orden) => (
+                    <li key={orden.id}>
+                      {orden.folio} · {orden.proveedores?.nombre || 'Proveedor'} ·{' '}
+                      {moneda.format(Number(orden.total_estimado))}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1">
+                  Revisa antes de confirmar: si es la misma compra, se
+                  bloqueará como duplicada.
+                </p>
+              </div>
+            )}
 
             {compraRequisicion.grupos.length === 0 ? (
               <p className="mt-4 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3 py-2 text-[12.5px] text-gonper-warning">

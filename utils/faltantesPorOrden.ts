@@ -226,6 +226,68 @@ export function agruparCompraPorProveedor(faltantes: FaltantePorOrdenItem[]): {
   return { grupos, sinPrecio }
 }
 
+// Anti-duplicado (Fase 1c ampliada): dos compras son "la misma" cuando
+// tienen los mismos productos con las mismas cantidades, sin importar
+// el orden. Se usa en el servidor antes de generar una orden de compra
+// por requisición: si ya existe una PENDIENTE igual para esa
+// requisición y ese proveedor, no se genera otra en silencio.
+export function esMismaCompra(
+  a: { productoId: string; cantidad: number }[],
+  b: { productoId: string; cantidad: number }[],
+): boolean {
+  if (a.length === 0 || a.length !== b.length) return false
+  const clave = (items: { productoId: string; cantidad: number }[]) =>
+    items
+      .map((item) => `${item.productoId}:${Number(item.cantidad) || 0}`)
+      .sort()
+      .join('|')
+  return clave(a) === clave(b)
+}
+
+// Agrupado de órdenes de compra por requisición (Fase 1c ampliada):
+// un grupo por requisición vinculada, en orden de primera aparición,
+// y al final el grupo "Sin requisición" (null) para las compras viejas
+// o generadas desde la vista General.
+export type RequisicionVinculada = {
+  id: string
+  folio: string
+  clienteNombre: string
+}
+
+export type GrupoComprasPorRequisicion<T> = {
+  requisicion: RequisicionVinculada | null
+  ordenes: T[]
+}
+
+export function agruparComprasPorRequisicion<
+  T extends { requisicion?: RequisicionVinculada | null },
+>(ordenes: T[]): GrupoComprasPorRequisicion<T>[] {
+  const grupos: GrupoComprasPorRequisicion<T>[] = []
+  const porId = new Map<string, GrupoComprasPorRequisicion<T>>()
+  let sinRequisicion: GrupoComprasPorRequisicion<T> | null = null
+
+  for (const orden of ordenes) {
+    const req = orden.requisicion ?? null
+    if (!req) {
+      if (!sinRequisicion) {
+        sinRequisicion = { requisicion: null, ordenes: [] }
+      }
+      sinRequisicion.ordenes.push(orden)
+      continue
+    }
+    let grupo = porId.get(req.id)
+    if (!grupo) {
+      grupo = { requisicion: req, ordenes: [] }
+      porId.set(req.id, grupo)
+      grupos.push(grupo)
+    }
+    grupo.ordenes.push(orden)
+  }
+
+  if (sinRequisicion) grupos.push(sinRequisicion)
+  return grupos
+}
+
 // Consolida el faltante de las órdenes seleccionadas, descontando el
 // stock una sola vez por producto. Si no hay selección, el llamador
 // debe usar el consolidado general ya calculado en el servidor.

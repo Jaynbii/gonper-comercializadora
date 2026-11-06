@@ -6,6 +6,8 @@ import {
   consolidarFaltantesSeleccionados,
   proveedorSugerido,
   agruparCompraPorProveedor,
+  esMismaCompra,
+  agruparComprasPorRequisicion,
 } from './faltantesPorOrden.ts'
 
 const productos = new Map([
@@ -176,4 +178,58 @@ test('proveedorSugerido ignora precios en cero y elige el más barato', () => {
     'C',
   )
   assert.equal(proveedorSugerido([]), null)
+})
+
+test('esMismaCompra: mismos artículos en distinto orden es duplicado', () => {
+  assert.equal(
+    esMismaCompra(
+      [
+        { productoId: 'a', cantidad: 10 },
+        { productoId: 'b', cantidad: 5 },
+      ],
+      [
+        { productoId: 'b', cantidad: 5 },
+        { productoId: 'a', cantidad: 10 },
+      ],
+    ),
+    true,
+  )
+  // Distinta cantidad: no es la misma compra.
+  assert.equal(
+    esMismaCompra(
+      [{ productoId: 'a', cantidad: 10 }],
+      [{ productoId: 'a', cantidad: 9 }],
+    ),
+    false,
+  )
+  // Distinto producto: no es la misma compra.
+  assert.equal(
+    esMismaCompra(
+      [{ productoId: 'a', cantidad: 10 }],
+      [{ productoId: 'c', cantidad: 10 }],
+    ),
+    false,
+  )
+  // Sin artículos no se considera duplicado.
+  assert.equal(esMismaCompra([], []), false)
+})
+
+test('agruparComprasPorRequisicion: un grupo por requisición y "Sin requisición" al final', () => {
+  const req3 = { id: 'r3', folio: 'REQ-0003', clienteNombre: 'Aseo Urbano' }
+  const req2 = { id: 'r2', folio: 'REQ-0002', clienteNombre: 'Capta' }
+  const grupos = agruparComprasPorRequisicion([
+    { id: 'c1', requisicion: req3 },
+    { id: 'c2', requisicion: null },
+    { id: 'c3', requisicion: req3 },
+    { id: 'c4', requisicion: req2 },
+    { id: 'c5' },
+  ])
+  assert.deepEqual(
+    grupos.map((g) => g.requisicion?.folio ?? null),
+    ['REQ-0003', 'REQ-0002', null],
+  )
+  assert.deepEqual(
+    grupos.map((g) => g.ordenes.map((o) => o.id)),
+    [['c1', 'c3'], ['c4'], ['c2', 'c5']],
+  )
 })
