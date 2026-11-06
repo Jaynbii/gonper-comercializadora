@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test utils/requisicion.test.mts utils/faltantesPorOrden.test.mts utils/folioRequisicion.test.mts"
+    "test": "node --test utils/requisicion.test.mts utils/faltantesPorOrden.test.mts utils/folioRequisicion.test.mts utils/surtir.test.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

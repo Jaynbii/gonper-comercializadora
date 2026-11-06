@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PackageCheck, TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { surtirOrden } from '../actions'
+import { mensajeErrorSurtir } from '@/utils/surtir'
 
 export default function BotonSurtir({
   ordenId,
@@ -27,9 +28,14 @@ export default function BotonSurtir({
       setConfirmOpen(false)
       router.refresh()
     } catch (error) {
-      setErrorMsg(
-        error instanceof Error ? error.message : 'No se pudo surtir la requisición.',
-      )
+      // En producción Next.js redacta el mensaje real del servidor y
+      // el cliente solo recibe "Minified React error #441". Nunca se
+      // muestra ese texto tal cual: se traduce a un mensaje humano
+      // (y se conserva el digest, si lo hay, para buscar el error
+      // real en el registro del servidor).
+      const { mensaje, digest } = mensajeErrorSurtir(error)
+      if (digest) console.error('Error al surtir, digest:', digest)
+      setErrorMsg(mensaje)
     } finally {
       setIsLoading(false)
     }
