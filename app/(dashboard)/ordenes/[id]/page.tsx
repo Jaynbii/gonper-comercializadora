@@ -104,10 +104,14 @@ export default async function OrdenDetallePage({
   const puedeIrACompras =
     orden.estado !== 'ENTREGADA' && orden.estado !== 'CANCELADA'
 
+  // Se puede surtir una PENDIENTE y también una PARCIAL (para surtir
+  // lo que falta cuando llega stock). Antes las PARCIAL no mostraban
+  // el botón: REQ-0003 quedó en PARCIAL tras el fallo #441 y ya no se
+  // podía completar desde aquí. El botón es "Surtir parcialmente"
+  // cuando no hay stock total (esParcial) y solo aparece si hay algo
+  // de stock (hayStockParcial); si no, se muestra el aviso.
   const puedeSurtir =
-    orden.estado !== 'ENTREGADA' &&
-    orden.estado !== 'PARCIAL' &&
-    orden.estado !== 'CANCELADA'
+    orden.estado !== 'ENTREGADA' && orden.estado !== 'CANCELADA'
 
   return (
     <div className="mx-auto max-w-245 pb-6">

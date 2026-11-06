@@ -673,17 +673,15 @@ export default function ComprasClient({
               `${grupo.proveedorNombre}: la compra se generó (${res.folio}) pero no se pudo recibir porque la orden no devolvió sus artículos. Recíbela desde la pestaña "Órdenes de compra".`,
             )
           } else {
-            try {
-              await recibirMercancia(res.id, itemsRecepcion)
-              recibidas.push(`${grupo.proveedorNombre} (${res.folio})`)
-            } catch (errorRecibir) {
-              const detalle =
-                errorRecibir instanceof Error
-                  ? errorRecibir.message
-                  : 'No se pudo recibir la mercancía.'
+            // recibirMercancia DEVUELVE el resultado, no lanza: hay
+            // que leer `success`, si no un fallo se daría por recibido.
+            const resRecibir = await recibirMercancia(res.id, itemsRecepcion)
+            if (!resRecibir.success) {
               errores.push(
-                `${grupo.proveedorNombre}: la compra se generó (${res.folio}) pero NO se recibió ni subió el stock: ${detalle} Recíbela desde la pestaña "Órdenes de compra".`,
+                `${grupo.proveedorNombre}: la compra se generó (${res.folio}) pero NO se recibió ni subió el stock: ${resRecibir.error} Recíbela desde la pestaña "Órdenes de compra".`,
               )
+            } else {
+              recibidas.push(`${grupo.proveedorNombre} (${res.folio})`)
             }
           }
         }
@@ -761,10 +759,14 @@ export default function ComprasClient({
     setErrorRecepcion('')
 
     try {
-      await recibirMercancia(
+      const resRecibir = await recibirMercancia(
         ordenActiva.id,
         itemsAEntregar as Parameters<typeof recibirMercancia>[1],
       )
+      if (!resRecibir.success) {
+        setErrorRecepcion(resRecibir.error)
+        return
+      }
       setMensaje(`Mercancía de ${ordenActiva.folio} recibida y stock actualizado.`)
       setOrdenActiva(null)
       router.refresh()

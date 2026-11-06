@@ -67,6 +67,9 @@ DECLARE
   v_total_pendiente NUMERIC := 0;
   v_total_surtido NUMERIC := 0;
   v_hay_items BOOLEAN := false;
+  v_total_items INT := 0;
+  v_ya_surtidos INT := 0;
+  v_sin_stock TEXT := '';
   r RECORD;
   v_pendiente NUMERIC;
   v_a_surtir NUMERIC;
@@ -93,7 +96,8 @@ BEGIN
       oi.producto_id,
       oi.cantidad_solicitada,
       COALESCE(oi.cantidad_surtida, 0) AS cantidad_surtida,
-      p.stock_actual
+      p.stock_actual,
+      p.nombre AS nombre_producto
     FROM public.orden_items oi
     LEFT JOIN public.productos p ON p.id = oi.producto_id
     WHERE oi.orden_id = p_orden_id
@@ -101,6 +105,7 @@ BEGIN
     FOR UPDATE OF oi, p
   LOOP
     v_hay_items := true;
+    v_total_items := v_total_items + 1;
 
     -- Sin producto (eliminado) no se puede surtir este artículo.
     IF r.stock_actual IS NULL THEN
@@ -110,6 +115,7 @@ BEGIN
     v_pendiente := r.cantidad_solicitada - r.cantidad_surtida;
     IF v_pendiente <= 0 THEN
       -- Ya estaba totalmente surtido: no se vuelve a descontar nada.
+      v_ya_surtidos := v_ya_surtidos + 1;
       CONTINUE;
     END IF;
 
@@ -118,6 +124,12 @@ BEGIN
     v_total_surtido := v_total_surtido + v_a_surtir;
 
     IF v_a_surtir <= 0 THEN
+      -- Sin stock para este artículo pendiente: se deja constancia
+      -- para el mensaje de error (ver abajo).
+      v_sin_stock := v_sin_stock ||
+        CASE WHEN v_sin_stock = '' THEN '' ELSE ', ' END ||
+        COALESCE(r.nombre_producto, 'artículo') ||
+        ' (pendiente ' || v_pendiente::TEXT || ')';
       UPDATE public.orden_items
       SET estado_item = 'SIN_STOCK'
       WHERE id = r.item_id;
@@ -151,7 +163,13 @@ BEGIN
   END IF;
 
   IF v_total_surtido = 0 THEN
-    RAISE EXCEPTION 'No hay stock de NINGÚN artículo. No se puede surtir la requisición.';
+    -- Diagnóstico con el estado real (digest 2179146847): con
+    -- REQ-0003 esto era "10 de 13 ya surtidos y los 3 pendientes sin
+    -- stock", y el mensaje genérico no decía nada de eso.
+    IF v_total_pendiente = 0 THEN
+      RAISE EXCEPTION 'Todos los artículos de esta requisición ya aparecen como surtidos (cantidad surtida = cantidad solicitada, % de %), pero la requisición sigue sin marcarse como surtida. No hay nada pendiente por surtir.', v_ya_surtidos, v_total_items;
+    END IF;
+    RAISE EXCEPTION 'No hay stock de NINGÚN artículo pendiente. Ya surtidos: % de %. Sin stock para surtir: %.', v_ya_surtidos, v_total_items, v_sin_stock;
   END IF;
 
   v_estado_final :=

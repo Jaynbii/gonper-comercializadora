@@ -24,15 +24,21 @@ export default function BotonSurtir({
     setErrorMsg('')
 
     try {
-      await surtirOrden(ordenId)
+      // surtirOrden() DEVUELVE el resultado, no lanza: los valores
+      // devueltos por una Server Action llegan tal cual al teléfono,
+      // mientras que un throw se redacta en producción como
+      // "Minified React error #441" (digest 2179146847). Por eso el
+      // mensaje real del fallo se lee de `resultado.error`.
+      const resultado = await surtirOrden(ordenId)
+      if (!resultado.success) {
+        setErrorMsg(mensajeErrorSurtir(resultado.error).mensaje)
+        return
+      }
       setConfirmOpen(false)
       router.refresh()
     } catch (error) {
-      // En producción Next.js redacta el mensaje real del servidor y
-      // el cliente solo recibe "Minified React error #441". Nunca se
-      // muestra ese texto tal cual: se traduce a un mensaje humano
-      // (y se conserva el digest, si lo hay, para buscar el error
-      // real en el registro del servidor).
+      // Red de seguridad: si algo fuera de surtirOrden() lanzara
+      // (p. ej. fallo de red), nunca se muestra el "#441" tal cual.
       const { mensaje, digest } = mensajeErrorSurtir(error)
       if (digest) console.error('Error al surtir, digest:', digest)
       setErrorMsg(mensaje)

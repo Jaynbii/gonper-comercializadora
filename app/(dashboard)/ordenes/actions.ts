@@ -3,7 +3,7 @@
 import { createClient, generarNuevoSku } from '@/utils/supabase/server' // 👈 Importamos generarNuevoSku
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
-import { planSurtido, esErrorFuncionInexistente } from '@/utils/surtir'
+import { surtirConCliente, type ResultadoSurtido } from '@/utils/surtir'
 
 type ItemDetectado = {
   codigo_pdf: string
@@ -147,136 +147,32 @@ export async function guardarItemsEnOrden(
   return { success: true }
 }
 
-export async function surtirOrden(ordenId: string) {
+export async function surtirOrden(ordenId: string): Promise<ResultadoSurtido> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) throw new Error('Usuario no autenticado')
+  if (!user) return { success: false, error: 'Usuario no autenticado' }
 
-  // Vía principal: RPC transaccional `surtir_orden` (migración
-  // supabase/migrations/20261106020000_surtir_orden_rpc.sql). Todo el
-  // surtido ocurre en UNA transacción de Postgres, o no ocurre: si
-  // algo falla a mitad, no queda el stock descontado a medias (eso
-  // fue el error #441 al surtir REQ-0003). El surtido PARCIAL se
-  // preserva: piden 10, hay 6, se surten 6 y queda PARCIAL.
-  const { data: estadoRpc, error: errorRpc } = await supabase.rpc(
-    'surtir_orden',
-    { p_orden_id: ordenId },
-  )
-  if (!errorRpc) {
+  // La lógica vive en utils/surtir.ts (`surtirConCliente`, probada
+  // con un mock de PostgREST): RPC transaccional `surtir_orden` si
+  // existe, vía secuencial de respaldo si la migración aún no se
+  // corrió. El surtido PARCIAL se preserva: piden 10, hay 6, se
+  // surten 6 y queda PARCIAL.
+  //
+  // IMPORTANTE (digest 2179146847): esto DEVUELVE el resultado, nunca
+  // lanza. En producción Next.js redacta el mensaje real de cualquier
+  // error lanzado por una Server Action y el cliente solo recibe
+  // "Minified React error #441"; los valores DEVUELTOS llegan tal
+  // cual al teléfono, con su mensaje real.
+  const resultado = await surtirConCliente(supabase, ordenId, user.id)
+
+  if (resultado.success) {
     revalidatePath('/ordenes')
     revalidatePath(`/ordenes/${ordenId}`)
     revalidatePath('/inventario')
-    return { success: true, estado: String(estadoRpc) }
   }
-
-  // Si la RPC aún no existe en Supabase (migración sin correr), se
-  // usa la vía secuencial de respaldo. Cualquier OTRO error de la
-  // RPC (p. ej. sin stock) es real y NO se reintenta por la vía de
-  // respaldo: se lanza tal cual.
-  if (!esErrorFuncionInexistente(errorRpc)) {
-    throw new Error(errorRpc.message)
-  }
-
-  // Vía de respaldo (sin transacción, solo si la RPC no existe):
-  // plan puro + writes en secuencia, VERIFICANDO cada error. Antes
-  // los updates de stock se hacían con Promise.all y sus errores se
-  // tragaban en silencio (los builders de PostgREST resuelven
-  // `{ data, error }`, no lanzan): la requisición quedaba marcada
-  // como surtida sin bajar el stock. Aquí un fallo aborta ANTES de
-  // marcar la requisición como surtida.
-  const { data: ordenActual } = await supabase
-    .from('ordenes')
-    .select('estado')
-    .eq('id', ordenId)
-    .single()
-  if (ordenActual?.estado === 'ENTREGADA')
-    throw new Error(
-      'Esta requisición ya fue surtida y entregada previamente.',
-    )
-
-  const { data: items, error: itemsError } = await supabase
-    .from('orden_items')
-    .select(
-      `id, cantidad_solicitada, cantidad_surtida, producto_id, productos (nombre, stock_actual)`,
-    )
-    .eq('orden_id', ordenId)
-  if (itemsError)
-    throw new Error(`Error al leer items: ${itemsError.message}`)
-  if (!items || items.length === 0)
-    throw new Error('La requisición no tiene artículos')
-
-  const plan = planSurtido(
-    items.map((item) => {
-      const producto = Array.isArray(item.productos)
-        ? item.productos[0]
-        : item.productos
-      return {
-        id: item.id,
-        productoId: item.producto_id,
-        cantidadSolicitada: Number(item.cantidad_solicitada) || 0,
-        cantidadSurtida: Number(item.cantidad_surtida) || 0,
-        stockActual: producto ? Number(producto.stock_actual) || 0 : null,
-      }
-    }),
-  )
-
-  for (const item of plan.items) {
-    if (!item.hayQueEscribir) continue
-
-    const { error: errorStock } = await supabase
-      .from('productos')
-      .update({ stock_actual: item.nuevoStock })
-      .eq('id', item.productoId)
-    if (errorStock)
-      throw new Error(
-        `Error al actualizar el stock: ${errorStock.message}`,
-      )
-
-    const { error: errorItem } = await supabase
-      .from('orden_items')
-      .update({
-        cantidad_surtida: item.nuevaCantidadSurtida,
-        estado_item: item.nuevoEstadoItem,
-      })
-      .eq('id', item.id)
-    if (errorItem)
-      throw new Error(
-        `Error al actualizar el artículo: ${errorItem.message}`,
-      )
-
-    if (item.cantidadASurtir > 0) {
-      const { error: errorMovimiento } = await supabase
-        .from('movimientos_inventario')
-        .insert({
-          producto_id: item.productoId,
-          tipo_movimiento: 'SALIDA_ORDEN',
-          cantidad: item.cantidadASurtir,
-          motivo: 'Surtido de requisición',
-          orden_id: ordenId,
-          usuario_id: user.id,
-        })
-      if (errorMovimiento)
-        throw new Error(
-          `Error al registrar el movimiento: ${errorMovimiento.message}`,
-        )
-    }
-  }
-
-  const { error: updateError } = await supabase
-    .from('ordenes')
-    .update({ estado: plan.nuevoEstadoOrden })
-    .eq('id', ordenId)
-  if (updateError)
-    throw new Error(
-      `Error al actualizar la requisición: ${updateError.message}`,
-    )
-
-  revalidatePath('/ordenes')
-  revalidatePath(`/ordenes/${ordenId}`)
-  revalidatePath('/inventario')
-  return { success: true, estado: plan.nuevoEstadoOrden }
+  return resultado
 }
 
 export async function eliminarOrden(ordenId: string, pdfPath: string | null) {

@@ -194,28 +194,26 @@ export async function generarOrdenCompra(
 export async function recibirMercancia(
   ordenCompraId: string,
   items: ItemRecepcion[]
-) {
-  // Inicializa el cliente de Supabase en el servidor.
+): Promise<{ success: true; data: unknown } | { success: false; error: string }> {
+  // Como `surtirOrden()`: DEVUELVE el resultado, nunca lanza. En
+  // producción Next.js redacta el mensaje real de un error lanzado
+  // por una Server Action ("Minified React error #441"); los valores
+  // devueltos llegan tal cual al teléfono.
   const supabase = await createClient()
 
-  // Obtiene y valida al usuario autenticado.
   const {
     data: { user },
     error: authError
   } = await supabase.auth.getUser()
 
-  // Impide que usuarios no autenticados registren recepciones.
   if (authError || !user) {
-    throw new Error('No autorizado')
+    return { success: false, error: 'No autorizado' }
   }
 
-  // Comprueba que se haya recibido una orden de compra y una lista de artículos.
   if (!ordenCompraId || !Array.isArray(items) || items.length === 0) {
-    throw new Error('Datos de recepción inválidos')
+    return { success: false, error: 'Datos de recepción inválidos' }
   }
 
-  // Comprueba que cada artículo tenga identificadores válidos
-  // y una cantidad numérica igual o superior a cero.
   const itemsInvalidos = items.some(item =>
     !item.id ||
     !item.producto_id ||
@@ -223,13 +221,10 @@ export async function recibirMercancia(
     Number(item.cantidad_recibida) < 0
   )
 
-  // Detiene el proceso si algún artículo no cumple las validaciones.
   if (itemsInvalidos) {
-    throw new Error('Hay artículos con datos inválidos')
+    return { success: false, error: 'Hay artículos con datos inválidos' }
   }
 
-  // Elimina los artículos cuya cantidad recibida sea cero.
-  // Solo se enviarán a la base de datos los artículos con recepción.
   const itemsARecibir = items
     .filter(item => Number(item.cantidad_recibida) > 0)
     .map(item => ({
@@ -237,29 +232,23 @@ export async function recibirMercancia(
       cantidad_recibida: Number(item.cantidad_recibida)
     }))
 
-  // Evita ejecutar una recepción sin cantidades positivas.
   if (itemsARecibir.length === 0) {
-    throw new Error('Debes indicar al menos una cantidad recibida')
+    return { success: false, error: 'Debes indicar al menos una cantidad recibida' }
   }
 
-  // Obtiene los identificadores de los artículos que se van a recibir.
   const ids = itemsARecibir.map(item => item.id)
 
-  // Evita procesar dos veces el mismo artículo dentro de una solicitud.
   if (new Set(ids).size !== ids.length) {
-    throw new Error('Hay artículos duplicados en la recepción')
+    return { success: false, error: 'Hay artículos duplicados en la recepción' }
   }
 
-  // Ejecuta la función SQL que valida y registra la recepción
-  // de forma transaccional en Supabase.
   const { data, error } = await supabase.rpc('recibir_mercancia', {
     p_orden_compra_id: ordenCompraId,
     p_items: itemsARecibir
   })
 
-  // Informa cualquier error devuelto por la función SQL.
   if (error) {
-    throw new Error(`Error al recibir mercancía: ${error.message}`)
+    return { success: false, error: `Error al recibir mercancía: ${error.message}` }
   }
 
   // Si la recepción fue completa (todo lo solicitado ya está
@@ -296,11 +285,9 @@ export async function recibirMercancia(
     console.error('No se pudo marcar la orden como RECIBIDA:', e)
   }
 
-  // Actualiza las secciones que muestran compras, inventario y requisiciones.
   revalidatePath('/compras')
   revalidatePath('/inventario')
   revalidatePath('/ordenes')
 
-  // Devuelve el resultado generado por la función SQL.
-  return data
+  return { success: true, data }
 }
