@@ -84,7 +84,7 @@ export default function DashboardView({
         >
           <div className="flex items-start justify-between gap-2">
             <p className="min-h-[2.7em] text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
-              Órdenes activas
+              Requisiciones activas
             </p>
             <ArrowUpRight
               className="mt-0.5 hidden h-3.5 w-3.5 shrink-0 text-gonper-muted opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 lg:block"
@@ -95,7 +95,7 @@ export default function DashboardView({
             {activas}
           </p>
           <p className="mt-2 text-[10.5px] leading-tight text-gonper-muted sm:hidden">
-            Ver órdenes
+            Ver requisiciones
           </p>
           <p className="mt-2 hidden text-[11.5px] leading-tight text-gonper-muted sm:block lg:text-[12.5px]">
             {pendientes} pendientes · {parciales} parciales
@@ -135,7 +135,7 @@ export default function DashboardView({
       >
         <section className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-gonper-border px-5 py-3.5">
-            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Últimas órdenes</h2>
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Últimas requisiciones</h2>
             <Link
               href="/ordenes"
               className="inline-flex items-center gap-1 text-[12px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
@@ -157,8 +157,11 @@ export default function DashboardView({
                       <p className="truncate text-[13.5px] font-medium">
                         {nombreCliente(orden.clientes)}
                       </p>
-                      <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
-                        {orden.folio} · {fechaCorta.format(new Date(orden.created_at))}
+                      <p className="mt-0.5 text-[11px] text-gonper-muted">
+                        <span className="text-[12px] font-semibold text-gonper-text">
+                          {orden.folio}
+                        </span>{' '}
+                        · {fechaCorta.format(new Date(orden.created_at))}
                       </p>
                     </div>
 
@@ -175,7 +178,7 @@ export default function DashboardView({
           ) : (
             <div className="flex flex-col items-center px-6 py-14 text-center">
               <Inbox className="h-6 w-6 text-gonper-muted" strokeWidth={1.5} />
-              <p className="mt-3 text-[13.5px] font-medium">Todavía no hay órdenes</p>
+              <p className="mt-3 text-[13.5px] font-medium">Todavía no hay requisiciones</p>
               <p className="mt-1 max-w-[34ch] text-[12.5px] text-gonper-muted">
                 Sube la primera requisición para empezar a surtir.
               </p>
@@ -221,7 +224,7 @@ export default function DashboardView({
               />
               <p className="mt-3 text-[13.5px] font-medium">Todo cubierto</p>
               <p className="mt-1 max-w-[32ch] text-[12.5px] text-gonper-muted">
-                No hay faltantes contra las órdenes activas.
+                No hay faltantes contra las requisiciones activas.
               </p>
             </div>
           )}

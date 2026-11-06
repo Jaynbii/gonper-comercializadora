@@ -65,9 +65,9 @@ export async function generarOrdenCompra(
     .select()
     .single()
 
-  // Detiene el proceso si no fue posible crear la orden.
+  // Detiene el proceso si no fue posible crear la orden de compra.
   if (ordenError) {
-    throw new Error(`Error al crear orden: ${ordenError.message}`)
+    throw new Error(`Error al crear la orden de compra: ${ordenError.message}`)
   }
 
   // Prepara los artículos para relacionarlos con la orden recién creada.
@@ -119,7 +119,7 @@ export async function recibirMercancia(
     throw new Error('No autorizado')
   }
 
-  // Comprueba que se haya recibido una orden y una lista de artículos.
+  // Comprueba que se haya recibido una orden de compra y una lista de artículos.
   if (!ordenCompraId || !Array.isArray(items) || items.length === 0) {
     throw new Error('Datos de recepción inválidos')
   }
@@ -172,7 +172,7 @@ export async function recibirMercancia(
     throw new Error(`Error al recibir mercancía: ${error.message}`)
   }
 
-  // Actualiza las secciones que muestran compras, inventario y órdenes.
+  // Actualiza las secciones que muestran compras, inventario y requisiciones.
   revalidatePath('/compras')
   revalidatePath('/inventario')
   revalidatePath('/ordenes')

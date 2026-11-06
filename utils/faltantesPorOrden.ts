@@ -1,4 +1,4 @@
-// Cálculo de faltantes por orden de cliente (Gonper, Fase 1).
+// Cálculo de faltantes por requisición de cliente (Gonper, Fase 1).
 //
 // Es código puro, sin Supabase ni Next.js, para poder probarlo con
 // `node --test` sin base de datos.
@@ -155,6 +155,75 @@ export function calcularFaltantePorOrden(args: {
     tieneSinPrecio: faltantes.some((f) => f.costoEstimado === null),
     demanda,
   }
+}
+
+// Compra por requisición (Fase 1b): agrupa el faltante de UNA
+// requisición por proveedor sugerido, para generar una orden de
+// compra por proveedor con `generarOrdenCompra`. Solo entran los
+// artículos con precio registrado; los "sin precio" se devuelven
+// aparte para avisar que hay que pedirlos por WhatsApp y NO se compran.
+export type ItemCompraPorProveedor = {
+  productoId: string
+  nombre: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+}
+
+export type GrupoCompraProveedor = {
+  proveedorId: string
+  proveedorNombre: string
+  items: ItemCompraPorProveedor[]
+  subtotal: number
+}
+
+export type ArticuloSinPrecio = {
+  productoId: string
+  nombre: string
+  cantidad: number
+}
+
+export function agruparCompraPorProveedor(faltantes: FaltantePorOrdenItem[]): {
+  grupos: GrupoCompraProveedor[]
+  sinPrecio: ArticuloSinPrecio[]
+} {
+  const grupos: GrupoCompraProveedor[] = []
+  const porProveedor = new Map<string, GrupoCompraProveedor>()
+  const sinPrecio: ArticuloSinPrecio[] = []
+
+  for (const item of faltantes) {
+    if (!item.proveedorSugerido || item.costoEstimado === null) {
+      sinPrecio.push({
+        productoId: item.productoId,
+        nombre: item.nombre,
+        cantidad: item.faltante,
+      })
+      continue
+    }
+    const sugerido = item.proveedorSugerido
+    let grupo = porProveedor.get(sugerido.proveedorId)
+    if (!grupo) {
+      grupo = {
+        proveedorId: sugerido.proveedorId,
+        proveedorNombre: sugerido.proveedorNombre,
+        items: [],
+        subtotal: 0,
+      }
+      porProveedor.set(sugerido.proveedorId, grupo)
+      grupos.push(grupo)
+    }
+    const subtotal = item.faltante * sugerido.precioUnitario
+    grupo.items.push({
+      productoId: item.productoId,
+      nombre: item.nombre,
+      cantidad: item.faltante,
+      precioUnitario: sugerido.precioUnitario,
+      subtotal,
+    })
+    grupo.subtotal += subtotal
+  }
+
+  return { grupos, sinPrecio }
 }
 
 // Consolida el faltante de las órdenes seleccionadas, descontando el

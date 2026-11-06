@@ -72,7 +72,7 @@ export async function eliminarProducto(id: string) {
   const { error } = await supabase.from('productos').delete().eq('id', id)
   
   if (error) {
-    if (error.code === '23503') return { error: 'No se puede eliminar porque este producto ya está en una o más órdenes.' }
+    if (error.code === '23503') return { error: 'No se puede eliminar porque este producto ya está en una o más requisiciones.' }
     return { error: error.message }
   }
 

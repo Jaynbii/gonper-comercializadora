@@ -11,15 +11,15 @@
 
 ## 📖 1. Resumen del Proyecto y Arquitectura
 
-El sistema automatiza la recepción de requerimientos (fotos/PDFs enviados por WhatsApp), la lectura de estos mediante OCR (Reconocimiento Óptico de Caracteres) e IA (Fuzzy Matching), el cotejo con el inventario, y el surtido de órdenes.
+El sistema automatiza la recepción de requisiciones (fotos/PDFs enviados por WhatsApp), la lectura de estos mediante OCR (Reconocimiento Óptico de Caracteres) e IA (Fuzzy Matching), el cotejo con el inventario, y el surtido de requisiciones.
 
 ### Módulos Implementados:
 1.  **Dashboard:** Tarjetas de métricas, acceso rápido a subir requisición y proyección de demanda (faltantes vs stock).
 2.  **Inventario:** CRUD de productos, asignación de categorías, control de stock y precios.
-3.  **Órdenes:** Subida de PDFs/Fotos, procesamiento OCR, cotejo inteligente, estados (BORRADOR, PENDIENTE, PARCIAL, ENTREGADA, CANCELADA), visor de PDF seguro y surtido automático (descuento de stock).
+3.  **Requisiciones:** Subida de PDFs/Fotos, procesamiento OCR, cotejo inteligente, estados (BORRADOR, PENDIENTE, PARCIAL, ENTREGADA, CANCELADA), visor de PDF seguro y surtido automático (descuento de stock).
 4.  **Clientes:** Directorio de mercados y dependencias de gobierno.
 5.  **Proveedores:** Directorio con catálogo de precios por producto (Relación N:M).
-6.  **Compras:** Panel de faltantes consolidados de órdenes activas, selección de proveedor y precio registrado, captura de cantidades, generación de órdenes de compra y recepción de mercancía con actualización de inventario. Desde el detalle de una orden con faltantes existe un botón para abrir el módulo de Compras.
+6.  **Compras:** Panel de faltantes consolidados de requisiciones activas, selección de proveedor y precio registrado, captura de cantidades, generación de órdenes de compra y recepción de mercancía con actualización de inventario. Desde el detalle de una requisición con faltantes existe un botón para abrir el módulo de Compras.
 
 ### Seguridad Implementada:
 *   **RLS (Row Level Security):** Ningún usuario puede ver o modificar datos sin estar autenticado.
@@ -294,26 +294,47 @@ CREATE POLICY "Borrar orden_items" ON public.orden_items FOR DELETE TO authentic
 
 ## 3. Flujos operativos actuales
 
-### Recepción y captura de una orden
-1. En **Órdenes**, se crea un requerimiento desde un PDF o imagen.
+### Recepción y captura de una requisición
+1. En **Requisiciones**, se crea una requisición desde un PDF o imagen.
 2. El archivo se envía mediante la Server Action `subirYProcesarPDF` y se almacena en el bucket privado `pdf-facturas`.
-3. Se registra la orden en `ordenes`, guardando la ruta del archivo en `pdf_path`.
-4. El PDF se procesa desde la lista de órdenes para extraer y cotejar artículos con el catálogo.
+3. Se registra la requisición en `ordenes`, guardando la ruta del archivo en `pdf_path`.
+4. El PDF se procesa desde la lista de requisiciones para extraer y cotejar artículos con el catálogo.
 5. En el detalle se comparan cantidades solicitadas, stock disponible y faltantes.
 
 ### Surtido y compras
-- El detalle de la orden muestra si el inventario permite surtir todos o parte de los artículos.
-- Cuando hay faltantes, el botón **Ir a Compras por el faltante de esta orden** lleva a `/compras?orden=<id>`, que abre Compras en la vista "Por orden" con esa orden ya seleccionada. También aparece en órdenes PARCIALES: el faltante se calcula como lo que queda por surtir después de lo ya surtido y del stock.
-- Compras tiene dos vistas en la pestaña Sugerencias, con interruptor **General | Por orden**:
-  - **General:** faltante consolidado de todas las órdenes activas (`PENDIENTE` y `PARCIAL`), como antes.
-  - **Por orden:** una card por orden activa con cliente, folio, % que ya se puede surtir con el stock actual, lista de faltantes de esa orden, proveedor sugerido (el más barato con precio registrado en `producto_proveedores`) y costo estimado total del faltante. Si un producto no tiene precio registrado, se muestra como "sin precio, pedir por WhatsApp" y no se inventa un costo.
-- Se pueden seleccionar hasta 2 cards. Al hacerlo, el faltante consolidado de la vista General se recalcula solo para esas órdenes, descontando el stock una sola vez por producto, para no comprar de más para las demás órdenes. La selección se puede limpiar con "Limpiar selección".
-- Desde cada card, el botón **Ir a surtir esta orden** lleva al detalle de esa orden para liberarla/surtirla.
-- El surtido parcial se preserva: si piden 10 y hay 6, se surten 6 y la orden queda PARCIAL. La lógica de `surtirOrden()` no cambió en esta fase.
+- El detalle de la requisición muestra si el inventario permite surtir todos o parte de los artículos.
+- Cuando hay faltantes, el botón **Ir a Compras por el faltante de esta requisición** lleva a `/compras?orden=<id>`, que abre Compras en la vista "Por requisición" con esa requisición ya seleccionada. También aparece en requisiciones PARCIALES: el faltante se calcula como lo que queda por surtir después de lo ya surtido y del stock.
+- Compras tiene dos vistas en la pestaña Sugerencias, con interruptor **General | Por requisición**:
+  - **General:** faltante consolidado de todas las requisiciones activas (`PENDIENTE` y `PARCIAL`), como antes.
+  - **Por requisición:** una card por requisición activa con cliente, folio destacado, fecha, % que ya se puede surtir con el stock actual, lista de faltantes de esa requisición, proveedor sugerido (el más barato con precio registrado en `producto_proveedores`) y costo estimado total del faltante. Si un producto no tiene precio registrado, se muestra como "sin precio, pedir por WhatsApp" y no se inventa un costo.
+- Se pueden seleccionar hasta 2 cards. Al hacerlo, el faltante consolidado de la vista General se recalcula solo para esas requisiciones, descontando el stock una sola vez por producto, para no comprar de más para las demás requisiciones. La selección se puede limpiar con "Limpiar selección".
+- Desde cada card, el botón **Ir a surtir esta requisición** lleva al detalle de esa requisición para liberarla/surtirla.
+- El surtido parcial se preserva: si piden 10 y hay 6, se surten 6 y la requisición queda PARCIAL. La lógica de `surtirOrden()` no cambió en esta fase.
 - Al generar una orden de compra se registra en `ordenes_compra` y `orden_compra_items`.
 - La recepción de mercancía registra entradas y actualiza el inventario mediante las acciones del módulo de Compras.
 
-**Alcance actual (Fase 1):** el botón del detalle ya no va al faltante general, va filtrado a esa orden. El módulo mantiene el faltante consolidado general y agrega el desglose por orden; no crea automáticamente una compra exclusiva para una sola orden, pero al seleccionar 1 o 2 órdenes el consolidado se limita a ellas antes de generar la compra.
+**Alcance actual (Fase 1):** el botón del detalle ya no va al faltante general, va filtrado a esa requisición. El módulo mantiene el faltante consolidado general y agrega el desglose por requisición; al seleccionar 1 o 2 requisiciones el consolidado se limita a ellas antes de generar la compra.
+
+### Fase 1b: comprar por requisición, folio nuevo y terminología
+
+- **Comprar faltante de esta requisición:** cada card de la vista "Por requisición" tiene este botón. Abre un diálogo de confirmación con proveedor(es) sugerido(s), artículos, cantidades, precios y total estimado. Agrupa por proveedor y genera una orden de compra por proveedor con la Server Action existente `generarOrdenCompra`, solo con los artículos que sí tienen precio. Los artículos "sin precio, pedir por WhatsApp" NO se compran y se listan en el diálogo. Si ningún artículo tiene precio, no se genera nada y se muestra el aviso. Tras generar, se muestran los folios COM generados.
+- **Folio de requisición:** las requisiciones nuevas llevan folio `REQ-0001`, `REQ-0002`, `REQ-0003`... con CONSECUTIVO GLOBAL en orden de creación (un número nunca se repite; el formato con fecha `REQ-YYMMDD-001` se descartó porque el 001 se repetía cada día). La generación vive en `utils/folioRequisicion.ts` (función pura, con tests) y se usa en `subirYProcesarPDF`: el siguiente número es el máximo sufijo numérico existente entre folios `REQ-...` + 1 (1 si no hay ninguno); si el folio choca con uno existente (único en BD), se reintenta con el siguiente consecutivo. Las requisiciones viejas conservan su folio `ORD-...` hasta que se corra la migración de abajo. El folio se muestra destacado junto al cliente y la fecha en la lista de requisiciones, en el detalle, en el Dashboard y en las cards de Compras.
+- **Terminología (para siempre):** lo que piden los clientes se llama **Requisición / Requisiciones** en toda la UI; lo que se pide a los proveedores se llama **Orden de compra / Órdenes de compra** (internas). En Compras, la pestaña "Órdenes" ahora dice "Órdenes de compra" y sus cards aclaran que son compras a proveedores. Las rutas (`/ordenes`), las tablas (`ordenes`, `ordenes_compra`) y los nombres internos de funciones NO se renombraron, para no romper enlaces ni la app.
+
+### Migración de folios viejos (solo después de fusionar el PR)
+
+Archivo: `supabase/migrations/20261106000000_renombrar_folios_requisiciones_viejas.sql`. Muse no tiene acceso a la base de producción: Alex debe revisarla y correrla él mismo en el SQL Editor de Supabase, solo después de fusionar el PR.
+
+- Actualiza solo los folios viejos `ORD-<6 dígitos>` de `ordenes` a `REQ-0001`, `REQ-0002`... con consecutivo global en orden de `created_at`. Con los datos actuales: `ORD-786179` -> `REQ-0001` y `ORD-699996` -> `REQ-0002`. No toca folios `REQ-...` ni órdenes de compra `COM-...`, ni ningún otro campo.
+- Es idempotente: una segunda corrida no encuentra folios `ORD-...` y no cambia nada. Una fila solo se actualiza si su folio nuevo no existe ya en otra requisición; si está ocupado, esa fila se queda con su folio viejo para revisarla.
+- Antes de correrla, en el SQL Editor: (1) opcional, respaldo con `CREATE TABLE public.ordenes_folios_backup_20261105 AS SELECT id, folio FROM public.ordenes;` (2) correr la consulta de verificación (preview) que viene en el archivo, que muestra folio viejo -> folio nuevo, cliente y fecha, y revisar el mapa. (3) correr el UPDATE del archivo. (4) volver a correr la verificación: ya no debe quedar ningún folio `ORD-<6 dígitos>`.
+
+```sql
+-- Preview (no cambia nada):
+SELECT id, folio AS folio_viejo, 'REQ-' || lpad((row_number() OVER (ORDER BY created_at, id))::text, 4, '0') AS folio_nuevo, created_at FROM ordenes WHERE folio ~ '^ORD-[0-9]{6}$' ORDER BY created_at;
+-- Update (la migración):
+UPDATE ordenes o SET folio = s.folio_nuevo FROM (SELECT id, 'REQ-' || lpad((row_number() OVER (ORDER BY created_at, id))::text, 4, '0') AS folio_nuevo FROM ordenes WHERE folio ~ '^ORD-[0-9]{6}$') s WHERE o.id = s.id AND NOT EXISTS (SELECT 1 FROM ordenes x WHERE x.folio = s.folio_nuevo);
+```
 
 ## 4. Consideraciones de seguridad y mantenimiento
 

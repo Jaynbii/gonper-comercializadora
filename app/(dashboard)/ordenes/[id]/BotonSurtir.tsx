@@ -28,7 +28,7 @@ export default function BotonSurtir({
       router.refresh()
     } catch (error) {
       setErrorMsg(
-        error instanceof Error ? error.message : 'No se pudo surtir la orden.',
+        error instanceof Error ? error.message : 'No se pudo surtir la requisición.',
       )
     } finally {
       setIsLoading(false)
@@ -54,14 +54,14 @@ export default function BotonSurtir({
         ) : (
           <PackageCheck className="h-4 w-4" strokeWidth={1.75} />
         )}
-        {esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+        {esParcial ? 'Surtir parcialmente' : 'Surtir requisición'}
       </button>
 
       <ConfirmDialog
         open={confirmOpen}
-        title={esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+        title={esParcial ? 'Surtir parcialmente' : 'Surtir requisición'}
         description="El inventario se descontará automáticamente."
-        confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir orden'}
+        confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir requisición'}
         pendingLabel="Surtiendo…"
         tono="primary"
         pending={isLoading}
@@ -76,7 +76,7 @@ export default function BotonSurtir({
         {esParcial ? (
           <>
             No hay stock suficiente para todos los artículos. Se surtirá solo lo
-            disponible y la orden quedará como{' '}
+            disponible y la requisición quedará como{' '}
             <strong className="font-semibold">parcial</strong>. ¿Continuar?
           </>
         ) : (

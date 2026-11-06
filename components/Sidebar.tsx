@@ -14,7 +14,7 @@ import {
 const MENU = [
   { name: 'Inicio', path: '/', icon: LayoutDashboard },
   { name: 'Inventario', path: '/inventario', icon: Package },
-  { name: 'Órdenes', path: '/ordenes', icon: FileText },
+  { name: 'Requisiciones', path: '/ordenes', icon: FileText },
   { name: 'Compras', path: '/compras', icon: ShoppingCart },
   { name: 'Proveedores', path: '/proveedores', icon: Factory },
   { name: 'Clientes', path: '/clientes', icon: Building2 },

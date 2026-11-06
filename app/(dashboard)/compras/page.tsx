@@ -59,8 +59,8 @@ type OrdenCompraCruda = {
 export default async function ComprasPage({
   searchParams,
 }: {
-  // ?orden=<id> llega desde el detalle de una orden: abre Compras ya
-  // filtrada a esa orden (vista "Por orden" y card seleccionada).
+  // ?orden=<id> llega desde el detalle de una requisición: abre Compras ya
+  // filtrada a esa requisición (vista "Por requisición" y card seleccionada).
   searchParams?: Promise<{ orden?: string | string[] }>
 }) {
   const supabase = await createClient()
@@ -69,7 +69,7 @@ export default async function ComprasPage({
     ? params.orden[0]
     : params.orden
 
-  // 1. Calcular faltantes (Órdenes activas vs Stock)
+  // 1. Calcular faltantes (Requisiciones activas vs Stock)
   const { data: ordenesActivas } = await supabase
     .from('ordenes')
     .select(
@@ -129,7 +129,7 @@ export default async function ComprasPage({
     }
   })
 
-  // 4. Faltante por orden (Fase 1): una card por orden activa, con su
+  // 4. Faltante por requisición (Fase 1): una card por requisición activa, con su
   // proveedor sugerido (el más barato con precio registrado) y su
   // costo estimado. El surtido parcial se preserva: el % incluye lo
   // ya surtido y lo que hay en stock.

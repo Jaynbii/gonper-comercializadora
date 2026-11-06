@@ -2,6 +2,10 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import {
+  generarFolioRequisicion,
+  siguienteConsecutivo,
+} from '@/utils/folioRequisicion'
 
 export async function subirYProcesarPDF(formData: FormData) {
   try {
@@ -32,26 +36,54 @@ export async function subirYProcesarPDF(formData: FormData) {
       return { error: 'Fallo al subir PDF a Supabase. Revisa la terminal.' }
     }
 
-    // 4. Generar folio para la orden
-    const folio = `ORD-${timestamp.toString().slice(-6)}`
-
-    // 5. Crear la orden en la base de datos guardando SOLO LA RUTA (pdf_path)
-    const { error: dbError } = await supabase
+    // 4. Generar folio para la requisición: REQ-0001, REQ-0002...
+    // con CONSECUTIVO GLOBAL en orden de creación, nunca se repite
+    // (Fase 1b, decisión de Alex). Las viejas conservan su folio
+    // ORD-... hasta que se corra la migración. Si dos subidas chocan
+    // en el mismo folio (único en BD), se reintenta con el siguiente.
+    const { data: foliosReq } = await supabase
       .from('ordenes')
-      .insert({
+      .select('folio')
+      .like('folio', 'REQ-%')
+    let consecutivo = siguienteConsecutivo(
+      (foliosReq || []).map((f: { folio: string }) => f.folio),
+    )
+
+    // 5. Crear la requisición en la base de datos guardando SOLO LA RUTA (pdf_path)
+    let folio = generarFolioRequisicion(consecutivo)
+    let insertado = false
+    let dbError: { code?: string; message: string } | null = null
+    for (let intento = 0; intento < 5 && !insertado; intento++) {
+      const { error } = await supabase.from('ordenes').insert({
         folio,
         cliente_id,
         pdf_path: nombreArchivo, // 👈 Aquí se guarda la ruta del archivo
         estado: 'BORRADOR',
-        created_by: user.id
+        created_by: user.id,
       })
-
-    if (dbError) {
-      console.error('Error DB:', dbError)
-      return { error: `Error al crear la orden en la base de datos: ${dbError.message}` }
+      if (!error) {
+        insertado = true
+        break
+      }
+      // 23505 = folio duplicado (único): probar el siguiente número.
+      if (error.code === '23505') {
+        consecutivo += 1
+        folio = generarFolioRequisicion(consecutivo)
+        dbError = error
+        continue
+      }
+      dbError = error
+      break
     }
 
-    // 6. Refrescar la lista de órdenes para que aparezca la nueva
+    if (!insertado) {
+      console.error('Error DB:', dbError)
+      return {
+        error: `Error al crear la requisición en la base de datos: ${dbError?.message}`,
+      }
+    }
+
+    // 6. Refrescar la lista de requisiciones para que aparezca la nueva
     revalidatePath('/ordenes')
     return { success: true }
 

@@ -91,7 +91,7 @@ export default async function OrdenDetallePage({
   )
 
   // 👇 Faltante real: lo que queda por surtir después de lo ya
-  // surtido y del stock disponible. Así una orden PARCIAL también
+  // surtido y del stock disponible. Así una requisición PARCIAL también
   // puede ir a Compras por lo que le falta (Fase 1).
   const hayFaltantes = items.some((item) => {
     const producto = productoDe(item)
@@ -116,18 +116,21 @@ export default async function OrdenDetallePage({
         className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-120 hover:text-gonper-primary"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-        Volver a órdenes
+        Volver a requisiciones
       </Link>
 
       <header className="card p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="eyebrow">Requerimiento</p>
+            <p className="eyebrow">Requisición</p>
             <h1 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.025em] sm:text-[28px]">
               {nombreCliente(orden.clientes)}
             </h1>
-            <p className="mt-1.5 font-mono text-[11.5px] text-gonper-muted">
-              {orden.folio}
+            <p className="mt-1.5 text-[12px] text-gonper-muted">
+              Folio{' '}
+              <span className="text-[14px] font-semibold text-gonper-text">
+                {orden.folio}
+              </span>
             </p>
             <p className="mt-0.5 text-[12px] text-gonper-muted">
               {fecha.format(new Date(orden.created_at))}
@@ -154,8 +157,8 @@ export default async function OrdenDetallePage({
             ) : (
               <p className="text-[12.5px] text-gonper-muted">
                 {orden.estado === 'CANCELADA'
-                  ? 'Esta orden está cancelada.'
-                  : 'Esta orden ya fue surtida.'}
+                  ? 'Esta requisición está cancelada.'
+                  : 'Esta requisición ya fue surtida.'}
               </p>
             )}
 
@@ -167,7 +170,7 @@ export default async function OrdenDetallePage({
                 className="btn btn-primary w-full sm:w-auto"
               >
                 <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
-                Ir a Compras por el faltante de esta orden
+                Ir a Compras por el faltante de esta requisición
               </Link>
             )}
           </div>
@@ -200,7 +203,7 @@ export default async function OrdenDetallePage({
               Esta orden todavía no tiene artículos
             </p>
             <p className="mt-1 text-[12px] text-gonper-muted">
-              Procesa el PDF desde la lista de órdenes para capturarlos.
+              Procesa el PDF desde la lista de requisiciones para capturarlos.
             </p>
           </div>
         ) : (

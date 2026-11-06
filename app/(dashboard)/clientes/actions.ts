@@ -54,7 +54,7 @@ export async function eliminarCliente(id: string) {
   const { error } = await supabase.from('clientes').delete().eq('id', id)
   
   if (error) {
-    if (error.code === '23503') return { error: 'No se puede eliminar porque tiene órdenes asociadas.' }
+    if (error.code === '23503') return { error: 'No se puede eliminar porque tiene requisiciones asociadas.' }
     return { error: error.message }
   }
 

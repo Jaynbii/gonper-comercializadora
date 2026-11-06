@@ -433,7 +433,7 @@ export default function ProcesarPdfButton({
     )
 
     if (itemsParaGuardar.length === 0) {
-      setErrorRevision('No has seleccionado ningún artículo para agregar a la orden.')
+      setErrorRevision('No has seleccionado ningún artículo para agregar a la requisición.')
       return
     }
 
@@ -503,7 +503,7 @@ export default function ProcesarPdfButton({
           setItemsDetectados(null)
           setErrorRevision('')
         }}
-        title="Revisión del requerimiento"
+        title="Revisión de la requisición"
         description="Corrige lo que el OCR haya leído mal. Las filas nuevas se registran en el catálogo con su unidad."
         size="wide"
         footer={
@@ -770,7 +770,7 @@ export default function ProcesarPdfButton({
                             checked={seleccionado}
                             onChange={() => toggleSeleccion(item.key)}
                           />
-                          Incluir en la orden
+                          Incluir en la requisición
                         </label>
                         <button
                           type="button"

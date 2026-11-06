@@ -138,7 +138,7 @@ export async function guardarItemsEnOrden(
     .update({ estado: 'PENDIENTE' })
     .eq('id', ordenId)
   if (updateError) {
-    throw new Error(`Error al actualizar la orden: ${updateError.message}`)
+    throw new Error(`Error al actualizar la requisición: ${updateError.message}`)
   }
 
   revalidatePath('/ordenes')
@@ -153,12 +153,12 @@ export async function surtirOrden(ordenId: string) {
     if (!user) throw new Error('Usuario no autenticado')
 
     const { data: ordenActual } = await supabase.from('ordenes').select('estado').eq('id', ordenId).single()
-    if (ordenActual?.estado === 'ENTREGADA') throw new Error('Esta orden ya fue surtida y entregada previamente.')
+    if (ordenActual?.estado === 'ENTREGADA') throw new Error('Esta requisición ya fue surtida y entregada previamente.')
 
     const { data: items, error: itemsError } = await supabase
       .from('orden_items').select(`id, cantidad_solicitada, producto_id, productos (nombre, stock_actual)`).eq('orden_id', ordenId)
     if (itemsError) throw new Error(`Error al leer items: ${itemsError.message}`)
-    if (!items || items.length === 0) throw new Error('La orden no tiene items')
+    if (!items || items.length === 0) throw new Error('La requisición no tiene artículos')
 
     let totalSolicitado = 0;
     let totalSurtido = 0;
@@ -194,11 +194,11 @@ export async function surtirOrden(ordenId: string) {
 
     await Promise.all(promesas)
 
-    if (totalSurtido === 0) throw new Error('No hay stock de NINGÚN artículo. No se puede surtir la orden.')
+    if (totalSurtido === 0) throw new Error('No hay stock de NINGÚN artículo. No se puede surtir la requisición.')
 
     const nuevoEstadoOrden = totalSurtido === totalSolicitado ? 'ENTREGADA' : 'PARCIAL';
     const { error: updateError } = await supabase.from('ordenes').update({ estado: nuevoEstadoOrden }).eq('id', ordenId)
-    if (updateError) throw new Error(`Error al actualizar orden: ${updateError.message}`)
+    if (updateError) throw new Error(`Error al actualizar la requisición: ${updateError.message}`)
 
     return { success: true, estado: nuevoEstadoOrden }
   } catch (error: unknown) {

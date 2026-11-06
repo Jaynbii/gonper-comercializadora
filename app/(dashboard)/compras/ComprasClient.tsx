@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Package,
   ReceiptText,
+  ShoppingCart,
   Truck,
   X,
   ArrowUpRight,
@@ -18,6 +19,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import { Badge } from '@/components/EstadoBadge'
 import { generarOrdenCompra, recibirMercancia } from './actions'
 import {
+  agruparCompraPorProveedor,
   consolidarFaltantesSeleccionados,
   type FaltantePorOrden,
 } from '@/utils/faltantesPorOrden'
@@ -88,17 +90,21 @@ function PorOrdenCards({
   ordenes,
   seleccionadas,
   onToggle,
+  onComprar,
+  comprandoId,
 }: {
   ordenes: FaltantePorOrden[]
   seleccionadas: string[]
   onToggle: (ordenId: string) => void
+  onComprar: (orden: FaltantePorOrden) => void
+  comprandoId: string | null
 }) {
   if (ordenes.length === 0) {
     return (
       <div className="card mt-4">
         <EmptyState
           icon={<CheckCircle2 className="h-6 w-6" strokeWidth={1.5} />}
-          title="Sin órdenes activas"
+          title="Sin requisiciones activas"
           description="No hay requisiciones pendientes o parciales por surtir."
         />
       </div>
@@ -125,7 +131,7 @@ function PorOrdenCards({
                   <Badge tono={orden.estado === 'PARCIAL' ? 'warning' : 'warning'}>
                     {orden.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
                   </Badge>
-                  <span className="font-mono text-[11.5px] text-gonper-muted">
+                  <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
                     {orden.folio}
                   </span>
                 </div>
@@ -145,7 +151,7 @@ function PorOrdenCards({
                     type="checkbox"
                     checked={seleccionada}
                     onChange={() => onToggle(orden.ordenId)}
-                    aria-label={`Seleccionar orden ${orden.folio} para comprar su faltante`}
+                    aria-label={`Seleccionar requisición ${orden.folio} para comprar su faltante`}
                   />
                   Elegir para comprar
                 </label>
@@ -153,7 +159,7 @@ function PorOrdenCards({
                   href={`/ordenes/${orden.ordenId}`}
                   className="btn btn-primary shrink-0"
                 >
-                  Ir a surtir esta orden
+                  Ir a surtir esta requisición
                   <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
                 </Link>
               </div>
@@ -161,7 +167,7 @@ function PorOrdenCards({
 
             {orden.faltantes.length === 0 ? (
               <p className="mt-3 border-t border-gonper-border pt-3 text-[12.5px] text-gonper-success">
-                Sin faltantes: esta orden se puede surtir completa con el
+                Sin faltantes: esta requisición se puede surtir completa con el
                 stock actual.
               </p>
             ) : (
@@ -198,6 +204,23 @@ function PorOrdenCards({
                     </span>
                   )}
                 </p>
+                <div className="mt-3 flex flex-col gap-2 border-t border-gonper-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[11.5px] text-gonper-muted">
+                    Compra solo el faltante de esta requisición, con el
+                    proveedor sugerido de cada artículo.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onComprar(orden)}
+                    disabled={comprandoId === orden.ordenId}
+                    className="btn btn-primary shrink-0"
+                  >
+                    <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
+                    {comprandoId === orden.ordenId
+                      ? 'Generando compras…'
+                      : 'Comprar faltante de esta requisición'}
+                  </button>
+                </div>
               </>
             )}
           </article>
@@ -225,8 +248,8 @@ export default function ComprasClient({
   const router = useRouter()
   const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
 
-  // Fase 1 — Vista por orden: si se llega con ?orden=<id> (desde el
-  // detalle de una orden), se abre directamente en "Por orden" con
+  // Fase 1 — Vista por requisición: si se llega con ?orden=<id> (desde el
+  // detalle de una requisición), se abre directamente en "Por requisición" con
   // esa card seleccionada.
   const ordenInicialValida =
     ordenIdInicial &&
@@ -248,7 +271,7 @@ export default function ComprasClient({
       }
       if (prev.length >= 2) {
         setErrorMsg(
-          'Solo puedes elegir hasta 2 órdenes a la vez para no comprar de más.',
+          'Solo puedes elegir hasta 2 requisiciones a la vez para no comprar de más.',
         )
         return prev
       }
@@ -260,8 +283,8 @@ export default function ComprasClient({
   }
 
   // Fase 1 — El faltante consolidado se recalcula solo para las
-  // órdenes seleccionadas (máx. 2). El stock se descuenta una sola
-  // vez por producto, no una vez por orden.
+  // requisiciones seleccionadas (máx. 2). El stock se descuenta una sola
+  // vez por producto, no una vez por requisición.
   const faltantesAMostrar: Faltante[] = (() => {
     if (ordenesSeleccionadas.length === 0) return faltantes
     const seleccionadas = faltantesPorOrden.filter((orden) =>
@@ -380,7 +403,7 @@ export default function ComprasClient({
         generadas.push(res.folio)
         productosGenerados.push(...itemsDelProveedor.map((item) => item.producto_id))
       } catch (error) {
-        const detalle = error instanceof Error ? error.message : 'No se pudo generar la orden.'
+        const detalle = error instanceof Error ? error.message : 'No se pudo generar la orden de compra.'
         errores.push((proveedor?.nombre || 'Proveedor') + ': ' + detalle)
       }
     }
@@ -396,7 +419,7 @@ export default function ComprasClient({
 
     if (errores.length > 0) {
       const resumen = generadas.length > 0
-        ? 'Se generaron ' + generadas.length + ' órdenes (' + generadas.join(', ') + '). '
+        ? 'Se generaron ' + generadas.length + ' órdenes de compra (' + generadas.join(', ') + '). '
         : ''
       setErrorMsg(resumen + 'Errores: ' + errores.join(' | '))
     } else if (generadas.length > 0) {
@@ -404,6 +427,91 @@ export default function ComprasClient({
     }
 
     setGenerandoProveedor(null)
+  }
+
+  // Fase 1b — Comprar el faltante de UNA requisición desde su card.
+  // Agrupa por proveedor sugerido y genera una orden de compra por
+  // proveedor, solo con artículos con precio. Los sin precio NO se
+  // compran: se avisan en el diálogo para pedirlos por WhatsApp.
+  const [requisicionAComprar, setRequisicionAComprar] =
+    useState<FaltantePorOrden | null>(null)
+  const [comprandoRequisicionId, setComprandoRequisicionId] = useState<
+    string | null
+  >(null)
+  const [errorCompra, setErrorCompra] = useState('')
+
+  const compraRequisicion = requisicionAComprar
+    ? agruparCompraPorProveedor(requisicionAComprar.faltantes)
+    : null
+
+  const abrirCompraRequisicion = (orden: FaltantePorOrden) => {
+    if (orden.faltantes.length === 0) return
+    setErrorCompra('')
+    setRequisicionAComprar(orden)
+  }
+
+  const confirmarCompraRequisicion = async () => {
+    if (!requisicionAComprar || !compraRequisicion) return
+    const { grupos, sinPrecio } = compraRequisicion
+    if (grupos.length === 0) {
+      setErrorCompra(
+        'Ningún artículo tiene precio registrado: pídelos por WhatsApp. No se generó ninguna compra.',
+      )
+      return
+    }
+
+    setComprandoRequisicionId(requisicionAComprar.ordenId)
+    setErrorCompra('')
+    setMensaje('')
+
+    const generadas: string[] = []
+    const errores: string[] = []
+    for (const grupo of grupos) {
+      try {
+        const res = await generarOrdenCompra(
+          grupo.proveedorId,
+          grupo.items.map((item) => ({
+            producto_id: item.productoId,
+            cantidad: item.cantidad,
+            precio: item.precioUnitario,
+          })),
+        )
+        generadas.push(`${grupo.proveedorNombre} (${res.folio})`)
+      } catch (error) {
+        const detalle =
+          error instanceof Error
+            ? error.message
+            : 'No se pudo generar la orden de compra.'
+        errores.push(`${grupo.proveedorNombre}: ${detalle}`)
+      }
+    }
+
+    setComprandoRequisicionId(null)
+
+    if (generadas.length > 0) {
+      const avisoSinPrecio =
+        sinPrecio.length > 0
+          ? ` ${sinPrecio.length} ${
+              sinPrecio.length === 1 ? 'artículo' : 'artículos'
+            } sin precio no se compraron (${sinPrecio
+              .map((item) => item.nombre)
+              .join(', ')}): pídelos por WhatsApp.`
+          : ''
+      setMensaje(
+        `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoSinPrecio}`,
+      )
+      setRequisicionAComprar(null)
+      router.refresh()
+    }
+    if (errores.length > 0) {
+      setErrorCompra(
+        (generadas.length > 0
+          ? 'Se generaron algunas compras. '
+          : 'No se pudo generar la compra. ') +
+          'Errores: ' +
+          errores.join(' | '),
+      )
+    }
   }
 
   const abrirRecepcion = (orden: OrdenCompra) => {
@@ -497,7 +605,7 @@ export default function ComprasClient({
               : 'text-gonper-muted hover:text-gonper-text'
           }`}
         >
-          Órdenes
+          Órdenes de compra
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
               tab === 'ordenes'
@@ -545,7 +653,7 @@ export default function ComprasClient({
               Requisiciones pendientes de surtir
             </p>
             <p className="mt-0.5 text-[11.5px] text-gonper-muted">
-              Acceso directo a las órdenes de tus clientes.
+              Acceso directo a las requisiciones de tus clientes.
             </p>
           </div>
           <Badge tono={requisiciones.length > 0 ? 'warning' : 'success'}>
@@ -569,16 +677,17 @@ export default function ComprasClient({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-[13.5px] font-semibold">
-                      {requisicion.folio}
+                      {requisicion.clientes?.nombre || 'Cliente desconocido'}
                     </h2>
                     <Badge tono="warning">
                       {requisicion.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
                     </Badge>
+                    <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+                      {requisicion.folio}
+                    </span>
                   </div>
                   <p className="mt-1 text-[12px] text-gonper-muted">
-                    {requisicion.clientes?.nombre || 'Cliente desconocido'}
-                    {' · '}
-                    {fecha.format(new Date(requisicion.created_at))}
+                    Requisición · {fecha.format(new Date(requisicion.created_at))}
                   </p>
                 </div>
                 <Link
@@ -596,8 +705,8 @@ export default function ComprasClient({
 
       {tab === 'sugerencias' && (
         <div key="sugerencias" className="animate-fade mt-4">
-          {/* Fase 1 — General: faltante consolidado de todas las órdenes.
-              Por orden: una card por orden activa para elegir cuáles
+          {/* Fase 1 — General: faltante consolidado de todas las requisiciones.
+              Por requisición: una card por requisición activa para elegir cuáles
               surtir hoy (máx. 2 seleccionadas). */}
           <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
             <button
@@ -620,7 +729,7 @@ export default function ComprasClient({
                   : 'text-gonper-muted hover:text-gonper-text'
               }`}
             >
-              Por orden
+              Por requisición
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
                   vista === 'por-orden'
@@ -639,8 +748,8 @@ export default function ComprasClient({
                 Faltante calculado solo para{' '}
                 <span className="font-semibold">
                   {ordenesSeleccionadas.length === 1
-                    ? '1 orden seleccionada'
-                    : '2 órdenes seleccionadas'}
+                    ? '1 requisición seleccionada'
+                    : '2 requisiciones seleccionadas'}
                 </span>
                 . Cambia a la vista General para comprar solo eso.
               </p>
@@ -662,13 +771,15 @@ export default function ComprasClient({
               ordenes={faltantesPorOrden}
               seleccionadas={ordenesSeleccionadas}
               onToggle={toggleOrdenSeleccionada}
+              onComprar={abrirCompraRequisicion}
+              comprandoId={comprandoRequisicionId}
             />
           ) : faltantesAMostrar.length === 0 ? (
             <div className="card">
               <EmptyState
                 icon={<CheckCircle2 className="h-6 w-6" strokeWidth={1.5} />}
                 title="Sin faltantes"
-                description="El inventario cubre la demanda de las órdenes activas."
+                description="El inventario cubre la demanda de las requisiciones activas."
               />
             </div>
           ) : (
@@ -927,7 +1038,7 @@ export default function ComprasClient({
               <EmptyState
                 icon={<ReceiptText className="h-6 w-6" strokeWidth={1.5} />}
                 title="Sin órdenes de compra"
-                description="Genera una orden desde las sugerencias para empezar a reponer."
+                description="Genera una orden de compra desde las sugerencias para empezar a reponer."
               />
             </div>
           ) : (
@@ -950,11 +1061,14 @@ export default function ComprasClient({
                             : 'Pendiente'}
                         </Badge>
                       </div>
-                      <p className="mt-1 font-mono text-[11.5px] text-gonper-muted">
-                        {orden.folio} ·{' '}
-                        {fecha.format(new Date(orden.created_at))}
+                      <p className="mt-1 text-[12px] text-gonper-muted">
+                        <span className="font-semibold text-gonper-text">
+                          {orden.folio}
+                        </span>{' '}
+                        · {fecha.format(new Date(orden.created_at))}
                       </p>
                       <p className="mt-1 text-[12px] text-gonper-muted">
+                        Orden de compra interna ·{' '}
                         {orden.orden_compra_items?.length || 0}{' '}
                         {orden.orden_compra_items?.length === 1
                           ? 'producto'
@@ -990,6 +1104,140 @@ export default function ComprasClient({
           )}
         </div>
       )}
+
+      <Modal
+        open={!!requisicionAComprar}
+        onClose={() => {
+          if (comprandoRequisicionId) return
+          setRequisicionAComprar(null)
+          setErrorCompra('')
+        }}
+        title="Comprar faltante de esta requisición"
+        description={
+          requisicionAComprar
+            ? `${requisicionAComprar.clienteNombre} · ${requisicionAComprar.folio} · ${fecha.format(new Date(requisicionAComprar.createdAt))}`
+            : ''
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                if (comprandoRequisicionId) return
+                setRequisicionAComprar(null)
+                setErrorCompra('')
+              }}
+              disabled={comprandoRequisicionId !== null}
+              className="btn btn-quiet flex-1 sm:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarCompraRequisicion}
+              disabled={
+                comprandoRequisicionId !== null ||
+                !compraRequisicion ||
+                compraRequisicion.grupos.length === 0
+              }
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
+              {comprandoRequisicionId
+                ? 'Generando compras…'
+                : 'Confirmar compra'}
+            </button>
+          </>
+        }
+      >
+        {requisicionAComprar && compraRequisicion && (
+          <div className="px-5 py-5">
+            <p className="text-[12.5px] text-gonper-muted">
+              Se genera una orden de compra por proveedor, solo con los
+              artículos que tienen precio registrado.
+            </p>
+
+            {compraRequisicion.grupos.length === 0 ? (
+              <p className="mt-4 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3 py-2 text-[12.5px] text-gonper-warning">
+                Ningún artículo tiene precio registrado: pídelos por
+                WhatsApp. No se generó ninguna compra.
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 space-y-3">
+                  {compraRequisicion.grupos.map((grupo) => (
+                    <div
+                      key={grupo.proveedorId}
+                      className="rounded-[6px] border border-gonper-border bg-gonper-bg/50 p-3"
+                    >
+                      <p className="text-[13px] font-semibold">
+                        {grupo.proveedorNombre}
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {grupo.items.map((item) => (
+                          <li
+                            key={item.productoId}
+                            className="flex items-center justify-between gap-3 text-[12.5px]"
+                          >
+                            <span className="min-w-0">
+                              <span className="font-medium">{item.nombre}</span>{' '}
+                              <span className="text-gonper-muted">
+                                · {numero.format(item.cantidad)} ×{' '}
+                                {moneda.format(item.precioUnitario)}
+                              </span>
+                            </span>
+                            <span className="shrink-0 font-semibold tabular-nums">
+                              {moneda.format(item.subtotal)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 border-t border-gonper-border pt-2 text-right text-[12px] text-gonper-muted">
+                        Subtotal{' '}
+                        <span className="text-[13px] font-semibold tabular-nums text-gonper-text">
+                          {moneda.format(grupo.subtotal)}
+                        </span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-right text-[13px] text-gonper-muted">
+                  Total estimado{' '}
+                  <span className="text-[15px] font-semibold tabular-nums text-gonper-text">
+                    {moneda.format(
+                      compraRequisicion.grupos.reduce(
+                        (acc, grupo) => acc + grupo.subtotal,
+                        0,
+                      ),
+                    )}
+                  </span>
+                </p>
+              </>
+            )}
+
+            {compraRequisicion.sinPrecio.length > 0 && (
+              <div className="mt-4 rounded-[6px] border border-gonper-warning-border bg-gonper-warning-bg px-3 py-2 text-[12.5px] text-gonper-warning">
+                <p className="font-semibold">
+                  Sin precio, no se compran: pedir por WhatsApp
+                </p>
+                <ul className="mt-1 list-disc pl-4">
+                  {compraRequisicion.sinPrecio.map((item) => (
+                    <li key={item.productoId}>
+                      {item.nombre} · faltan {numero.format(item.cantidad)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {errorCompra && (
+              <p className="mt-3 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
+                {errorCompra}
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={!!ordenActiva}
@@ -1077,7 +1325,7 @@ export default function ComprasClient({
                     strokeWidth={1.5}
                   />
                   <p className="mt-2 text-[13px] font-medium">
-                    Esta orden no tiene artículos.
+                    Esta orden de compra no tiene artículos.
                   </p>
                 </div>
               )}

@@ -47,7 +47,7 @@ export default function FaltantesStat({
           Ver detalle
         </p>
         <p className="mt-2 hidden text-[11.5px] leading-tight text-gonper-muted sm:block lg:text-[12.5px]">
-          {conFaltante.length > 0 ? 'Según órdenes activas' : 'Inventario suficiente'}
+          {conFaltante.length > 0 ? 'Según requisiciones activas' : 'Inventario suficiente'}
         </p>
       </button>
 
@@ -58,7 +58,7 @@ export default function FaltantesStat({
         description={`${conFaltante.length} ${
           conFaltante.length === 1 ? 'producto' : 'productos'
         } · ${ordenesActivas} ${
-          ordenesActivas === 1 ? 'orden activa' : 'órdenes activas'
+          ordenesActivas === 1 ? 'requisición activa' : 'requisiciones activas'
         }`}
         footer={
           <button
@@ -74,7 +74,7 @@ export default function FaltantesStat({
           <div className="px-5 py-12 text-center">
             <p className="text-[13.5px] font-medium">Sin demanda pendiente</p>
             <p className="mt-1 text-[12.5px] text-gonper-muted">
-              No hay órdenes activas que requieran inventario.
+              No hay requisiciones activas que requieran inventario.
             </p>
           </div>
         ) : (

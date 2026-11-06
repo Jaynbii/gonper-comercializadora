@@ -1,0 +1,54 @@
+-- Migración de folios viejos de requisiciones (Gonper, Fase 1b).
+--
+-- QUÉ HACE
+--   Actualiza solo los folios viejos con formato ORD-<6 dígitos> de la
+--   tabla public.ordenes a REQ-0001, REQ-0002, ... con CONSECUTIVO
+--   GLOBAL en orden de created_at (nunca se repite un número).
+--   Con los datos actuales de producción eso da:
+--     ORD-786179 -> REQ-0001 (la más antigua, 4 nov 2026)
+--     ORD-699996 -> REQ-0002 (5 nov 2026)
+--
+-- QUÉ NO TOCA
+--   - No toca los folios que ya sean REQ-... ni las órdenes de compra
+--     COM-... (esas viven en ordenes_compra, otra tabla).
+--   - No cambia ningún otro campo, ni surtirOrden(), ni el stock.
+--
+-- IDEMPOTENTE
+--   Solo actualiza folios que empiecen por ORD- + 6 dígitos. Si se corre
+--   dos veces, la segunda no encuentra nada que cambiar. Además, una fila
+--   solo se actualiza si su folio nuevo no existe ya en otra requisición
+--   (NOT EXISTS): si ese número ya está ocupado por una requisición REQ-...
+--   creada después de fusionar el PR, esa fila vieja se queda con su
+--   folio ORD-... y se puede revisar con la consulta de verificación.
+--
+-- CÓMO CORRERLA (Alex, en Supabase, SOLO DESPUÉS de fusionar el PR
+-- y de revisar esta migración; Muse no tiene acceso a la base de
+-- producción y no la corre por ti):
+--   1. Supabase Dashboard -> SQL Editor -> New query.
+--   2. OPCIONAL pero recomendado, respaldo antes de correrla:
+--        CREATE TABLE public.ordenes_folios_backup_20261105
+--        AS SELECT id, folio FROM public.ordenes;
+--   3. Primero corre la consulta de VERIFICACIÓN (preview) de abajo y
+--      revisa el mapa folio viejo -> folio nuevo.
+--   4. Pega y corre TODO este archivo (el UPDATE es la migración).
+--   5. Vuelve a correr la verificación: ya no debe quedar ningún
+--      folio ORD-<6 dígitos> y los nuevos deben ser REQ-0001, REQ-0002...
+--
+-- VERIFICACIÓN (preview, no cambia nada; córrela antes y después):
+--   SELECT id, folio AS folio_viejo,
+--     'REQ-' || lpad((row_number() OVER (ORDER BY created_at, id))::text, 4, '0') AS folio_nuevo,
+--     created_at FROM ordenes
+--   WHERE folio ~ '^ORD-[0-9]{6}$' ORDER BY created_at;
+--
+--   Después de la migración, esta consulta debe dar 0 filas:
+--   SELECT id, folio, created_at FROM ordenes
+--   WHERE folio ~ '^ORD-[0-9]{6}$' ORDER BY created_at;
+
+-- Preview (no cambia nada): folio viejo -> folio nuevo, en orden de created_at.
+SELECT id, folio AS folio_viejo, 'REQ-' || lpad((row_number() OVER (ORDER BY created_at, id))::text, 4, '0') AS folio_nuevo, created_at FROM ordenes WHERE folio ~ '^ORD-[0-9]{6}$' ORDER BY created_at;
+
+-- Migración: actualiza solo folios ORD-<6 dígitos> a REQ-0001, REQ-0002...
+-- Idempotente: una segunda corrida no encuentra folios ORD-... y no
+-- cambia nada. El NOT EXISTS evita chocar con un folio REQ-... que ya
+-- exista (esa fila se deja con su folio viejo para revisarla).
+UPDATE ordenes o SET folio = s.folio_nuevo FROM (SELECT id, 'REQ-' || lpad((row_number() OVER (ORDER BY created_at, id))::text, 4, '0') AS folio_nuevo FROM ordenes WHERE folio ~ '^ORD-[0-9]{6}$') s WHERE o.id = s.id AND NOT EXISTS (SELECT 1 FROM ordenes x WHERE x.folio = s.folio_nuevo);

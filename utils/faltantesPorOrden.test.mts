@@ -5,6 +5,7 @@ import {
   calcularFaltantePorOrden,
   consolidarFaltantesSeleccionados,
   proveedorSugerido,
+  agruparCompraPorProveedor,
 } from './faltantesPorOrden.ts'
 
 const productos = new Map([
@@ -108,6 +109,61 @@ test('al consolidar dos órdenes el stock se descuenta una sola vez', () => {
 
   // Demanda 20 - stock 6 = 14, no 4 + 4 = 8.
   assert.deepEqual(consolidado, [{ productoId: 'prod-papel', faltante: 14 }])
+})
+
+test('agruparCompraPorProveedor junta por proveedor y aparta los sin precio', () => {
+  const orden = calcularFaltantePorOrden({
+    ordenId: 'ord-1',
+    folio: 'REQ-0001',
+    clienteNombre: 'Ingresos',
+    estado: 'PENDIENTE',
+    createdAt: '2026-11-05',
+    items: [
+      { productoId: 'prod-papel', cantidadSolicitada: 10, cantidadSurtida: 0 },
+      { productoId: 'prod-jabon', cantidadSolicitada: 5, cantidadSurtida: 0 },
+    ],
+    productos,
+    preciosPorProducto: precios,
+  })
+
+  const { grupos, sinPrecio } = agruparCompraPorProveedor(orden.faltantes)
+
+  // Papel: faltan 4 a $80 de MazLimpio. Jabón: sin precio.
+  assert.equal(grupos.length, 1)
+  assert.equal(grupos[0].proveedorNombre, 'MazLimpio')
+  assert.equal(grupos[0].subtotal, 320)
+  assert.deepEqual(grupos[0].items, [
+    {
+      productoId: 'prod-papel',
+      nombre: 'Papel para manos',
+      cantidad: 4,
+      precioUnitario: 80,
+      subtotal: 320,
+    },
+  ])
+  assert.deepEqual(sinPrecio, [
+    { productoId: 'prod-jabon', nombre: 'Jabón líquido', cantidad: 5 },
+  ])
+})
+
+test('agruparCompraPorProveedor con todo sin precio no genera grupos', () => {
+  const { grupos, sinPrecio } = agruparCompraPorProveedor([
+    {
+      productoId: 'prod-jabon',
+      nombre: 'Jabón líquido',
+      sku: 'ART0002',
+      unidadMedida: 'GALON',
+      cantidadSolicitada: 5,
+      cantidadSurtida: 0,
+      pendiente: 5,
+      enStock: 0,
+      faltante: 5,
+      proveedorSugerido: null,
+      costoEstimado: null,
+    },
+  ])
+  assert.deepEqual(grupos, [])
+  assert.equal(sinPrecio.length, 1)
 })
 
 test('proveedorSugerido ignora precios en cero y elige el más barato', () => {
