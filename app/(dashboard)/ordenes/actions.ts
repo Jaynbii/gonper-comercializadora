@@ -3,6 +3,7 @@
 import { createClient, generarNuevoSku } from '@/utils/supabase/server' // 👈 Importamos generarNuevoSku
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
+import { buscarProductoSimilarPorNombre, type ProductoCatalogo } from '@/utils/vincularProductos'
 import { surtirConCliente, type ResultadoSurtido } from '@/utils/surtir'
 
 type ItemDetectado = {
@@ -45,15 +46,24 @@ export async function registrarProductoEnInventario(item: ItemDetectado) {
   if (!codigo_sat) throw new Error('El artículo no tiene código SAT de referencia.')
   if (!nombre) throw new Error('El artículo no tiene descripción.')
 
-  // 🛡️ FRENO DE MANO: Buscamos si el código SAT ya existe en el inventario
-  const { data: existeSat } = await supabase
+  // 🛡️ FRENO DE MANO: el código SAT es una CLASE, no la identidad del
+  // producto — dos artículos distintos pueden compartirlo (Factura A570:
+  // 14111704 es "Papel P/wc Jumbo Junior" y también "Papel para Manos en
+  // Rollo"). Solo bloqueamos cuando YA existe un producto con ese código
+  // SAT *y* un nombre similar; mismo código + nombre distinto sí se
+  // puede registrar.
+  const { data: mismoSat } = await supabase
     .from('productos')
     .select('*')
     .eq('codigo_sat', codigo_sat)
-    .maybeSingle()
 
-  if (existeSat) {
-    throw new Error(`Este producto ya existe en tu inventario como "${existeSat.nombre}" (${existeSat.sku}). Por favor, usa la sugerencia en lugar de registrar uno nuevo.`)
+  const duplicado = buscarProductoSimilarPorNombre(
+    nombre,
+    ((mismoSat ?? []) as ProductoCatalogo[]),
+  )
+
+  if (duplicado) {
+    throw new Error(`Este producto ya existe en tu inventario como "${duplicado.nombre}" (${duplicado.sku}). Por favor, usa la sugerencia en lugar de registrar uno nuevo.`)
   }
 
   // 🏷️ GENERAMOS EL NUEVO SKU INTERNO (ARTXXXX)
@@ -76,12 +86,19 @@ export async function registrarProductoEnInventario(item: ItemDetectado) {
   if (error) {
     // En caso de que alguien más lo haya registrado exactamente al mismo tiempo
     if (error.code === '23505') {
-      const { data: recienCreado } = await supabase
+      const { data: mismoSat } = await supabase
         .from('productos')
         .select('*')
         .eq('codigo_sat', codigo_sat)
-        .maybeSingle()
+      // Solo devolvemos el recién creado si es el MISMO producto (nombre
+      // similar); si otro artículo con el mismo código SAT se registró
+      // antes, no es este producto y no se devuelve.
+      const recienCreado = buscarProductoSimilarPorNombre(
+        nombre,
+        ((mismoSat ?? []) as ProductoCatalogo[]),
+      )
       if (recienCreado) return recienCreado
+      throw new Error('Otro producto con ese código SAT se registró al mismo tiempo. Vuelve a intentarlo.')
     }
     throw new Error(error.message)
   }
