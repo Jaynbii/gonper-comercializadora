@@ -44,10 +44,10 @@
 :root {
   --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-fast: cubic-bezier(0.4, 0, 1, 1);
-  --dur-1: 120ms;
-  --dur-2: 180ms;
-  --dur-3: 240ms;
-  --dur-4: 320ms;
+  --dur-1: 160ms;
+  --dur-2: 240ms;
+  --dur-3: 320ms;
+  --dur-4: 420ms;
 }
 
 @layer base {
@@ -97,7 +97,7 @@
   }
 
   .btn {
-    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] font-medium transition-[color,background-color,border-color,transform,box-shadow] duration-[120ms] ease-out active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
+    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] font-medium transition-[color,background-color,border-color,transform,box-shadow] duration-200 ease-out active:scale-[0.94] disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
   }
 
   .btn-primary {
@@ -109,7 +109,7 @@
   }
 
   .btn-icon {
-    @apply grid h-10 w-10 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-[120ms] ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-95 sm:h-8 sm:w-8;
+    @apply grid h-10 w-10 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-200 ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-90 sm:h-8 sm:w-8;
   }
 
   .badge {
@@ -127,7 +127,7 @@
   }
 
   .field {
-    @apply h-11 w-full rounded-[10px] border border-gonper-border bg-gonper-surface px-3 text-[14px] text-gonper-text transition-[border-color,box-shadow,background-size] duration-[120ms] placeholder:text-gonper-muted/70 hover:border-gonper-muted/45 focus:border-gonper-primary focus:outline-none focus:ring-2 focus:ring-gonper-primary/15 sm:h-10;
+    @apply h-11 w-full rounded-[10px] border border-gonper-border bg-gonper-surface px-3 text-[14px] text-gonper-text transition-[border-color,box-shadow,background-size] duration-200 placeholder:text-gonper-muted/70 hover:border-gonper-muted/45 focus:border-gonper-primary focus:outline-none focus:ring-2 focus:ring-gonper-primary/15 sm:h-10;
   }
 
   .field-label {
@@ -186,7 +186,7 @@
     stroke-linejoin: round;
     stroke-dasharray: 24;
     stroke-dashoffset: 24;
-    transition: stroke-dashoffset var(--dur-3) var(--ease-out-quint) 40ms;
+    transition: stroke-dashoffset var(--dur-4) var(--ease-out-quint) 60ms;
   }
 
   .peer:checked + .check-box {
@@ -199,7 +199,7 @@
   }
 
   .peer:active + .check-box {
-    transform: scale(0.92);
+    transform: scale(0.88);
   }
 
   .peer:focus-visible + .check-box {
@@ -256,7 +256,7 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -276,7 +276,7 @@
 @keyframes menu-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-6px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -285,21 +285,21 @@
 }
 
 .animate-page {
-  animation: fade 180ms var(--ease-out-quint) both;
+  animation: fade 260ms var(--ease-out-quint) both;
 }
 
 .animate-fade {
-  animation: fade 200ms var(--ease-out-quint) both;
+  animation: fade 280ms var(--ease-out-quint) both;
 }
 
 .animate-fab {
-  animation: fab-in 260ms var(--ease-out-quint) both;
+  animation: fab-in 340ms var(--ease-out-quint) both;
 }
 
 @keyframes fab-in {
   from {
     opacity: 0;
-    transform: scale(0.9) translateY(8px);
+    transform: scale(0.85) translateY(12px);
   }
   to {
     opacity: 1;
@@ -308,24 +308,24 @@
 }
 
 .stagger > * {
-  animation: rise 280ms var(--ease-out-quint) both;
+  animation: rise 360ms var(--ease-out-quint) both;
 }
 
-.stagger > *:nth-child(2) { animation-delay: 35ms; }
-.stagger > *:nth-child(3) { animation-delay: 70ms; }
-.stagger > *:nth-child(4) { animation-delay: 105ms; }
-.stagger > *:nth-child(5) { animation-delay: 140ms; }
-.stagger > *:nth-child(6) { animation-delay: 175ms; }
-.stagger > *:nth-child(7) { animation-delay: 210ms; }
-.stagger > *:nth-child(8) { animation-delay: 245ms; }
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+.stagger > *:nth-child(7) { animation-delay: 300ms; }
+.stagger > *:nth-child(8) { animation-delay: 350ms; }
 
 
 .animate-rise {
-  animation: rise 320ms var(--ease-out-quint) both;
+  animation: rise 400ms var(--ease-out-quint) both;
 }
 
 .animate-menu {
-  animation: menu-in 160ms var(--ease-out-quint) both;
+  animation: menu-in 220ms var(--ease-out-quint) both;
   transform-origin: top right;
 }
 
@@ -344,7 +344,7 @@ dialog.modal-panel {
   overflow: hidden;
   box-shadow: var(--shadow-pop);
   opacity: 0;
-  transform: translateY(10px) scale(0.985);
+  transform: translateY(16px) scale(0.97);
   transition:
     opacity var(--dur-3) var(--ease-out-quint),
     transform var(--dur-3) var(--ease-out-quint),
@@ -366,7 +366,7 @@ dialog.modal-panel.modal-wide {
 @starting-style {
   dialog.modal-panel[open] {
     opacity: 0;
-    transform: translateY(10px) scale(0.985);
+    transform: translateY(16px) scale(0.97);
   }
 }
 
