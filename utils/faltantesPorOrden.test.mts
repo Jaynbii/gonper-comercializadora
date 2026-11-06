@@ -8,6 +8,7 @@ import {
   agruparCompraPorProveedor,
   esMismaCompra,
   agruparComprasPorRequisicion,
+  resumenCarpetaCompras,
   construirItemsRecepcion,
   puedeEliminarOrdenCompra,
 } from './faltantesPorOrden.ts'
@@ -234,6 +235,56 @@ test('agruparComprasPorRequisicion: un grupo por requisición y "Sin requisició
     grupos.map((g) => g.ordenes.map((o) => o.id)),
     [['c1', 'c3'], ['c4'], ['c2', 'c5']],
   )
+})
+
+test('resumenCarpetaCompras: 4 o menos se ven todas y el total es la suma', () => {
+  const resumen = resumenCarpetaCompras([
+    { id: 'c1', total_estimado: 340 },
+    { id: 'c2', total_estimado: '233' },
+    { id: 'c3', total_estimado: 460 },
+  ])
+  assert.equal(resumen.totalEstimado, 1033)
+  assert.deepEqual(
+    resumen.visibles.map((o) => o.id),
+    ['c1', 'c2', 'c3'],
+  )
+  assert.equal(resumen.restantes, 0)
+})
+
+test('resumenCarpetaCompras: con más de 4 se ven 3 y el resto va en "+N"', () => {
+  const ordenes = Array.from({ length: 21 }, (_, i) => ({
+    id: `c${i + 1}`,
+    total_estimado: 100,
+  }))
+  const resumen = resumenCarpetaCompras(ordenes)
+  assert.equal(resumen.totalEstimado, 2100)
+  assert.deepEqual(
+    resumen.visibles.map((o) => o.id),
+    ['c1', 'c2', 'c3'],
+  )
+  assert.equal(resumen.restantes, 18)
+})
+
+test('resumenCarpetaCompras: sin órdenes el total es 0', () => {
+  const resumen = resumenCarpetaCompras([])
+  assert.equal(resumen.totalEstimado, 0)
+  assert.deepEqual(resumen.visibles, [])
+  assert.equal(resumen.restantes, 0)
+})
+
+test('agruparComprasPorRequisicion: sin compras sin vínculo no hay carpeta "Sin requisición"', () => {
+  const req3 = { id: 'r3', folio: 'REQ-0003', clienteNombre: 'Aseo Urbano' }
+  // Si Alex borra las 21 compras viejas sin requisición, el grupo
+  // no existe y la carpeta no se muestra (no queda una carpeta vacía).
+  const grupos = agruparComprasPorRequisicion([
+    { id: 'c1', requisicion: req3 },
+    { id: 'c2', requisicion: req3 },
+  ])
+  assert.deepEqual(
+    grupos.map((g) => g.requisicion?.folio ?? null),
+    ['REQ-0003'],
+  )
+  assert.equal(grupos.every((g) => g.ordenes.length > 0), true)
 })
 
 test('construirItemsRecepcion: recibe por lo solicitado, solo artículos de la orden generada', () => {

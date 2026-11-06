@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   AlertCircle,
   CheckCircle2,
+  Folder,
   MoreHorizontal,
   Package,
   ReceiptText,
@@ -27,7 +28,9 @@ import {
   consolidarFaltantesSeleccionados,
   construirItemsRecepcion,
   puedeEliminarOrdenCompra,
+  resumenCarpetaCompras,
   type FaltantePorOrden,
+  type GrupoComprasPorRequisicion,
 } from '@/utils/faltantesPorOrden'
 
 type Proveedor = {
@@ -430,6 +433,94 @@ function MenuOrdenCompra({
   )
 }
 
+// Card de una orden de compra: se usa dentro del modal de su
+// carpeta. Lleva todo lo que llevaba en la lista plana: proveedor,
+// estado, folio, fecha y productos, a qué requisición pertenece,
+// total estimado, Recibir si está Pendiente y el menú "..." de
+// eliminar (solo admin, solo Pendiente).
+function TarjetaOrdenCompra({
+  orden,
+  esAdmin,
+  onEliminar,
+  onRecibir,
+}: {
+  orden: OrdenCompra
+  esAdmin: boolean
+  onEliminar: (orden: OrdenCompra) => void
+  onRecibir: (orden: OrdenCompra) => void
+}) {
+  return (
+    <article className="card flex flex-col p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+          {orden.proveedores?.nombre || 'Proveedor'}
+        </h2>
+        <Badge tono={orden.estado === 'RECIBIDA' ? 'success' : 'warning'}>
+          {orden.estado === 'RECIBIDA' ? 'Recibida' : 'Pendiente'}
+        </Badge>
+        <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+          {orden.folio}
+        </span>
+        {/* Eliminar va anidado en el menú "...", no como botón
+            visible: la acción principal de la card sigue siendo
+            Recibir. Solo admin y solo si la orden está Pendiente;
+            una Recibida no se puede borrar porque el stock ya subió. */}
+        {puedeEliminarOrdenCompra(orden.estado, esAdmin) && (
+          <MenuOrdenCompra
+            orden={orden}
+            onEliminar={(ordenElegida) => {
+              onEliminar(ordenElegida)
+            }}
+          />
+        )}
+      </div>
+      <p className="mt-1 text-[12px] text-gonper-muted">
+        {fecha.format(new Date(orden.created_at))} ·{' '}
+        {orden.orden_compra_items?.length || 0}{' '}
+        {orden.orden_compra_items?.length === 1 ? 'producto' : 'productos'}
+      </p>
+      {orden.requisicion ? (
+        <p className="mt-1 text-[12.5px]">
+          Para{' '}
+          <Link
+            href={`/ordenes/${orden.requisicion.id}`}
+            className="font-semibold text-gonper-primary hover:underline"
+          >
+            {orden.requisicion.folio}
+          </Link>{' '}
+          · {orden.requisicion.clienteNombre}
+        </p>
+      ) : (
+        <p className="mt-1 text-[12.5px] text-gonper-muted">
+          Sin requisición vinculada
+        </p>
+      )}
+
+      <div className="mt-auto flex items-end justify-between gap-3 border-t border-gonper-border pt-3">
+        <div>
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
+            Total estimado
+          </p>
+          <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
+            {moneda.format(Number(orden.total_estimado))}
+          </p>
+        </div>
+
+        {orden.estado === 'PENDIENTE' && (
+          <button
+            type="button"
+            onClick={() => onRecibir(orden)}
+            className="btn btn-primary shrink-0"
+          >
+            <Truck className="h-4 w-4" strokeWidth={1.75} />
+            Recibir
+          </button>
+        )}
+      </div>
+    </article>
+  )
+}
+
 export default function ComprasClient({
   faltantes,
   proveedores,
@@ -568,6 +659,15 @@ export default function ComprasClient({
   >({})
   const [isReceiving, setIsReceiving] = useState(false)
   const [errorRecepcion, setErrorRecepcion] = useState('')
+
+  // Carpeta abierta en la pestaña "Órdenes de compra": el id de la
+  // requisición del grupo, o 'sin-requisicion'. La carpeta se deriva
+  // de ordenesCompra en cada render, así que si una orden se recibe
+  // o se elimina con el modal abierto, el contenido se actualiza
+  // solo; si la carpeta queda vacía, el modal se cierra solo.
+  const [carpetaAbiertaId, setCarpetaAbiertaId] = useState<string | null>(
+    null,
+  )
 
   // Eliminar una orden de compra (solo admin, solo Pendiente, desde
   // el menú "..." de la card). El ConfirmDialog pide confirmación;
@@ -899,6 +999,26 @@ export default function ComprasClient({
   const proveedoresSeleccionados = Array.from(
     new Set(Object.values(itemsSeleccionados).map((item) => item.proveedorId)),
   )
+
+  // Carpetas de órdenes de compra (estilo carpetas de Android): un
+  // grupo por requisición, y al final el grupo "Sin requisición"
+  // para las compras viejas o generadas desde la vista General.
+  // Una carpeta sin órdenes no se muestra: Alex está borrando las
+  // 21 compras viejas sin requisición en Supabase, así que esa
+  // carpeta desaparecerá sola cuando se quede vacía (y si el modal
+  // estaba abierto en ella, se cierra solo).
+  const gruposCompras: GrupoComprasPorRequisicion<OrdenCompra>[] =
+    agruparComprasPorRequisicion(ordenesCompra).filter(
+      (grupo) => grupo.ordenes.length > 0,
+    )
+  const carpetaAbierta =
+    carpetaAbiertaId === null
+      ? null
+      : (gruposCompras.find(
+          (grupo) =>
+            (grupo.requisicion?.id ?? 'sin-requisicion') ===
+            carpetaAbiertaId,
+        ) ?? null)
 
   return (
     <div className="mx-auto max-w-[1180px] pb-6">
@@ -1352,134 +1472,158 @@ export default function ComprasClient({
               />
             </div>
           ) : (
-            // Fase 1c ampliada — Órdenes de compra en cards claras,
-            // agrupadas por la requisición para la que se generaron
-            // ("Para REQ-... · cliente"); las viejas y las generadas
-            // desde la vista General van en el grupo "Sin requisición".
-            <div className="space-y-5">
-              {agruparComprasPorRequisicion(ordenesCompra).map((grupo) => (
-                <section key={grupo.requisicion?.id ?? 'sin-requisicion'}>
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    {grupo.requisicion ? (
-                      <>
-                        <p className="text-[14px] font-semibold tracking-[-0.01em]">
-                          Para{' '}
-                          <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
-                            {grupo.requisicion.folio}
-                          </span>{' '}
-                          · {grupo.requisicion.clienteNombre}
-                        </p>
-                        <Link
-                          href={`/ordenes/${grupo.requisicion.id}`}
-                          className="btn btn-quiet w-full justify-center sm:w-auto sm:shrink-0"
-                        >
-                          Ver requisición
-                          <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-[14px] font-semibold tracking-[-0.01em]">
-                          Sin requisición
-                        </p>
-                        <p className="text-[11.5px] text-gonper-muted">
-                          Compras viejas o generadas desde la vista General,
-                          sin requisición vinculada.
-                        </p>
-                      </>
-                    )}
-                    <Badge tono="warning">{grupo.ordenes.length}</Badge>
-                  </div>
+            // Carpetas por requisición (estilo carpetas de Android):
+            // una carpeta por requisición con sus compras como
+            // miniaturas dentro; al tocarla se abre el modal con
+            // zoom. Las compras viejas y las generadas desde la
+            // vista General van en la carpeta "Sin requisición"
+            // porque la base de datos no guarda a qué requisición
+            // pertenecían (requisition_id NULL).
+            <div className="stagger grid grid-cols-2 gap-3 md:grid-cols-3">
+              {gruposCompras.map((grupo) => {
+                const clave = grupo.requisicion?.id ?? 'sin-requisicion'
+                const resumen = resumenCarpetaCompras(grupo.ordenes)
+                const titulo = grupo.requisicion
+                  ? grupo.requisicion.folio
+                  : 'Sin requisición'
+                const subtitulo = grupo.requisicion
+                  ? grupo.requisicion.clienteNombre
+                  : 'Compras viejas o de la vista General'
+                return (
+                  <button
+                    key={clave}
+                    type="button"
+                    onClick={() => setCarpetaAbiertaId(clave)}
+                    aria-label={`Abrir carpeta ${titulo} · ${subtitulo}, ${grupo.ordenes.length} ${grupo.ordenes.length === 1 ? 'orden de compra' : 'órdenes de compra'}`}
+                    className="card flex min-h-11 flex-col gap-2.5 p-3 text-left transition-[transform,box-shadow] duration-200 ease-out hover:shadow-raise active:scale-[0.97]"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-gonper-success-bg text-gonper-primary"
+                      >
+                        <Folder className="h-5 w-5" strokeWidth={1.75} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13.5px] font-semibold tracking-[-0.01em]">
+                          {titulo}
+                        </span>
+                        <span className="block truncate text-[11.5px] text-gonper-muted">
+                          {subtitulo}
+                        </span>
+                      </span>
+                    </span>
 
-                  <div className="stagger grid grid-cols-1 gap-3 md:grid-cols-2">
-                    {grupo.ordenes.map((orden) => (
-                      <article key={orden.id} className="card flex flex-col p-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+                    <span
+                      aria-hidden="true"
+                      className="grid grid-cols-2 gap-1.5"
+                    >
+                      {resumen.visibles.map((orden) => (
+                        <span
+                          key={orden.id}
+                          className="min-w-0 rounded-[6px] bg-gonper-surface-muted px-2 py-1.5"
+                        >
+                          <span className="block truncate text-[11px] font-semibold leading-tight">
                             {orden.proveedores?.nombre || 'Proveedor'}
-                          </h2>
-                          <Badge
-                            tono={
-                              orden.estado === 'RECIBIDA' ? 'success' : 'warning'
-                            }
-                          >
-                            {orden.estado === 'RECIBIDA'
-                              ? 'Recibida'
-                              : 'Pendiente'}
-                          </Badge>
-                          <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+                          </span>
+                          <span className="block truncate text-[10.5px] tabular-nums text-gonper-muted">
                             {orden.folio}
                           </span>
-                          {/* Eliminar va anidado en el menú "...", no como
-                              botón visible: la acción principal de la
-                              card sigue siendo Recibir. Solo admin y
-                              solo si la orden está Pendiente; una
-                              Recibida no se puede borrar porque el
-                              stock ya subió. */}
-                          {puedeEliminarOrdenCompra(orden.estado, esAdmin) && (
-                            <MenuOrdenCompra
-                              orden={orden}
-                              onEliminar={(ordenElegida) => {
-                                setErrorEliminar('')
-                                setOrdenAEliminar(ordenElegida)
-                              }}
-                            />
-                          )}
-                        </div>
-                        <p className="mt-1 text-[12px] text-gonper-muted">
-                          {fecha.format(new Date(orden.created_at))} ·{' '}
-                          {orden.orden_compra_items?.length || 0}{' '}
-                          {orden.orden_compra_items?.length === 1
-                            ? 'producto'
-                            : 'productos'}
-                        </p>
-                        {orden.requisicion ? (
-                          <p className="mt-1 text-[12.5px]">
-                            Para{' '}
-                            <Link
-                              href={`/ordenes/${orden.requisicion.id}`}
-                              className="font-semibold text-gonper-primary hover:underline"
-                            >
-                              {orden.requisicion.folio}
-                            </Link>{' '}
-                            · {orden.requisicion.clienteNombre}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-[12.5px] text-gonper-muted">
-                            Sin requisición vinculada
-                          </p>
-                        )}
+                        </span>
+                      ))}
+                      {resumen.restantes > 0 && (
+                        <span className="grid min-h-[34px] place-items-center rounded-[6px] bg-gonper-surface-muted text-[12px] font-semibold text-gonper-primary">
+                          +{resumen.restantes}
+                        </span>
+                      )}
+                    </span>
 
-                        <div className="mt-auto flex items-end justify-between gap-3 border-t border-gonper-border pt-3">
-                          <div>
-                            <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
-                              Total estimado
-                            </p>
-                            <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
-                              {moneda.format(Number(orden.total_estimado))}
-                            </p>
-                          </div>
-
-                          {orden.estado === 'PENDIENTE' && (
-                            <button
-                              type="button"
-                              onClick={() => abrirRecepcion(orden)}
-                              className="btn btn-primary shrink-0"
-                            >
-                              <Truck className="h-4 w-4" strokeWidth={1.75} />
-                              Recibir
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
+                    <span className="mt-auto flex items-baseline justify-between gap-2 border-t border-gonper-border pt-2">
+                      <span className="text-[11.5px] text-gonper-muted">
+                        {grupo.ordenes.length}{' '}
+                        {grupo.ordenes.length === 1 ? 'orden' : 'órdenes'}
+                      </span>
+                      <span className="text-[12.5px] font-semibold tabular-nums">
+                        {moneda.format(resumen.totalEstimado)}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
       )}
+
+      {/* Modal de la carpeta: se abre con zoom al tocar una carpeta.
+          Dentro van las compras de esa carpeta como cards completas
+          (con su requisición, Recibir y el menú "..."). Se cierra
+          con la X, tocando fuera o con Escape (diálogo nativo). */}
+      <Modal
+        open={carpetaAbierta !== null}
+        onClose={() => setCarpetaAbiertaId(null)}
+        variant="zoom"
+        title={
+          carpetaAbierta?.requisicion
+            ? `${carpetaAbierta.requisicion.folio} · ${carpetaAbierta.requisicion.clienteNombre}`
+            : 'Sin requisición'
+        }
+        description={
+          carpetaAbierta
+            ? `${carpetaAbierta.ordenes.length} ${
+                carpetaAbierta.ordenes.length === 1
+                  ? 'orden de compra'
+                  : 'órdenes de compra'
+              } · Total estimado ${moneda.format(
+                resumenCarpetaCompras(carpetaAbierta.ordenes).totalEstimado,
+              )}`
+            : ''
+        }
+        footer={
+          <>
+            {carpetaAbierta?.requisicion && (
+              <Link
+                href={`/ordenes/${carpetaAbierta.requisicion.id}`}
+                className="btn btn-quiet flex-1 justify-center sm:flex-none"
+              >
+                Ver requisición
+                <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setCarpetaAbiertaId(null)}
+              className="btn btn-primary flex-1 sm:flex-none"
+            >
+              Cerrar
+            </button>
+          </>
+        }
+      >
+        {carpetaAbierta && (
+          <div className="space-y-3 px-5 py-5">
+            {carpetaAbierta.requisicion === null && (
+              <p className="text-[12.5px] text-gonper-muted">
+                Compras viejas o generadas desde la vista General, sin
+                requisición vinculada. La base de datos no guarda a qué
+                requisición pertenecían.
+              </p>
+            )}
+            {carpetaAbierta.ordenes.map((orden) => (
+              <TarjetaOrdenCompra
+                key={orden.id}
+                orden={orden}
+                esAdmin={esAdmin}
+                onEliminar={(ordenElegida) => {
+                  setErrorEliminar('')
+                  setOrdenAEliminar(ordenElegida)
+                }}
+                onRecibir={abrirRecepcion}
+              />
+            ))}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={!!requisicionAComprar}
