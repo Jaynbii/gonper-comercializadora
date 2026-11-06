@@ -362,6 +362,29 @@ dialog.modal-panel.modal-wide {
   max-height: min(92dvh, 56rem);
 }
 
+/*
+ * Variante zoom (carpetas de Compras): el diálogo entra creciendo
+ * desde scale(0.92) con fade, ~220ms, sin deslizarse. El resto del
+ * comportamiento (foco atrapado, Escape, backdrop) es el mismo del
+ * diálogo nativo. Respeta prefers-reduced-motion por la regla
+ * global de @layer base.
+ */
+dialog.modal-panel.modal-zoom {
+  transform: scale(0.92);
+  transition-duration: 220ms, 220ms, 220ms, 220ms;
+}
+
+dialog.modal-panel.modal-zoom::backdrop {
+  transition-duration: 220ms, 220ms, 220ms, 220ms;
+}
+
+@starting-style {
+  dialog.modal-panel.modal-zoom[open] {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
 
 @starting-style {
   dialog.modal-panel[open] {

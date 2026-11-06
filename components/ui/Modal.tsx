@@ -10,7 +10,7 @@ type ModalProps = {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  variant?: 'dialog' | 'sheet'
+  variant?: 'dialog' | 'sheet' | 'zoom'
   size?: 'normal' | 'wide'
 }
 
@@ -55,8 +55,8 @@ export default function Modal({
     <dialog
       ref={ref}
       className={`${variant === 'sheet' ? 'sheet-panel' : 'modal-panel'} ${
-        size === 'wide' ? 'modal-wide' : ''
-      }`}
+        variant === 'zoom' ? 'modal-zoom' : ''
+      } ${size === 'wide' ? 'modal-wide' : ''}`}
       aria-labelledby={titleId}
       onClose={() => {
         if (cerrandoPorCodigo.current) {

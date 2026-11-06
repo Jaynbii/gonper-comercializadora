@@ -345,6 +345,27 @@ export function agruparComprasPorRequisicion<
   return grupos
 }
 
+// Resumen para la carpeta de un grupo de compras en Compras (estilo
+// carpetas de Android): las compras visibles como miniaturas dentro
+// de la carpeta, el resto como "+N" y el total estimado del grupo.
+// La carpeta muestra 4 miniaturas como mucho; si hay más de 4, la
+// última es el "+N" con las que no caben.
+export function resumenCarpetaCompras<
+  T extends { total_estimado: number | string },
+>(ordenes: T[]): { totalEstimado: number; visibles: T[]; restantes: number } {
+  const totalEstimado = ordenes.reduce(
+    (suma, orden) => suma + (Number(orden.total_estimado) || 0),
+    0,
+  )
+  const visibles =
+    ordenes.length > 4 ? ordenes.slice(0, 3) : ordenes.slice(0, 4)
+  return {
+    totalEstimado,
+    visibles,
+    restantes: ordenes.length - visibles.length,
+  }
+}
+
 // Consolida el faltante de las órdenes seleccionadas, descontando el
 // stock una sola vez por producto. Si no hay selección, el llamador
 // debe usar el consolidado general ya calculado en el servidor.
