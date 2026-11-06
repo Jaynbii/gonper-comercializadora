@@ -1,10 +1,10 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
-import { FilePlus2, FileText, Plus, Upload } from 'lucide-react'
+import { ChevronRight, FilePlus2, FileText, Plus, Upload } from 'lucide-react'
 import VerPdfButton from './VerPdfButton'
 import ProcesarPdfButton from './ProcesarPdfButton'
 import AccionesOrden from './AccionesOrden'
-import EstadoBadge from '@/components/EstadoBadge'
+import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import EmptyState from '@/components/ui/EmptyState'
 import Fab from '@/components/ui/Fab'
 import PageHeader from '@/components/ui/PageHeader'
@@ -32,8 +32,15 @@ const nombreCliente = (clientes: Orden['clientes']) => {
     : clientes.nombre
 }
 
-export default async function OrdenesPage() {
+export default async function OrdenesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ nueva?: string | string[] }>
+}) {
   const supabase = await createClient()
+  const params = (await searchParams) || {}
+  const nuevaId =
+    typeof params.nueva === 'string' ? params.nueva : undefined
 
   const { data: ordenes, error } = await supabase
     .from('ordenes')
@@ -49,6 +56,13 @@ export default async function OrdenesPage() {
     .order('nombre')
 
   const lista = (ordenes ?? []) as Orden[]
+
+  // Requisición recién creada (viene de /ordenes/nueva con ?nueva=<id>):
+  // su fila queda resaltada con un ring suave y el badge "Nueva".
+  // Si el id no existe en la lista, no se muestra nada.
+  const nuevaOrden = nuevaId
+    ? lista.find((orden) => orden.id === nuevaId)
+    : undefined
 
   return (
     <div className="mx-auto max-w-[1180px] pb-6">
@@ -88,40 +102,69 @@ export default async function OrdenesPage() {
           {lista.map((orden) => (
             <article
               key={orden.id}
-              className="card min-w-0 p-4 md:flex md:items-center md:justify-between md:gap-6 md:rounded-none md:border-0 md:border-b md:border-gonper-border md:px-5 md:py-3.5 md:last:border-b-0 md:hover:bg-gonper-hover"
+              className={`card min-w-0 p-4 md:flex md:items-center md:justify-between md:gap-6 md:rounded-none md:border-0 md:border-b md:border-gonper-border md:px-5 md:py-3.5 md:last:border-b-0 md:hover:bg-gonper-hover ${
+                nuevaOrden?.id === orden.id
+                  ? 'ring-1 ring-inset ring-gonper-success'
+                  : ''
+              }`}
             >
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-3">
+                  {/* Toda la zona nombre/folio es el enlace al detalle,
+                      con chevron para que se vea tocable. */}
                   <Link
                     href={`/ordenes/${orden.id}`}
-                    className="min-w-0 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] transition-colors duration-[120ms] hover:text-gonper-primary md:text-[13.5px]"
+                    className="group min-w-0 flex-1"
                   >
-                    {nombreCliente(orden.clientes)}
+                    <span className="flex items-center gap-1 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] transition-colors duration-[120ms] group-hover:text-gonper-primary md:text-[13.5px]">
+                      <span className="min-w-0 truncate">
+                        {nombreCliente(orden.clientes)}
+                      </span>
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-gonper-muted transition-all duration-[120ms] group-hover:translate-x-0.5 group-hover:text-gonper-primary"
+                        strokeWidth={1.75}
+                      />
+                    </span>
+                    <span className="mt-1 block text-[11.5px] text-gonper-muted">
+                      <span className="text-[12.5px] font-semibold text-gonper-text">
+                        {orden.folio}
+                      </span>
+                      <span className="mx-1.5 text-gonper-border">/</span>
+                      {fecha.format(new Date(orden.created_at))}
+                    </span>
                   </Link>
-                  <div className="shrink-0 md:hidden">
+                  <div className="flex shrink-0 items-center gap-1.5 md:hidden">
+                    {nuevaOrden?.id === orden.id && (
+                      <Badge tono="success">Nueva</Badge>
+                    )}
                     <EstadoBadge estado={orden.estado} />
                   </div>
                 </div>
-
-                <p className="mt-1 text-[11.5px] text-gonper-muted">
-                  <span className="text-[12.5px] font-semibold text-gonper-text">
-                    {orden.folio}
-                  </span>
-                  <span className="mx-1.5 text-gonper-border">/</span>
-                  {fecha.format(new Date(orden.created_at))}
-                </p>
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-0 md:shrink-0 md:justify-end">
+                {/* Enlace discreto al detalle, además de la zona
+                    nombre/folio, que también es enlace. */}
+                <Link
+                  href={`/ordenes/${orden.id}`}
+                  className="inline-flex min-h-11 items-center gap-0.5 px-1 text-[12.5px] font-medium text-gonper-primary hover:underline md:min-h-0"
+                >
+                  Ver requisición
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+                </Link>
+
                 {orden.pdf_path ? (
                   <>
-                    <VerPdfButton pdfPath={orden.pdf_path} />
+                    {/* En BORRADOR, "Leer archivo" es la acción primaria
+                        de la fila: va primero y es el único botón
+                        principal, así el flujo sigue solo. */}
                     {orden.estado === 'BORRADOR' && (
                       <ProcesarPdfButton
                         ordenId={orden.id}
                         pdfPath={orden.pdf_path}
                       />
                     )}
+                    <VerPdfButton pdfPath={orden.pdf_path} />
                   </>
                 ) : (
                   <span className="text-[11.5px] italic text-gonper-muted">
@@ -129,7 +172,10 @@ export default async function OrdenesPage() {
                   </span>
                 )}
 
-                <div className="hidden md:block">
+                <div className="hidden items-center gap-1.5 md:flex">
+                  {nuevaOrden?.id === orden.id && (
+                    <Badge tono="success">Nueva</Badge>
+                  )}
                   <EstadoBadge estado={orden.estado} />
                 </div>
 
