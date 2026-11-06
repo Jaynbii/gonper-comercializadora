@@ -38,7 +38,7 @@ export default function AccionesOrden({
 
   const router = useRouter()
   // Cada orden monta su propio modal en la misma página: el id del formulario
-  // debe ser único o el botón "Guardar" termina enviando el formulario de otra orden.
+  // debe ser único o el botón "Guardar" termina enviando el formulario de otra requisición.
   const formId = `orden-form-${orden.id}`
 
   const cerrar = () => {
@@ -62,7 +62,7 @@ export default function AccionesOrden({
       router.refresh()
     } catch (error) {
       setErrorMsg(
-        error instanceof Error ? error.message : 'No se pudo guardar la orden.',
+        error instanceof Error ? error.message : 'No se pudo guardar la requisición.',
       )
     } finally {
       setIsEditing(false)
@@ -80,7 +80,7 @@ export default function AccionesOrden({
       router.refresh()
     } catch (error) {
       setErrorEliminar(
-        error instanceof Error ? error.message : 'No se pudo eliminar la orden.',
+        error instanceof Error ? error.message : 'No se pudo eliminar la requisición.',
       )
     } finally {
       setIsDeleting(false)
@@ -93,8 +93,8 @@ export default function AccionesOrden({
         type="button"
         onClick={() => setIsOpen(true)}
         className="btn-icon"
-        title="Gestionar orden"
-        aria-label={`Gestionar orden ${orden.folio}`}
+        title="Gestionar requisición"
+        aria-label={`Gestionar requisición ${orden.folio}`}
       >
         <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} />
       </button>
@@ -102,7 +102,7 @@ export default function AccionesOrden({
       <Modal
         open={isOpen}
         onClose={cerrar}
-        title="Gestionar orden"
+        title="Gestionar requisición"
         description={`${orden.folio} · ${orden.estado.toLowerCase()}`}
         footer={
           <>
@@ -163,7 +163,7 @@ export default function AccionesOrden({
 
           <div className="mt-4">
             <label className="field-label" htmlFor={`orden-estado-${orden.id}`}>
-              Estado de la orden
+              Estado de la requisición
             </label>
             <select
               id={`orden-estado-${orden.id}`}
@@ -192,7 +192,7 @@ export default function AccionesOrden({
 
       <ConfirmDialog
         open={eliminarOpen}
-        title="Eliminar orden"
+        title="Eliminar requisición"
         description="Esta acción no se puede deshacer."
         pending={isDeleting}
         error={errorEliminar}
@@ -203,7 +203,7 @@ export default function AccionesOrden({
           setErrorEliminar('')
         }}
       >
-        Se borrarán la orden{' '}
+        Se borrará la requisición{' '}
         <strong className="font-semibold">{orden.folio}</strong>, sus artículos y
         el PDF original.
       </ConfirmDialog>

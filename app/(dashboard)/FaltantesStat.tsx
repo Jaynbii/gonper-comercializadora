@@ -32,7 +32,7 @@ export default function FaltantesStat({
         className="group w-full px-4 py-4 text-left transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="min-h-[2.7em] text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
+          <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
             Faltantes
           </p>
           <ArrowUpRight
@@ -47,7 +47,7 @@ export default function FaltantesStat({
           Ver detalle
         </p>
         <p className="mt-2 hidden text-[11.5px] leading-tight text-gonper-muted sm:block lg:text-[12.5px]">
-          {conFaltante.length > 0 ? 'Según órdenes activas' : 'Inventario suficiente'}
+          {conFaltante.length > 0 ? 'Según requisiciones activas' : 'Inventario suficiente'}
         </p>
       </button>
 
@@ -58,7 +58,7 @@ export default function FaltantesStat({
         description={`${conFaltante.length} ${
           conFaltante.length === 1 ? 'producto' : 'productos'
         } · ${ordenesActivas} ${
-          ordenesActivas === 1 ? 'orden activa' : 'órdenes activas'
+          ordenesActivas === 1 ? 'requisición activa' : 'requisiciones activas'
         }`}
         footer={
           <button
@@ -74,7 +74,7 @@ export default function FaltantesStat({
           <div className="px-5 py-12 text-center">
             <p className="text-[13.5px] font-medium">Sin demanda pendiente</p>
             <p className="mt-1 text-[12.5px] text-gonper-muted">
-              No hay órdenes activas que requieran inventario.
+              No hay requisiciones activas que requieran inventario.
             </p>
           </div>
         ) : (

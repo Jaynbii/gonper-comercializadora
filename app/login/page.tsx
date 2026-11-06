@@ -36,7 +36,7 @@ export default async function LoginPage({
             Ingresa a tu cuenta
           </h2>
           <p className="mt-1 text-[12.5px] text-gonper-muted">
-            Inventario, requerimientos y compras.
+            Inventario, requisiciones y compras.
           </p>
 
           <form action={login} className="mt-6 flex flex-col gap-4">

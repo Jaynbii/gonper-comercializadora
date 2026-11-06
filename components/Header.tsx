@@ -8,7 +8,7 @@ import { createClient } from '@/utils/supabase/client'
 const SECCIONES: Record<string, string> = {
   '': 'Inicio',
   inventario: 'Inventario',
-  ordenes: 'Órdenes',
+  ordenes: 'Requisiciones',
   compras: 'Compras',
   proveedores: 'Proveedores',
   clientes: 'Clientes',

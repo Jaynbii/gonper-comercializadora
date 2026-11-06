@@ -3,6 +3,7 @@
 import { createClient, generarNuevoSku } from '@/utils/supabase/server' // 👈 Importamos generarNuevoSku
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
+import { surtirConCliente, type ResultadoSurtido } from '@/utils/surtir'
 
 type ItemDetectado = {
   codigo_pdf: string
@@ -138,7 +139,7 @@ export async function guardarItemsEnOrden(
     .update({ estado: 'PENDIENTE' })
     .eq('id', ordenId)
   if (updateError) {
-    throw new Error(`Error al actualizar la orden: ${updateError.message}`)
+    throw new Error(`Error al actualizar la requisición: ${updateError.message}`)
   }
 
   revalidatePath('/ordenes')
@@ -146,64 +147,32 @@ export async function guardarItemsEnOrden(
   return { success: true }
 }
 
-export async function surtirOrden(ordenId: string) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Usuario no autenticado')
+export async function surtirOrden(ordenId: string): Promise<ResultadoSurtido> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Usuario no autenticado' }
 
-    const { data: ordenActual } = await supabase.from('ordenes').select('estado').eq('id', ordenId).single()
-    if (ordenActual?.estado === 'ENTREGADA') throw new Error('Esta orden ya fue surtida y entregada previamente.')
+  // La lógica vive en utils/surtir.ts (`surtirConCliente`, probada
+  // con un mock de PostgREST): RPC transaccional `surtir_orden` si
+  // existe, vía secuencial de respaldo si la migración aún no se
+  // corrió. El surtido PARCIAL se preserva: piden 10, hay 6, se
+  // surten 6 y queda PARCIAL.
+  //
+  // IMPORTANTE (digest 2179146847): esto DEVUELVE el resultado, nunca
+  // lanza. En producción Next.js redacta el mensaje real de cualquier
+  // error lanzado por una Server Action y el cliente solo recibe
+  // "Minified React error #441"; los valores DEVUELTOS llegan tal
+  // cual al teléfono, con su mensaje real.
+  const resultado = await surtirConCliente(supabase, ordenId, user.id)
 
-    const { data: items, error: itemsError } = await supabase
-      .from('orden_items').select(`id, cantidad_solicitada, producto_id, productos (nombre, stock_actual)`).eq('orden_id', ordenId)
-    if (itemsError) throw new Error(`Error al leer items: ${itemsError.message}`)
-    if (!items || items.length === 0) throw new Error('La orden no tiene items')
-
-    let totalSolicitado = 0;
-    let totalSurtido = 0;
-
-    const promesas = items.map(async (item) => {
-      const producto = Array.isArray(item.productos) ? item.productos[0] : item.productos
-      if (!producto) return 
-      const stockActual = Number(producto.stock_actual) || 0
-      const cantidadSolicitada = Number(item.cantidad_solicitada) || 0
-      const cantidadASurtir = Math.min(stockActual, cantidadSolicitada)
-      
-      totalSolicitado += cantidadSolicitada;
-      totalSurtido += cantidadASurtir;
-
-      const nuevoStock = stockActual - cantidadASurtir
-      let nuevoEstadoItem = 'SIN_STOCK'
-      if (cantidadASurtir === cantidadSolicitada) nuevoEstadoItem = 'SURTIMIENTO_COMPLETO'
-      else if (cantidadASurtir > 0) nuevoEstadoItem = 'PARCIAL'
-
-      const p1 = supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id)
-      const p2 = supabase.from('orden_items').update({ cantidad_surtida: cantidadASurtir, estado_item: nuevoEstadoItem }).eq('id', item.id)
-      let p3: Promise<void> = Promise.resolve()
-      if (cantidadASurtir > 0) {
-        p3 = (async () => {
-          const { error } = await supabase.from('movimientos_inventario').insert({
-            producto_id: item.producto_id, tipo_movimiento: 'SALIDA_ORDEN', cantidad: cantidadASurtir, motivo: 'Surtido de Orden', orden_id: ordenId, usuario_id: user.id
-          })
-          if (error) throw new Error(`Error al registrar el movimiento: ${error.message}`)
-        })()
-      }
-      await Promise.all([p1, p2, p3])
-    })
-
-    await Promise.all(promesas)
-
-    if (totalSurtido === 0) throw new Error('No hay stock de NINGÚN artículo. No se puede surtir la orden.')
-
-    const nuevoEstadoOrden = totalSurtido === totalSolicitado ? 'ENTREGADA' : 'PARCIAL';
-    const { error: updateError } = await supabase.from('ordenes').update({ estado: nuevoEstadoOrden }).eq('id', ordenId)
-    if (updateError) throw new Error(`Error al actualizar orden: ${updateError.message}`)
-
-    return { success: true, estado: nuevoEstadoOrden }
-  } catch (error: unknown) {
-    throw new Error(error instanceof Error ? error.message : String(error))
+  if (resultado.success) {
+    revalidatePath('/ordenes')
+    revalidatePath(`/ordenes/${ordenId}`)
+    revalidatePath('/inventario')
   }
+  return resultado
 }
 
 export async function eliminarOrden(ordenId: string, pdfPath: string | null) {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PackageCheck, TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { surtirOrden } from '../actions'
+import { mensajeErrorSurtir } from '@/utils/surtir'
 
 export default function BotonSurtir({
   ordenId,
@@ -23,13 +24,24 @@ export default function BotonSurtir({
     setErrorMsg('')
 
     try {
-      await surtirOrden(ordenId)
+      // surtirOrden() DEVUELVE el resultado, no lanza: los valores
+      // devueltos por una Server Action llegan tal cual al teléfono,
+      // mientras que un throw se redacta en producción como
+      // "Minified React error #441" (digest 2179146847). Por eso el
+      // mensaje real del fallo se lee de `resultado.error`.
+      const resultado = await surtirOrden(ordenId)
+      if (!resultado.success) {
+        setErrorMsg(mensajeErrorSurtir(resultado.error).mensaje)
+        return
+      }
       setConfirmOpen(false)
       router.refresh()
     } catch (error) {
-      setErrorMsg(
-        error instanceof Error ? error.message : 'No se pudo surtir la orden.',
-      )
+      // Red de seguridad: si algo fuera de surtirOrden() lanzara
+      // (p. ej. fallo de red), nunca se muestra el "#441" tal cual.
+      const { mensaje, digest } = mensajeErrorSurtir(error)
+      if (digest) console.error('Error al surtir, digest:', digest)
+      setErrorMsg(mensaje)
     } finally {
       setIsLoading(false)
     }
@@ -43,7 +55,7 @@ export default function BotonSurtir({
           setErrorMsg('')
           setConfirmOpen(true)
         }}
-        className={`btn ${
+        className={`btn w-full sm:w-auto ${
           esParcial
             ? 'border border-gonper-warning-border bg-gonper-warning-bg text-gonper-warning hover:bg-gonper-warning-bg/70'
             : 'btn-primary'
@@ -54,14 +66,14 @@ export default function BotonSurtir({
         ) : (
           <PackageCheck className="h-4 w-4" strokeWidth={1.75} />
         )}
-        {esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+        {esParcial ? 'Surtir parcialmente' : 'Surtir requisición'}
       </button>
 
       <ConfirmDialog
         open={confirmOpen}
-        title={esParcial ? 'Surtir parcialmente' : 'Surtir orden'}
+        title={esParcial ? 'Surtir parcialmente' : 'Surtir requisición'}
         description="El inventario se descontará automáticamente."
-        confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir orden'}
+        confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir requisición'}
         pendingLabel="Surtiendo…"
         tono="primary"
         pending={isLoading}
@@ -76,7 +88,7 @@ export default function BotonSurtir({
         {esParcial ? (
           <>
             No hay stock suficiente para todos los artículos. Se surtirá solo lo
-            disponible y la orden quedará como{' '}
+            disponible y la requisición quedará como{' '}
             <strong className="font-semibold">parcial</strong>. ¿Continuar?
           </>
         ) : (

@@ -112,18 +112,18 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
         className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-        Volver a órdenes
+        Volver a requisiciones
       </Link>
 
       <PageHeader
-        eyebrow="Requerimiento recibido"
-        title="Nuevo requerimiento"
+        eyebrow="Requisición"
+        title="Nueva requisición"
       />
 
       <form onSubmit={handleSubmit} className="card mt-5 overflow-hidden">
         <div className="border-b border-gonper-border p-5 sm:p-6">
           <label className="field-label" htmlFor="cliente_id">
-            ¿De qué mercado es este requerimiento?
+            ¿De qué mercado es esta requisición?
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <select
@@ -273,7 +273,7 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
           setErrorMsgCliente('')
         }}
         title="Nuevo cliente"
-        description="Regístralo una sola vez y quedará disponible en todos los requerimientos."
+        description="Regístralo una sola vez y quedará disponible en todas las requisiciones."
         footer={
           <>
             <button

@@ -54,31 +54,31 @@ export default async function OrdenesPage() {
     <div className="mx-auto max-w-[1180px] pb-6">
       <PageHeader
         eyebrow={`${lista.length} ${
-          lista.length === 1 ? 'requerimiento' : 'requerimientos'
-        } registrados`}
-        title="Órdenes"
+          lista.length === 1 ? 'requisición' : 'requisiciones'
+        } registradas`}
+        title="Requisiciones"
         action={
           <Link href="/ordenes/nueva" className="btn btn-primary hidden sm:inline-flex">
             <Upload className="h-4 w-4" strokeWidth={1.75} />
-            Subir requerimiento
+            Subir requisición
           </Link>
         }
       />
 
       {error ? (
         <div className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-4 py-3 text-[13px] text-gonper-danger">
-          No se pudieron cargar las órdenes. Intenta recargar la página.
+          No se pudieron cargar las requisiciones. Intenta recargar la página.
         </div>
       ) : lista.length === 0 ? (
         <div className="card mt-5">
           <EmptyState
             icon={<FileText className="h-6 w-6" strokeWidth={1.5} />}
-            title="Sin órdenes todavía"
-            description="Sube el primer requerimiento en PDF o foto para capturar sus artículos."
+            title="Sin requisiciones todavía"
+            description="Sube la primera requisición en PDF o foto para capturar sus artículos."
             action={
               <Link href="/ordenes/nueva" className="btn btn-primary">
                 <FilePlus2 className="h-4 w-4" strokeWidth={1.75} />
-                Subir mi primer requerimiento
+                Subir mi primera requisición
               </Link>
             }
           />
@@ -103,8 +103,10 @@ export default async function OrdenesPage() {
                   </div>
                 </div>
 
-                <p className="mt-1 font-mono text-[11.5px] text-gonper-muted">
-                  {orden.folio}
+                <p className="mt-1 text-[11.5px] text-gonper-muted">
+                  <span className="text-[12.5px] font-semibold text-gonper-text">
+                    {orden.folio}
+                  </span>
                   <span className="mx-1.5 text-gonper-border">/</span>
                   {fecha.format(new Date(orden.created_at))}
                 </p>
@@ -142,7 +144,7 @@ export default async function OrdenesPage() {
 
       <Fab
         href="/ordenes/nueva"
-        label="Subir requerimiento"
+        label="Subir requisición"
         icon={<Plus className="h-6 w-6" strokeWidth={2} />}
       />
     </div>

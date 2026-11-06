@@ -14,7 +14,10 @@ import {
 const MENU = [
   { name: 'Inicio', path: '/', icon: LayoutDashboard },
   { name: 'Inventario', path: '/inventario', icon: Package },
-  { name: 'Órdenes', path: '/ordenes', icon: FileText },
+  // En la barra inferior de móvil cada celda mide ~60px a 360px de
+  // ancho: "Requisiciones" (13 letras, sin corte) se salía de su celda
+  // y se montaba sobre la siguiente. En móvil se usa el nombre corto.
+  { name: 'Requisiciones', corto: 'Requis.', path: '/ordenes', icon: FileText },
   { name: 'Compras', path: '/compras', icon: ShoppingCart },
   { name: 'Proveedores', path: '/proveedores', icon: Factory },
   { name: 'Clientes', path: '/clientes', icon: Building2 },
@@ -83,6 +86,7 @@ export default function Sidebar() {
                 key={item.path}
                 href={item.path}
                 aria-current={activo ? 'page' : undefined}
+                aria-label={item.name}
                 className={`flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-120 ${
                   activo ? 'text-gonper-primary' : 'text-gonper-muted'
                 }`}
@@ -102,7 +106,7 @@ export default function Sidebar() {
                     activo ? 'font-semibold' : 'font-medium'
                   }`}
                 >
-                  {item.name}
+                  {item.corto ?? item.name}
                 </span>
               </Link>
             )
