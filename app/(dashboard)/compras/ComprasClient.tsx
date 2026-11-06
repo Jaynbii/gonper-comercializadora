@@ -230,6 +230,103 @@ function PorOrdenCards({
   )
 }
 
+// Fase 1c — "Requisiciones pendientes de surtir" en cards, con el mismo
+// estilo visual que las cards de "Por requisición". Los datos de
+// % surtible, nº de artículos con faltante y costo estimado vienen
+// de faltantesPorOrden, ya calculado en el servidor (sin consultas
+// nuevas). Cada card tiene "Abrir requisición" (al detalle) y
+// "Ver faltante" (a la vista Por requisición filtrada a esa
+// requisición, /compras?orden=<id>).
+function RequisicionesPendientesCards({
+  requisiciones,
+  faltantesPorOrden,
+}: {
+  requisiciones: Requisicion[]
+  faltantesPorOrden: FaltantePorOrden[]
+}) {
+  const detallePorId = new Map(
+    faltantesPorOrden.map((orden) => [orden.ordenId, orden]),
+  )
+
+  return (
+    <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {requisiciones.map((requisicion) => {
+        const detalle = detallePorId.get(requisicion.id)
+        return (
+          <article
+            key={requisicion.id}
+            className="card flex flex-col p-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+                {requisicion.clientes?.nombre || 'Cliente desconocido'}
+              </h2>
+              <Badge tono="warning">
+                {requisicion.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
+              </Badge>
+              <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
+                {requisicion.folio}
+              </span>
+            </div>
+            <p className="mt-1 text-[12px] text-gonper-muted">
+              Requisición · {fecha.format(new Date(requisicion.created_at))}
+            </p>
+
+            {detalle && (
+              <div className="mt-3 border-t border-gonper-border pt-3 text-[12.5px]">
+                <p>
+                  Se puede surtir el{' '}
+                  <span className="font-semibold text-gonper-text">
+                    {detalle.porcentajeSurtible}%
+                  </span>{' '}
+                  con el stock actual
+                </p>
+                {detalle.faltantes.length === 0 ? (
+                  <p className="mt-1 text-gonper-success">
+                    Sin faltantes: se puede surtir completa.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-gonper-muted">
+                    {detalle.faltantes.length}{' '}
+                    {detalle.faltantes.length === 1
+                      ? 'artículo con faltante'
+                      : 'artículos con faltante'}{' '}
+                    · Costo estimado del faltante{' '}
+                    <span className="font-semibold tabular-nums text-gonper-text">
+                      {moneda.format(detalle.costoEstimadoTotal)}
+                    </span>
+                    {detalle.tieneSinPrecio && (
+                      <span className="block text-[11.5px]">
+                        Hay artículos sin precio: el total es parcial.
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-auto flex flex-col gap-2 pt-4">
+              <Link
+                href={`/ordenes/${requisicion.id}`}
+                className="btn btn-primary w-full justify-center"
+              >
+                Abrir requisición
+                <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
+              </Link>
+              <Link
+                href={`/compras?orden=${requisicion.id}`}
+                className="btn btn-quiet w-full justify-center"
+              >
+                Ver faltante
+              </Link>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function ComprasClient({
   faltantes,
   proveedores,
@@ -668,38 +765,10 @@ export default function ComprasClient({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {requisiciones.map((requisicion) => (
-              <article
-                key={requisicion.id}
-                className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-[13.5px] font-semibold">
-                      {requisicion.clientes?.nombre || 'Cliente desconocido'}
-                    </h2>
-                    <Badge tono="warning">
-                      {requisicion.estado === 'PARCIAL' ? 'Parcial' : 'Pendiente'}
-                    </Badge>
-                    <span className="rounded bg-gonper-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-gonper-text">
-                      {requisicion.folio}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[12px] text-gonper-muted">
-                    Requisición · {fecha.format(new Date(requisicion.created_at))}
-                  </p>
-                </div>
-                <Link
-                  href={`/ordenes/${requisicion.id}`}
-                  className="btn btn-quiet shrink-0"
-                >
-                  Abrir requisición
-                  <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} />
-                </Link>
-              </article>
-            ))}
-          </div>
+          <RequisicionesPendientesCards
+            requisiciones={requisiciones}
+            faltantesPorOrden={faltantesPorOrden}
+          />
         )}
       </section>
 
