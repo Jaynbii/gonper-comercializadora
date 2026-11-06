@@ -554,10 +554,15 @@ export default function ProcesarPdfButton({
             <label className="flex items-center gap-2 text-[12.5px] font-medium">
               <input
                 type="checkbox"
-                className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                className="peer sr-only"
                 checked={todosSeleccionados}
                 onChange={toggleTodos}
               />
+              <span aria-hidden="true" className="check-box">
+                <svg viewBox="0 0 20 20">
+                  <path d="M4 10.5 8.5 15 16 6.5" />
+                </svg>
+              </span>
               Seleccionar todo
             </label>
 
@@ -627,11 +632,16 @@ export default function ProcesarPdfButton({
                           <td className="px-2 py-2 text-center">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                              className="peer sr-only"
                               checked={seleccionado}
                               onChange={() => toggleSeleccion(item.key)}
                               aria-label={`Seleccionar ${item.descripcion_pdf || item.codigo_pdf}`}
                             />
+                            <span aria-hidden="true" className="check-box mx-auto">
+                              <svg viewBox="0 0 20 20">
+                                <path d="M4 10.5 8.5 15 16 6.5" />
+                              </svg>
+                            </span>
                           </td>
                           <td className="px-2 py-2">
                             <input
@@ -766,10 +776,15 @@ export default function ProcesarPdfButton({
                         <label className="flex items-center gap-2 text-[12px] font-medium text-gonper-muted">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 cursor-pointer accent-gonper-primary"
+                            className="peer sr-only"
                             checked={seleccionado}
                             onChange={() => toggleSeleccion(item.key)}
                           />
+                          <span aria-hidden="true" className="check-box">
+                            <svg viewBox="0 0 20 20">
+                              <path d="M4 10.5 8.5 15 16 6.5" />
+                            </svg>
+                          </span>
                           Incluir en la requisición
                         </label>
                         <button

@@ -164,11 +164,16 @@ function PorOrdenCards({
                 <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12.5px] font-medium">
                   <input
                     type="checkbox"
-                    className="h-5 w-5 shrink-0 accent-[#164e41]"
+                    className="peer sr-only"
                     checked={seleccionada}
                     onChange={() => onToggle(orden.ordenId)}
                     aria-label={`Seleccionar requisición ${orden.folio} para comprar su faltante`}
                   />
+                  <span aria-hidden="true" className="check-box">
+                    <svg viewBox="0 0 20 20">
+                      <path d="M4 10.5 8.5 15 16 6.5" />
+                    </svg>
+                  </span>
                   Elegir para comprar
                 </label>
                 <Link
@@ -1535,12 +1540,17 @@ export default function ComprasClient({
             <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-2.5 rounded-[6px] border border-gonper-border bg-gonper-bg/50 px-3 py-2.5">
               <input
                 type="checkbox"
-                className="mt-0.5 h-5 w-5 shrink-0 accent-[#164e41]"
+                className="peer sr-only"
                 checked={recibirAlComprar}
                 disabled={comprandoRequisicionId !== null}
                 onChange={(e) => setRecibirAlComprar(e.target.checked)}
                 aria-label="Ya recibí la mercancía, subir stock"
               />
+              <span aria-hidden="true" className="check-box mt-0.5">
+                <svg viewBox="0 0 20 20">
+                  <path d="M4 10.5 8.5 15 16 6.5" />
+                </svg>
+              </span>
               <span className="text-[12.5px]">
                 <span className="font-semibold">
                   Ya recibí la mercancía, subir stock
@@ -1693,7 +1703,7 @@ export default function ComprasClient({
               className="btn btn-primary flex-1 sm:flex-none"
             >
               <Truck className="h-4 w-4" strokeWidth={1.75} />
-              {isReceiving ? 'Guardando…' : 'Confirmar recepción'}
+              {isReceiving ? 'Recibiendo…' : 'Confirmar recepción'}
             </button>
           </>
         }

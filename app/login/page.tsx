@@ -15,7 +15,7 @@ export default async function LoginPage({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            'radial-gradient(60rem 40rem at 50% -12%, #fffdf8 0%, transparent 65%), linear-gradient(#164e4108 1px, transparent 1px)',
+            'radial-gradient(60rem 40rem at 50% -12%, #fffdf8 0%, transparent 65%), linear-gradient(#0f766e08 1px, transparent 1px)',
           backgroundSize: 'auto, 100% 3.25rem',
         }}
       />
