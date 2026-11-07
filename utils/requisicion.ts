@@ -213,9 +213,12 @@ function limpiarDescripcion(texto: string) {
   // Fragmento final de 2 letras ("BS", "TA", "CA"): un nombre real no
   // termina en una palabra de 2 letras que no sea medida (las medidas
   // de 2 letras como "KG" están protegidas como unidades). Se quita si
-  // la cola trae una letra suelta ("E CA") o si es el único token de
-  // la cola y sigue a una palabra real ("CEPILLO IXTLE BS"); no se
-  // quita si sigue a un número ("500 ML" se queda: ML sigue a 500).
+  // la cola trae una letra suelta ("E CA"), si es el único token de
+  // la cola y sigue a una palabra real ("CEPILLO IXTLE BS"), o si
+  // sigue a una unidad ("CLORO DE 20 LITROS Ae", requisición 20345:
+  // el "Ae" es resto de la columna del precio, no parte del nombre).
+  // No se quita si sigue a un número ("500 ML" se queda: ML sigue a
+  // 500) ni si es una palabra real de 2 letras.
   const esFragmentoDosLetras =
     ultimoToken !== undefined &&
     /^[A-Za-zÁÉÍÓÚÜÑ]{2}$/.test(ultimoToken) &&
@@ -223,12 +226,27 @@ function limpiarDescripcion(texto: string) {
   const colaTieneLetraSuelta = tokens
     .slice(tokens.length - cola)
     .some((token) => /^[A-Za-zÁÉÍÓÚÜÑ]$/.test(token))
+  // Palabras reales de 2 letras: un nombre sí puede terminar en una
+  // de estas (aunque en este catálogo no se ha visto), así que nunca
+  // se quitan; la basura del OCR ("AE", "BS", "TA", "CA") nunca es
+  // una de estas.
+  const PALABRAS_CORTAS_REALES = new Set([
+    'DE', 'EN', 'EL', 'LA', 'UN', 'ES', 'SE', 'SU', 'AL',
+    'MI', 'TU', 'SI', 'NO', 'YA', 'ME', 'TE', 'LE', 'LO',
+  ])
+  const esPalabraRealCorta = (token: string) =>
+    PALABRAS_CORTAS_REALES.has(token.toUpperCase())
   const quitarPorFragmentoDosLetras =
     esFragmentoDosLetras &&
     (colaTieneLetraSuelta ||
       (cola === 1 &&
         tokenAntesDeCola !== undefined &&
-        esPalabraNombre(tokenAntesDeCola)))
+        esPalabraNombre(tokenAntesDeCola)) ||
+      (cola === 1 &&
+        tokenAntesDeCola !== undefined &&
+        ultimoToken !== undefined &&
+        esUnidadConocida(tokenAntesDeCola) &&
+        !esPalabraRealCorta(ultimoToken)))
   // Un número suelto al final de la cola solo se quita si no sigue a
   // una palabra real del nombre ("KGS. 38" se va; "JUMBO 400" se queda).
   const quitarPorEnteroSuelto =
@@ -420,12 +438,251 @@ function parsearBloquesColumnas(lineas: string[]): { items: ItemRequisicion[], c
   }
 }
 
+// Carta de entrega (Mercado Municipal "José María Pino Suárez",
+// 19/10/2026): otra forma en que piden material. No es una tabla — es
+// una lista de viñetas "cantidad unidad descripción", sin códigos ni
+// precios:
+//   • 2 porron de cloro
+//   • ½ bulto de bolsas negras medianas
+//   • 5 escobas de espiga reforzadas
+// La detección exige la frase de la carta ("se hace entrega del
+// siguiente material") con 2+ líneas de viñeta, o 2+ líneas que
+// empiezan con viñeta y cantidad sin que haya encabezado de tabla.
+// La frase sola no basta: las requisiciones en tabla dicen "SE
+// SOLICITA EL SIGUIENTE MATERIAL" en Observaciones. Y la viñeta sola
+// tampoco roba filas de la tabla: el encabezado de columnas la frena.
+const FRACCIONES_VINETA: Record<string, number> = {
+  '½': 0.5,
+  '¼': 0.25,
+  '¾': 0.75,
+  '⅓': 1 / 3,
+  '⅔': 2 / 3,
+  '⅛': 0.125,
+  '⅜': 0.375,
+  '⅝': 0.625,
+  '⅞': 0.875,
+}
+
+// El OCR del teléfono pega la cantidad a la palabra ("2porrones",
+// "5escobas"), así que el espacio tras la cantidad es opcional.
+// OJO: con \s* la fracción "1/2" se rompería ("1" + "/2 ..."), por
+// eso la alternativa \d+/\d+ va primero: se intenta antes que \d+.
+const CANTIDAD_VINETA =
+  '(?:\\d+/\\d+|\\d+(?:[.,:]\\d{1,3})?|[½¼¾⅓⅔⅛⅜⅝⅞])'
+const LINEA_VINETA = new RegExp(
+  `^(?:[•\\-\\*·▪◦–—]\\s*)?(${CANTIDAD_VINETA})\\s*(.+)$`,
+  'u',
+)
+const LINEA_VINETA_CON_MARCA = new RegExp(
+  `^[•\\-\\*·▪◦–—]\\s*${CANTIDAD_VINETA}\\s*\\S`,
+  'u',
+)
+
+function parseCantidadVineta(valor: string): number {
+  const limpio = valor.trim()
+  if (FRACCIONES_VINETA[limpio] !== undefined) return FRACCIONES_VINETA[limpio]
+  const fraccion = limpio.match(/^(-?\d+)\s*\/\s*(\d+)$/)
+  if (fraccion) {
+    const denominador = Number(fraccion[2])
+    return denominador === 0 ? NaN : Number(fraccion[1]) / denominador
+  }
+  return parseCantidad(limpio)
+}
+
+const esUnidadCarta = (token: string) =>
+  (UNIDADES_COMUNES as readonly string[]).includes(normalizarUnidad(token))
+
+// El 5 leído como "S" pegada a la palabra ("Scepillos", foto de la
+// carta Pino Suárez con el preprocesado de la app): S mayúscula
+// seguida de 3+ minúsculas. El mínimo de 3 deja fuera "Se"/"Sin"/
+// "Sal", que sí son palabras reales.
+const CINCO_COMO_S = /^S[a-záéíóúüñ]{3,}$/
+
+// El OCR del teléfono deforma las viñetas de la carta de varias formas
+// vistas en la foto real del Mercado Pino Suárez:
+//  - la viñeta • sale como "e" o "+" ("e 2porrones de cloro");
+//  - la cantidad va pegada a la palabra ("2porrones", "5escobas");
+//  - el ½ desaparece ("e bulto de bolsas..."), sale como "Ya"/"Ys"
+//    pegado a la unidad ("Yabulto", "Ysbulto") o como una "Y" suelta
+//    ("e Y bulto de bolsas...");
+//  - el 5 sale como "S" pegada a la palabra ("e Scepillos de mango
+//    largo", con el preprocesado de la app).
+// Antes de detectar la carta, cada línea se canoniza: la marca se
+// vuelve "•", el artefacto de ½ se vuelve "½", la "S" que es un 5 se
+// vuelve "5" y una línea que empieza por una unidad conocida sin
+// cantidad se lee como ½ (es el único caso en que la cantidad se
+// pierde del todo). Solo se usa en la ruta de la carta; la tabla y
+// la factura no pasan por aquí.
+function normalizarLineaCarta(linea: string): string {
+  let texto = linea.trim()
+  if (!texto) return texto
+
+  // 1. Marca de viñeta → "•". La "e" solo es marca cuando lo que sigue
+  // es una cantidad, una unidad conocida, el 5 leído como S pegada a
+  // la palabra ("e Scepillos...") o el ½ leído como una "Y" suelta
+  // antes de la unidad ("e Y bulto..."): una línea que empiece por
+  // una palabra con "e" ("Escobas de espiga...") no se toca.
+  const marca = texto.match(/^[•\-\*·▪◦–—+]\s*/)
+  if (marca) {
+    texto = `• ${texto.slice(marca[0].length)}`.trimEnd()
+  } else {
+    const conE = texto.match(/^e\s+(.+)$/i)
+    if (conE) {
+      const siguiente = conE[1]
+      const tokensSiguiente = siguiente.split(/\s+/)
+      const primerToken = tokensSiguiente[0] ?? ''
+      const segundoToken = tokensSiguiente[1] ?? ''
+      if (
+        /^(?:\d|[½¼¾⅓⅔⅛⅜⅝⅞])/.test(primerToken) ||
+        esUnidadCarta(primerToken) ||
+        CINCO_COMO_S.test(primerToken) ||
+        (/^y$/i.test(primerToken) && esUnidadCarta(segundoToken))
+      ) {
+        texto = `• ${siguiente}`
+      }
+    } else {
+      // "e2porrones..." o "eScepillos...": la "e" pegada a la cantidad.
+      const pegada = texto.match(/^e(.+)$/i)
+      if (pegada) {
+        const restoPegado = pegada[1]
+        if (/^\d/.test(restoPegado)) {
+          texto = `• ${restoPegado}`
+        } else if (CINCO_COMO_S.test(restoPegado.split(/\s+/)[0] ?? '')) {
+          texto = `• 5 ${restoPegado.slice(1)}`
+        }
+      }
+    }
+  }
+
+  // 2. Resto después de la marca (o la línea entera si no hay marca).
+  const conMarca = texto.match(/^•\s*(.*)$/)
+  const resto = conMarca ? conMarca[1] : texto
+  const prefijo = conMarca ? '• ' : ''
+
+  // 2.5. Artefactos del 5 y del ½ en el primer token tras la viñeta:
+  // "Scepillos" (el 5 leído como S pegada a la palabra) y "Y" suelta
+  // (el ½ leído como una letra) antes de una unidad. Solo con marca
+  // de viñeta: sin ella, una línea que empiece por una palabra con S
+  // ("Saludos", "Sin otro particular") no se toca. El falso positivo
+  // que queda: una viñeta sin cantidad que empiece por una palabra
+  // real con S ("Sosa cáustica") se leería como "5 osa cáustica" —
+  // se corrige en el modal, y sin esta regla esa línea se perdía
+  // entera.
+  if (prefijo) {
+    const tokensResto = resto.split(/\s+/).filter(Boolean)
+    const primerResto = tokensResto[0] ?? ''
+    if (CINCO_COMO_S.test(primerResto)) {
+      return `${prefijo}5 ${resto.slice(1)}`
+    }
+    const segundoResto = tokensResto[1] ?? ''
+    if (/^y$/i.test(primerResto) && esUnidadCarta(segundoResto)) {
+      return `${prefijo}½ ${resto.slice(primerResto.length).trimStart()}`
+    }
+  }
+
+  // 3. "Yabulto" / "Ysbulto" / "%bulto": el ½ pegado a la unidad.
+  // El resto del token debe ser una unidad de 2+ letras: "Ya" + "m"
+  // (METRO) no basta, que "Yam..." no es un artefacto.
+  const tokens = resto.split(/\s+/).filter(Boolean)
+  const primer = tokens[0] ?? ''
+  const artefacto = primer.match(/^(ya|ys|%)(.+)$/i)
+  if (artefacto) {
+    const restoToken = artefacto[2]
+    if (restoToken.length >= 2 && esUnidadCarta(restoToken)) {
+      return `${prefijo}½ ${restoToken}${resto.slice(primer.length)}`
+    }
+  }
+
+  // 4. Sin cantidad y empieza por unidad conocida ("bulto de bolsas
+  // negras medianas"): es el ½ que el OCR se comió.
+  if (
+    primer &&
+    !/^(?:\d|[½¼¾⅓⅔⅛⅜⅝⅞])/.test(primer) &&
+    esUnidadCarta(primer)
+  ) {
+    return `${prefijo}½ ${resto}`
+  }
+
+  return texto
+}
+
+function parsearLineaVineta(linea: string): ItemRequisicion | null {
+  const match = linea.trim().match(LINEA_VINETA)
+  if (!match) return null
+
+  const cantidad = parseCantidadVineta(match[1])
+  const resto = match[2].trim()
+  const tokens = resto.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return null
+
+  let unidad = ''
+  let descripcionTexto = resto
+  const posibleUnidad = normalizarUnidad(tokens[0])
+  if ((UNIDADES_COMUNES as readonly string[]).includes(posibleUnidad)) {
+    unidad = posibleUnidad
+    descripcionTexto = tokens.slice(1).join(' ')
+  } else {
+    // Sin unidad ("5 escobas de espiga reforzadas"): pieza.
+    unidad = 'PIEZA'
+  }
+  // "2 porron de cloro" → la descripción es "cloro", no "de cloro".
+  descripcionTexto = descripcionTexto.replace(/^de\s+/i, '')
+
+  const descripcion = limpiarDescripcion(descripcionTexto)
+  if (!esFilaPlausible(cantidad, descripcion) || descripcion.length < 3) {
+    return null
+  }
+  // Sin código: el artículo se vincula por nombre como cualquier otro
+  // sin vincular; no se inventa código ni precio.
+  return { codigo_pdf: '', cantidad, unidad, descripcion_pdf: descripcion }
+}
+
+function esCartaEntrega(lineas: string[]): boolean {
+  const texto = lineas.join('\n')
+  const tieneFrase = /se\s+hace\s+entrega/i.test(sinAcentos(texto))
+  const tieneEncabezadoTabla = lineas.some((linea) =>
+    RE_ENCABEZADO_COLUMNAS.test(sinAcentos(linea)),
+  )
+  if (tieneEncabezadoTabla) return false
+  const vinetasConMarca = lineas.filter((linea) =>
+    LINEA_VINETA_CON_MARCA.test(linea.trim()),
+  )
+  if (vinetasConMarca.length >= 2) return true
+  const lineasItem = lineas.filter((linea) => LINEA_VINETA.test(linea.trim()))
+  return tieneFrase && lineasItem.length >= 2
+}
+
+function parsearCartaEntrega(lineas: string[]): ResultadoParseo | null {
+  // El OCR deforma las viñetas: se detecta y se lee sobre las líneas
+  // canonizadas, pero las no reconocidas se reportan con su texto
+  // original para que la revisión muestre lo que de verdad se leyó.
+  const lineasCarta = lineas.map(normalizarLineaCarta)
+  if (!esCartaEntrega(lineasCarta)) return null
+
+  const items: ItemRequisicion[] = []
+  const lineasNoReconocidas: string[] = []
+
+  for (const [indice, lineaOriginal] of lineas.entries()) {
+    const item = parsearLineaVineta(lineasCarta[indice] ?? '')
+    if (item) {
+      items.push(item)
+      continue
+    }
+    if (esLineaUtilParaRevision(lineaOriginal)) lineasNoReconocidas.push(lineaOriginal)
+  }
+
+  return items.length > 0 ? { items, lineasNoReconocidas } : null
+}
+
 export function parseRequisicion(textoCrudo: string): ResultadoParseo {
   const lineasBase = (textoCrudo || '')
     .replace(/\u00a0/g, ' ')
     .split(/\r?\n/)
     .map((linea) => linea.trim())
     .filter(Boolean)
+
+  const carta = parsearCartaEntrega(lineasBase)
+  if (carta) return carta
 
   const bloque = parsearBloquesColumnas(lineasBase)
   const lineas = unirLineasPartidas(lineasBase.filter((_, indice) => !bloque.consumidas.has(indice)))

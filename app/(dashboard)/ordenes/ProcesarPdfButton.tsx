@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
@@ -16,11 +16,12 @@ import {
   guardarItemsEnOrden,
   registrarProductoEnInventario,
 } from './actions'
-import { procesarTextoOrden } from './procesarTexto'
+import { procesarTextoOrden, obtenerCatalogoProductos } from './procesarTexto'
 import { extraerTextoDelPDF } from './procesarPdf'
 import * as pdfjsLib from 'pdfjs-dist'
 import Tesseract from 'tesseract.js'
 import { parseRequisicion } from '@/utils/requisicion'
+import { vincularItems, type ProductoCatalogo } from '@/utils/vincularProductos'
 import { normalizarUnidad, UNIDADES_COMUNES } from '@/utils/unidades'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
@@ -150,6 +151,30 @@ export default function ProcesarPdfButton({
   const router = useRouter()
   const contadorFilas = useRef(0)
   const etiquetaOcr = useRef('Analizando imagen')
+
+  // Re-cotejo al editar la descripción: el catálogo se carga una sola
+  // vez y se guarda en caché; el temporizador espera a que el usuario
+  // pare de escribir; el ref espeja las filas para no aplicar un
+  // cotejo que ya quedó viejo.
+  const catalogoRef = useRef<ProductoCatalogo[] | null>(null)
+  const temporizadorCotejoRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+  const itemsDetectadosRef = useRef<ItemDetectado[] | null>(null)
+
+  useEffect(() => {
+    itemsDetectadosRef.current = itemsDetectados
+  }, [itemsDetectados])
+
+  // Si el modal se cierra con un cotejo pendiente, no se aplica.
+  useEffect(
+    () => () => {
+      if (temporizadorCotejoRef.current) {
+        clearTimeout(temporizadorCotejoRef.current)
+      }
+    },
+    [],
+  )
 
   const nuevaLlave = () => `fila-${contadorFilas.current++}`
 
@@ -311,6 +336,133 @@ export default function ProcesarPdfButton({
           })
         : null,
     )
+  }
+
+  // El cotejo contra el catálogo solo corría al leer el archivo: si el
+  // usuario corregía el nombre a mano en el modal, la fila se quedaba
+  // como "Registrar" aunque el nombre corregido sí existiera. Al editar
+  // la descripción se vuelve a cotejar por nombre con el mismo
+  // mecanismo (vincularItems) que usa la lectura inicial. El texto que
+  // escribió el usuario no se toca: solo cambia el vínculo (y con él
+  // el código corregido, la unidad del catálogo y la sugerencia); la
+  // descripción del catálogo se adopta con el botón "Usar" de la
+  // sugerencia, como siempre.
+  const reCotejarDescripcion = async (
+    key: string,
+    descripcion: string,
+    codigoPdf: string,
+    unidad: string,
+  ) => {
+    const nombre = descripcion.trim()
+
+    if (nombre.length === 0) {
+      // Sin nombre no hay nada que cotejar: la fila deja de apuntar
+      // al producto anterior.
+      setItemsDetectados((prev) =>
+        prev
+          ? prev.map((fila) =>
+              fila.key === key
+                ? { ...fila, existe_en_bd: false, id_bd: null, sugerencia: null }
+                : fila,
+            )
+          : null,
+      )
+      setSeleccionados((prev) => {
+        const nuevos = new Set(prev)
+        nuevos.delete(key)
+        return nuevos
+      })
+      return
+    }
+    if (nombre.length < 3) return
+
+    try {
+      if (!catalogoRef.current) {
+        catalogoRef.current = await obtenerCatalogoProductos()
+      }
+      const [resultado] = vincularItems(
+        [
+          {
+            codigo_pdf: codigoPdf,
+            cantidad: 1,
+            unidad,
+            descripcion_pdf: nombre,
+          },
+        ],
+        catalogoRef.current,
+      )
+      if (!resultado) return
+
+      // El cotejo es asíncrono (la primera vez trae el catálogo): si
+      // el usuario siguió escribiendo o la fila ya no existe, el
+      // resultado ya no corresponde y no se aplica.
+      const filaActual = itemsDetectadosRef.current?.find(
+        (fila) => fila.key === key,
+      )
+      if (!filaActual || filaActual.descripcion_pdf.trim() !== nombre) return
+
+      setItemsDetectados((prev) =>
+        prev
+          ? prev.map((fila) =>
+              fila.key === key &&
+              fila.descripcion_pdf.trim() === nombre
+                ? {
+                    ...fila,
+                    codigo_pdf: resultado.codigo_pdf,
+                    unidad: resultado.unidad,
+                    existe_en_bd: resultado.existe_en_bd,
+                    id_bd: resultado.id_bd,
+                    sugerencia: resultado.sugerencia,
+                  }
+                : fila,
+            )
+          : null,
+      )
+      setSeleccionados((prev) => {
+        const nuevos = new Set(prev)
+        if (resultado.existe_en_bd) nuevos.add(key)
+        else nuevos.delete(key)
+        return nuevos
+      })
+    } catch (error) {
+      // El cotejo es una ayuda, no un bloqueo: si el catálogo no se
+      // pudo cargar, la fila se queda como estaba y se puede registrar
+      // a mano.
+      console.error('No se pudo cotejar la descripción:', error)
+    }
+  }
+
+  // Al escribir se espera a que el usuario pare (500 ms) para no
+  // cotejar en cada tecla; al salir del campo se coteja de inmediato.
+  const programarCotejo = (
+    key: string,
+    descripcion: string,
+    codigoPdf: string,
+    unidad: string,
+  ) => {
+    if (temporizadorCotejoRef.current) {
+      clearTimeout(temporizadorCotejoRef.current)
+    }
+    temporizadorCotejoRef.current = setTimeout(() => {
+      void reCotejarDescripcion(key, descripcion, codigoPdf, unidad)
+    }, 500)
+  }
+
+  const cotejarAhora = (
+    key: string,
+    descripcion: string,
+    codigoPdf: string,
+    unidad: string,
+  ) => {
+    if (temporizadorCotejoRef.current) {
+      clearTimeout(temporizadorCotejoRef.current)
+    }
+    void reCotejarDescripcion(key, descripcion, codigoPdf, unidad)
+  }
+
+  const actualizarDescripcion = (item: ItemDetectado, descripcion: string) => {
+    actualizarItem(item.key, { descripcion_pdf: descripcion })
+    programarCotejo(item.key, descripcion, item.codigo_pdf, item.unidad)
   }
 
   const aplicarSugerencia = (item: ItemDetectado) => {
@@ -665,9 +817,15 @@ export default function ProcesarPdfButton({
                             <input
                               value={item.descripcion_pdf}
                               onChange={(e) =>
-                                actualizarItem(item.key, {
-                                  descripcion_pdf: e.target.value,
-                                })
+                                actualizarDescripcion(item, e.target.value)
+                              }
+                              onBlur={(e) =>
+                                cotejarAhora(
+                                  item.key,
+                                  e.target.value,
+                                  item.codigo_pdf,
+                                  item.unidad,
+                                )
                               }
                               placeholder="Descripción del artículo"
                               aria-label="Descripción"
@@ -856,9 +1014,15 @@ export default function ProcesarPdfButton({
                           id={`descripcion-${item.key}`}
                           value={item.descripcion_pdf}
                           onChange={(e) =>
-                            actualizarItem(item.key, {
-                              descripcion_pdf: e.target.value,
-                            })
+                            actualizarDescripcion(item, e.target.value)
+                          }
+                          onBlur={(e) =>
+                            cotejarAhora(
+                              item.key,
+                              e.target.value,
+                              item.codigo_pdf,
+                              item.unidad,
+                            )
                           }
                           placeholder="Descripción del artículo"
                           className="field h-10 text-[13px] font-medium"
