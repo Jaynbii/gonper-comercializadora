@@ -320,6 +320,36 @@ test('no inventa artículos con las líneas del encabezado o del pie de la foto'
   assert.deepEqual(items, [])
 })
 
+// Re-test de Alex (2026-11-07) con la misma foto 20759: ya no se
+// inventaban filas, pero la descripción 1 seguía con "Des Lo" pegado
+// (en la primera corrida "Des Lo I"): restos de palabras de las
+// columnas vecinas que el OCR cuela al final de la fila.
+test('limpia los fragmentos cortos que el OCR pega al final de la descripción', () => {
+  const { items } = parseRequisicion(
+    [
+      '13747 3.00 CAJAS PAPEL PARA MANOS EN ROLLO DES LO 736.60 2,209.80',
+      '13747 3.00 CAJAS PAPEL PARA MANOS EN ROLLO DES LO I 736.60 2,209.80',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+  assert.equal(items[1].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+})
+
+test('no quita medidas ni palabras cortas reales al final de la descripción', () => {
+  const { items } = parseRequisicion(
+    [
+      '35980 1.00 CAJA PAPEL HIGIENICO JUMBO 12/200 MTS 749.36 749.36',
+      '1234 1 PIEZA TANQUE DE GAS',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].descripcion_pdf, 'PAPEL HIGIENICO JUMBO 12/200 MTS')
+  assert.equal(items[1].descripcion_pdf, 'TANQUE DE GAS')
+})
+
 test('no corta la descripción cuando el hueco no lleva precios', () => {
   const { items } = parseRequisicion('13747  3.00  CAJAS  PAPEL PARA MANOS   EN ROLLO')
 

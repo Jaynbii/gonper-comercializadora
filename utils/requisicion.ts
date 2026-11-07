@@ -114,6 +114,24 @@ function limpiarDescripcion(texto: string) {
   while (tokens.length > 0 && /^[A-Za-zÁÉÍÓÚÜÑ]$/.test(tokens[0])) {
     tokens.shift()
   }
+
+  // 5. Quitar la cola de fragmentos cortos: el OCR a veces pega al final
+  // de la descripción restos de palabras de las columnas vecinas
+  // ("DES LO", de "DESCRIPCIÓN..." o de la línea del pie). Una cola de
+  // 2+ tokens seguidos de 2-3 letras que no son medidas conocidas no es
+  // parte del nombre: los nombres reales terminan en una palabra
+  // completa ("MANOS", "LITROS") o en una medida ("12/200 MTS"). Se
+  // exige una cola de 2+ para no tocar nombres que terminan en una sola
+  // palabra corta real ("GAS", "PRO", "JR"), y siempre quedan 2+ tokens.
+  const esFragmentoCorto = (token: string) =>
+    /^[A-Za-zÁÉÍÓÚÜÑ]{2,3}$/.test(token) && normalizarUnidad(token) === token
+  let colaFragmentos = 0
+  for (let i = tokens.length - 1; i >= 0 && esFragmentoCorto(tokens[i]); i--) {
+    colaFragmentos++
+  }
+  if (colaFragmentos >= 2 && tokens.length - colaFragmentos >= 2) {
+    tokens.length -= colaFragmentos
+  }
   limpio = tokens.join(' ')
 
   return limpio.toUpperCase()
