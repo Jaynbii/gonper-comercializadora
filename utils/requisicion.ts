@@ -69,9 +69,25 @@ function parseCantidad(valor: string): number {
 }
 
 /**
- * LIMPIEZA AGRESIVA: Corta la descripción en el primer precio decimal que 
+ * LIMPIEZA AGRESIVA: Corta la descripción en el primer precio decimal que
  * encuentre, y elimina cualquier texto basura del SAT que venga después.
+ * Además quita la basura que el OCR deja pegada al final de la descripción
+ * (letras sueltas, restos de precios mal leídos, guiones): en una foto,
+ * el texto de las columnas vecinas se cuela en la fila ("ROLLO E",
+ * "MANOS ANE16 - A7E.16", "MANOS O"). Los números internos de la
+ * descripción (12/200) se conservan: solo se tocan los tokens del final.
  */
+const TOKEN_BASURA_FINAL =
+  /^(?:\d+(?:[.,]\d+)?|[A-Za-zÁÉÍÓÚÜÑ]|[^\p{L}\p{N}]+)$/u
+// Letras y dígitos mezclados ("ANE16", "A7E.16"): un precio mal leído.
+// Se exceptúan las medidas tipo 12/200, que sí son parte del nombre.
+const TOKEN_MIXTO_BASURA =
+  /^(?![\d/]+$)(?=[^ ]*[A-Za-zÁÉÍÓÚÜÑ])(?=[^ ]*\d)[^ ]+$/u
+
+function esTokenBasura(token: string) {
+  return TOKEN_BASURA_FINAL.test(token) || TOKEN_MIXTO_BASURA.test(token)
+}
+
 function limpiarDescripcion(texto: string) {
   let limpio = texto.replace(/\s+/g, ' ').trim()
 
@@ -90,7 +106,38 @@ function limpiarDescripcion(texto: string) {
   limpio = limpio.replace(/\s+/g, ' ').trim()
   limpio = limpio.replace(/^[\s/#,.+-]+|[\s/#,.+-]+$/g, '')
 
+  // 4. Quitar los tokens basura del final y una letra suelta del inicio.
+  const tokens = limpio.split(' ').filter(Boolean)
+  while (tokens.length > 0 && esTokenBasura(tokens[tokens.length - 1])) {
+    tokens.pop()
+  }
+  while (tokens.length > 0 && /^[A-Za-zÁÉÍÓÚÜÑ]$/.test(tokens[0])) {
+    tokens.shift()
+  }
+  limpio = tokens.join(' ')
+
   return limpio.toUpperCase()
+}
+
+// Una fila de requisición real tiene cantidades pequeñas (unidades,
+// cajas, galones) y una descripción que es un nombre de producto.
+// El OCR a veces junta el encabezado o el pie en una línea que
+// parece fila ("2026 1 CAJA E In", "004 46080 CAJA Omo"): esas
+// filas inventadas se descartan aquí en vez de llegar al modal.
+const CANTIDAD_MAXIMA_PLAUSIBLE = 10000
+
+function esFilaPlausible(cantidad: number, descripcion: string): boolean {
+  if (
+    !Number.isFinite(cantidad) ||
+    cantidad <= 0 ||
+    cantidad > CANTIDAD_MAXIMA_PLAUSIBLE
+  ) {
+    return false
+  }
+  const tokens = descripcion.split(' ').filter(Boolean)
+  // El nombre del producto tiene al menos una palabra de 3+ letras;
+  // restos como "E IN" no son un artículo.
+  return tokens.some((token) => /[A-Za-zÁÉÍÓÚÜÑ]{3,}/.test(token))
 }
 
 function separarUnidadAlInicio(descripcion: string, unidad: string) {
@@ -261,7 +308,7 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
       const { unidad, descripcion } = separarUnidadAlInicio(descripcionDetectada, normalizarUnidad(match[3] ?? ''))
       const esSoloUnidad = !descripcion.includes(' ') && (UNIDADES_COMUNES as readonly string[]).includes(normalizarUnidad(descripcion))
 
-      if (Number.isFinite(cantidad) && cantidad > 0 && descripcion.length >= 3 && !esSoloUnidad) {
+      if (esFilaPlausible(cantidad, descripcion) && descripcion.length >= 3 && !esSoloUnidad) {
         items.push({ codigo_pdf: codigo, cantidad, unidad, descripcion_pdf: descripcion })
         continue
       }
@@ -274,7 +321,7 @@ export function parseRequisicion(textoCrudo: string): ResultadoParseo {
       const codigo = match[3]
       const descripcion = limpiarDescripcion(match[4])
 
-      if (Number.isFinite(cantidad) && cantidad > 0 && descripcion.length >= 3) {
+      if (esFilaPlausible(cantidad, descripcion) && descripcion.length >= 3) {
         items.push({ codigo_pdf: codigo, cantidad, unidad, descripcion_pdf: descripcion })
         continue
       }

@@ -239,6 +239,87 @@ test('lee la foto de ingresos cuando el OCR conserva las columnas', () => {
   )
 })
 
+// Texto real de Tesseract (spa, preserve_interword_spaces) sobre la foto
+// de la requisición 20759 (Dirección de Ingresos, 30/10/2026), con el
+// preprocesado de la app (escala a 2200 px + contraste). Antes de este
+// fix, el parser inventaba dos filas y ensuciaba las descripciones.
+test('lee la foto real de ingresos 20759 sin inventar filas ni ensuciar descripciones', () => {
+  const { items } = parseRequisicion(
+    [
+  'MUNICIPIO     MAZATLAN                              ORDEN DE COMPRA: 15280',
+  '                                    Autorizacion: 50378',
+  'Requisición: 20759',
+  'Póliza:0-0                                             Fecha: 30/10/ 2026 _ a',
+  'Nas remo O ias aa Ac            ennansrncncnnao   nin Ueenane PENETRA .',
+  'Depto: DIRECCIÓN DE INGRESOS                                DAN AR',
+  'PROVEEDOR: 004606 - PEREA CAMBEROS ALAN                     CTA: 2112/2/000912/004606/000000/00',
+  'Dirección: SANTA ROSA                                          E.         -',
+  'Ciudad: MAZATLAN                                REC: PECABS0101H6A —',
+  'Teléfono:                                                           AT        - u     N',
+  'Observaciones: SOLICITUD DE MATERIAL DE LIMPIEZA PARA LA DIRECCION DE INGRESOS,  o',
+  'CORRESPONDIENTE AL MES DE OCTUBRE DE 2026       a        MRE E',
+  'CODIGO CANTIDAD UNIDAD DESCRIPCIÓN DEL ARTÍCULO O SERVICIO      o PRECIO IMPORTE',
+  '13747 3.00 CAJAS PAPEL PARA MANOS EN ROLLO ”            736.60 2,209.80',
+  '35980    1.00 CAJA PAPEL HIGIENICO JUMBO 12/200 MTS                    749.36     di',
+  '7385     1.00 GALON JABON LIQUIDO PARA MANOS                        o 378.16 378.16',
+  '2026-9-0912-152-3-3-5-216001-5121221600100000900091200 ARTICULOS DE ASEO Y LIMPIA - FONDOS FEDERALES - FORTAMUN - DIRECCIÓ',
+  '0429                                       DE INGRESOS                               .',
+  'Proyecto: + 429  FORTAMUN - DIRECCION DE INGRESOS                         y      «4',
+  'COG: — 216001 ARTICULOS DE ASEO Y LIMPIA                          A',
+  '— SUB-TOTAL    -',
+  'E h        1',
+  'j        TOT:         3,33',
+  'L)',
+  '| ".  .',
+  '1 e',
+  'MEE LI',
+  '" E |',
+  'l',
+  'Ml',
+  'N  LJ',
+  'PU',
+  'JE Y',
+  '!',
+  '|',
+  'di',
+  '!',
+  '!',
+  '-    peenoos peneana            J   |   =  NI | Y',
+  '“NOTA: ENTREGAR FA           e     N PLAZO NO MAYOR A DÍA:',
+  ':         |',
+      // Líneas reconstruidas de la corrida real en la app: el OCR juntó
+      // el encabezado y el pie en líneas que parecían filas y el parser
+      // inventó dos artículos ("2026 | E In | 1 | CAJA" y
+      // "004 | Omo | 46080 | CAJA"). Ya no deben aparecer.
+      '2026 1 CAJA E In',
+      '004 46080 CAJA Omo',
+    ].join('\n'),
+  )
+
+  assert.deepEqual(
+    items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '13747|3|CAJA|PAPEL PARA MANOS EN ROLLO',
+      '35980|1|CAJA|PAPEL HIGIENICO JUMBO 12/200 MTS',
+      '7385|1|GALON|JABON LIQUIDO PARA MANOS',
+    ],
+  )
+})
+
+test('no inventa artículos con las líneas del encabezado o del pie de la foto', () => {
+  const { items } = parseRequisicion(
+    [
+      '2026 1 CAJA E In',
+      '004 46080 CAJA Omo',
+      '2026 9 0912 152 3 3 5 216001 5121221600100000900091200 ARTICULOS DE ASEO Y LIMPIA',
+      'PROVEEDOR: 004606 - PEREA CAMBEROS ALAN',
+      'CORRESPONDIENTE AL MES DE OCTUBRE DE 2026',
+    ].join('\n'),
+  )
+
+  assert.deepEqual(items, [])
+})
+
 test('no corta la descripción cuando el hueco no lleva precios', () => {
   const { items } = parseRequisicion('13747  3.00  CAJAS  PAPEL PARA MANOS   EN ROLLO')
 
