@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
-import { ChevronRight, FilePlus2, FileText, Plus, Upload } from 'lucide-react'
+import { CheckCircle2, ChevronRight, FilePlus2, FileText, Plus, Upload } from 'lucide-react'
 import VerPdfButton from './VerPdfButton'
 import ProcesarPdfButton from './ProcesarPdfButton'
 import AccionesOrden from './AccionesOrden'
@@ -78,6 +78,37 @@ export default async function OrdenesPage({
           </Link>
         }
       />
+
+      {/* Siguiente paso tras subir el archivo. Antes la lista solo
+          resaltaba la fila nueva con un ring suave y el badge "Nueva",
+          y el usuario tenía que descubrir el botón chico "Leer archivo"
+          entre las demás acciones de la fila. Ahora la tarjeta le dice
+          en palabras simples qué hacer y el botón es a todo lo ancho.
+          Solo aplica a la requisición recién subida y en BORRADOR
+          (aún sin leer); si ya se leyó, la fila normal basta. */}
+      {nuevaOrden && nuevaOrden.estado === 'BORRADOR' && nuevaOrden.pdf_path && (
+        <section className="card mt-5 border-gonper-success-border bg-gonper-success-bg/40 p-5">
+          <p className="flex items-center gap-2 text-[14.5px] font-semibold leading-snug">
+            <CheckCircle2
+              className="h-5 w-5 shrink-0 text-gonper-success"
+              strokeWidth={1.75}
+            />
+            Archivo subido: {nombreCliente(nuevaOrden.clientes)} ·{' '}
+            {nuevaOrden.folio}
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-gonper-muted">
+            La requisición ya quedó guardada. Ahora lee el archivo para ver
+            sus artículos y revisar las cantidades.
+          </p>
+          <div className="mt-4">
+            <ProcesarPdfButton
+              ordenId={nuevaOrden.id}
+              pdfPath={nuevaOrden.pdf_path}
+              grande
+            />
+          </div>
+        </section>
+      )}
 
       {error ? (
         <div className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-4 py-3 text-[13px] text-gonper-danger">

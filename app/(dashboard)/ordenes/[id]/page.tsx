@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 
@@ -49,10 +49,14 @@ const nombreCliente = (clientes: Orden['clientes']) => {
 
 export default async function OrdenDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ guardado?: string | string[] }>
 }) {
   const { id } = await params
+  const guardado =
+    (await searchParams)?.guardado === '1'
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -123,6 +127,27 @@ export default async function OrdenDetallePage({
         Volver a requisiciones
       </Link>
 
+      {/* Confirmación al llegar desde "Confirmar y agregar" tras leer
+          el archivo. Antes el usuario caía en el detalle sin ninguna
+          señal de que los artículos se guardaron, y no sabía si
+          "pasó algo" o qué seguía. */}
+      {guardado && (
+        <div
+          role="status"
+          className="card mb-4 border-gonper-success-border bg-gonper-success-bg/50 p-4"
+        >
+          <p className="flex items-center gap-2 text-[14px] font-semibold text-gonper-success">
+            <CheckCircle2 className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+            Artículos guardados: {items.length}{' '}
+            {items.length === 1 ? 'artículo' : 'artículos'} en la requisición
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed text-gonper-muted">
+            Revisa las cantidades abajo. Lo que sigue es surtir lo que hay
+            en stock o comprar lo que falta.
+          </p>
+        </div>
+      )}
+
       <header className="card p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -179,9 +204,17 @@ export default async function OrdenDetallePage({
             )}
           </div>
 
-          {puedeSurtir && hayStockParcial && (
-            <p className="text-[11.5px] leading-relaxed text-gonper-muted">
-              Al surtir se descuenta el inventario automáticamente.
+          {/* Qué sigue, en palabras simples y según el stock real.
+              Antes solo había una nota chica ("al surtir se descuenta
+              el inventario") y solo cuando había algo de stock; un
+              usuario nuevo no sabía si surtir, comprar o esperar. */}
+          {puedeSurtir && (
+            <p className="text-[12.5px] leading-relaxed text-gonper-muted">
+              {hayStockTotal
+                ? 'Tenemos todo en stock: puedes surtir ahora.'
+                : hayStockParcial
+                  ? 'Hay stock para una parte: surte lo que hay y compra lo que falta.'
+                  : 'No hay stock para ningún artículo: compra lo que falta para poder surtir.'}
             </p>
           )}
         </div>
@@ -211,7 +244,7 @@ export default async function OrdenDetallePage({
             </p>
             <Link
               href="/ordenes"
-              className="mt-3 inline-flex min-h-11 items-center text-[13px] font-medium text-gonper-primary hover:underline"
+              className="btn btn-primary mt-4 inline-flex min-h-12"
             >
               Leer el archivo
             </Link>
