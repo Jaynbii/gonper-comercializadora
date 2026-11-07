@@ -569,3 +569,111 @@ test('conserva el número del nombre y quita el número resto del precio', () =>
   assert.equal(items[0].descripcion_pdf, 'PAPEL P/WC JUMBO 400')
   assert.equal(items[1].descripcion_pdf, 'JABON C/9 KGS')
 })
+
+// Carta de entrega (Mercado Municipal "José María Pino Suárez",
+// 19/10/2026): otra forma en que les piden material. No es una tabla —
+// es una lista de viñetas "cantidad unidad descripción", sin códigos
+// ni precios. El cliente se elige al subir el archivo, como siempre;
+// aquí solo se leen los artículos.
+const CARTA_PINO_SUAREZ = [
+  'Mazatlán, Sinaloa a 19 de octubre del 2026',
+  'C. BRIANDA DANIELA ÁVILA TIRADO',
+  'ADMINISTRADORA',
+  'MERCADO MUNICIPAL "JOSÉ MARÍA PINO SUÁREZ"',
+  'PRESENTE.',
+  'Se hace entrega del siguiente material (mes de octubre):',
+  '• 2 porron de cloro',
+  '• ½ bulto de bolsas negras medianas',
+  '• ½ bulto de bolsas negras jumbo',
+  '• 5 escobas de espiga reforzadas',
+  '• 5 cepillos de mango largo',
+  'FIRMA DE RECIBIDO',
+].join('\n')
+
+test('lee la carta de entrega del Mercado Pino Suárez como requisición', () => {
+  const { items } = parseRequisicion(CARTA_PINO_SUAREZ)
+
+  assert.deepEqual(
+    items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '|2|PORRON|CLORO',
+      '|0.5|BULTO|BOLSAS NEGRAS MEDIANAS',
+      '|0.5|BULTO|BOLSAS NEGRAS JUMBO',
+      '|5|PIEZA|ESCOBAS DE ESPIGA REFORZADAS',
+      '|5|PIEZA|CEPILLOS DE MANGO LARGO',
+    ],
+  )
+})
+
+// Fracciones: ½, ¼, ¾ como carácter único y "1/2" como el OCR a veces
+// lo lee. Sin unidad, la pieza es el valor por defecto.
+test('acepta fracciones en la carta de entrega (¼, ¾ y 1/2)', () => {
+  const { items } = parseRequisicion(
+    [
+      'Se hace entrega del siguiente material:',
+      '• ¼ bulto de bolsas negras medianas',
+      '• ¾ caja de guantes',
+      '• 1/2 galon de cloro',
+    ].join('\n'),
+  )
+
+  assert.deepEqual(
+    items.map((item) => `${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '0.25|BULTO|BOLSAS NEGRAS MEDIANAS',
+      '0.75|CAJA|GUANTES',
+      '0.5|GALON|CLORO',
+    ],
+  )
+})
+
+// El OCR del teléfono a veces pierde la viñeta: con la frase de
+// entrega, las líneas "cantidad + resto" también se leen.
+test('lee la carta aunque el OCR pierda las viñetas', () => {
+  const { items } = parseRequisicion(
+    [
+      'Se hace entrega del siguiente material:',
+      '2 porron de cloro',
+      '5 escobas de espiga reforzadas',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].cantidad, 2)
+  assert.equal(items[0].unidad, 'PORRON')
+  assert.equal(items[0].descripcion_pdf, 'CLORO')
+  assert.equal(items[1].unidad, 'PIEZA')
+  assert.equal(items[1].descripcion_pdf, 'ESCOBAS DE ESPIGA REFORZADAS')
+})
+
+// Y aunque pierda la frase: 2+ líneas con viñeta y cantidad, sin
+// encabezado de tabla, también son una carta.
+test('lee la lista de viñetas aunque el OCR pierda la frase de entrega', () => {
+  const { items } = parseRequisicion(
+    [
+      '• 2 porron de cloro',
+      '• ½ bulto de bolsas negras medianas',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[1].cantidad, 0.5)
+  assert.equal(items[1].unidad, 'BULTO')
+})
+
+// Las requisiciones en tabla dicen "SE SOLICITA EL SIGUIENTE
+// MATERIAL" en Observaciones: eso no es una carta y no debe robar
+// filas de la tabla.
+test('no confunde una requisición en tabla con una carta aunque diga "siguiente material"', () => {
+  const { items } = parseRequisicion(
+    [
+      'Observaciones: SE SOLICITA EL SIGUIENTE MATERIAL DE LIMPIEZA PARA EL DEPARTAMENTO DE ASEO',
+      'CODIGO CANTIDAD UNIDAD DESCRIPCION DEL ARTICULO O SERVICIO PRECIO IMPORTE',
+      '13747 3.00 CAJAS PAPEL PARA MANOS EN ROLLO 736.60 2,209.80',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].codigo_pdf, '13747')
+  assert.equal(items[0].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+})

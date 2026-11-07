@@ -420,12 +420,126 @@ function parsearBloquesColumnas(lineas: string[]): { items: ItemRequisicion[], c
   }
 }
 
+// Carta de entrega (Mercado Municipal "José María Pino Suárez",
+// 19/10/2026): otra forma en que piden material. No es una tabla — es
+// una lista de viñetas "cantidad unidad descripción", sin códigos ni
+// precios:
+//   • 2 porron de cloro
+//   • ½ bulto de bolsas negras medianas
+//   • 5 escobas de espiga reforzadas
+// La detección exige la frase de la carta ("se hace entrega del
+// siguiente material") con 2+ líneas de viñeta, o 2+ líneas que
+// empiezan con viñeta y cantidad sin que haya encabezado de tabla.
+// La frase sola no basta: las requisiciones en tabla dicen "SE
+// SOLICITA EL SIGUIENTE MATERIAL" en Observaciones. Y la viñeta sola
+// tampoco roba filas de la tabla: el encabezado de columnas la frena.
+const FRACCIONES_VINETA: Record<string, number> = {
+  '½': 0.5,
+  '¼': 0.25,
+  '¾': 0.75,
+  '⅓': 1 / 3,
+  '⅔': 2 / 3,
+  '⅛': 0.125,
+  '⅜': 0.375,
+  '⅝': 0.625,
+  '⅞': 0.875,
+}
+
+const CANTIDAD_VINETA =
+  '(?:\\d+(?:[.,:]\\d{1,3})?|\\d+/\\d+|[½¼¾⅓⅔⅛⅜⅝⅞])'
+const LINEA_VINETA = new RegExp(
+  `^(?:[•\\-\\*·▪◦–—]\\s*)?(${CANTIDAD_VINETA})\\s+(.+)$`,
+  'u',
+)
+const LINEA_VINETA_CON_MARCA = new RegExp(
+  `^[•\\-\\*·▪◦–—]\\s*${CANTIDAD_VINETA}\\s+\\S`,
+  'u',
+)
+
+function parseCantidadVineta(valor: string): number {
+  const limpio = valor.trim()
+  if (FRACCIONES_VINETA[limpio] !== undefined) return FRACCIONES_VINETA[limpio]
+  const fraccion = limpio.match(/^(-?\d+)\s*\/\s*(\d+)$/)
+  if (fraccion) {
+    const denominador = Number(fraccion[2])
+    return denominador === 0 ? NaN : Number(fraccion[1]) / denominador
+  }
+  return parseCantidad(limpio)
+}
+
+function parsearLineaVineta(linea: string): ItemRequisicion | null {
+  const match = linea.trim().match(LINEA_VINETA)
+  if (!match) return null
+
+  const cantidad = parseCantidadVineta(match[1])
+  const resto = match[2].trim()
+  const tokens = resto.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return null
+
+  let unidad = ''
+  let descripcionTexto = resto
+  const posibleUnidad = normalizarUnidad(tokens[0])
+  if ((UNIDADES_COMUNES as readonly string[]).includes(posibleUnidad)) {
+    unidad = posibleUnidad
+    descripcionTexto = tokens.slice(1).join(' ')
+  } else {
+    // Sin unidad ("5 escobas de espiga reforzadas"): pieza.
+    unidad = 'PIEZA'
+  }
+  // "2 porron de cloro" → la descripción es "cloro", no "de cloro".
+  descripcionTexto = descripcionTexto.replace(/^de\s+/i, '')
+
+  const descripcion = limpiarDescripcion(descripcionTexto)
+  if (!esFilaPlausible(cantidad, descripcion) || descripcion.length < 3) {
+    return null
+  }
+  // Sin código: el artículo se vincula por nombre como cualquier otro
+  // sin vincular; no se inventa código ni precio.
+  return { codigo_pdf: '', cantidad, unidad, descripcion_pdf: descripcion }
+}
+
+function esCartaEntrega(lineas: string[]): boolean {
+  const texto = lineas.join('\n')
+  const tieneFrase = /se\s+hace\s+entrega/i.test(sinAcentos(texto))
+  const tieneEncabezadoTabla = lineas.some((linea) =>
+    RE_ENCABEZADO_COLUMNAS.test(sinAcentos(linea)),
+  )
+  if (tieneEncabezadoTabla) return false
+  const vinetasConMarca = lineas.filter((linea) =>
+    LINEA_VINETA_CON_MARCA.test(linea.trim()),
+  )
+  if (vinetasConMarca.length >= 2) return true
+  const lineasItem = lineas.filter((linea) => LINEA_VINETA.test(linea.trim()))
+  return tieneFrase && lineasItem.length >= 2
+}
+
+function parsearCartaEntrega(lineas: string[]): ResultadoParseo | null {
+  if (!esCartaEntrega(lineas)) return null
+
+  const items: ItemRequisicion[] = []
+  const lineasNoReconocidas: string[] = []
+
+  for (const linea of lineas) {
+    const item = parsearLineaVineta(linea)
+    if (item) {
+      items.push(item)
+      continue
+    }
+    if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
+  }
+
+  return items.length > 0 ? { items, lineasNoReconocidas } : null
+}
+
 export function parseRequisicion(textoCrudo: string): ResultadoParseo {
   const lineasBase = (textoCrudo || '')
     .replace(/\u00a0/g, ' ')
     .split(/\r?\n/)
     .map((linea) => linea.trim())
     .filter(Boolean)
+
+  const carta = parsearCartaEntrega(lineasBase)
+  if (carta) return carta
 
   const bloque = parsearBloquesColumnas(lineasBase)
   const lineas = unirLineasPartidas(lineasBase.filter((_, indice) => !bloque.consumidas.has(indice)))
