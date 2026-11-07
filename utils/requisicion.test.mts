@@ -108,7 +108,9 @@ test('no pierde la fila cuando GALON fue leído como CAJA', () => {
   assert.equal(items.length, 3)
   assert.equal(items[2].codigo_pdf, '7385')
   assert.equal(items[2].unidad, 'CAJA')
-  assert.equal(items[2].descripcion_pdf, 'JABON LIQUIDO PARA MANOS E LI')
+  // "E LI" es un resto de GALON mal leído, no parte del nombre: la cola
+  // de la descripción lo limpia (igual que "E CA" en la 20345).
+  assert.equal(items[2].descripcion_pdf, 'JABON LIQUIDO PARA MANOS')
 })
 
 test('acepta códigos de 3 a 8 dígitos y conserva ceros a la izquierda', () => {
@@ -431,4 +433,139 @@ test('normaliza plurales y abreviaturas de unidades', () => {
   assert.equal(normalizarUnidad('PZAS'), 'PIEZA')
   assert.equal(normalizarUnidad('PORRÓN'), 'PORRON')
   assert.equal(normalizarUnidad(''), '')
+})
+
+// Requisición 20345 (Aseo Urbano, 14/10/2026): PDF escaneado sin capa de
+// texto, leído con Tesseract 'spa' sobre el render a escala 2.0 (la misma
+// que usa la app para los PDFs escaneados). En la corrida del teléfono de
+// Alex, dos filas salieron con basura al final de la descripción:
+// "Recogedor De Lamina Reforzada 1840 Y Teno" y "Papel P/wc Jumbo 400
+// ... Ta". Es el precio/importe colado en la línea: en esta reproducción
+// las mismas filas salen como "— ¡18:43 AT" y "a e :". La regla de la
+// cola ahora quita esos restos sin tocar los números reales del nombre
+// ("400", "12/200", "25 KGS"). También cubre que el OCR confunda el
+// punto decimal con dos puntos ("5:00" por "5.00" en el trapeador).
+test('lee el PDF escaneado real de la requisición 20345 sin ensuciar descripciones', () => {
+  const { items } = parseRequisicion(
+    [
+  "y                                                                     na",
+  "MUNICIPIO DE MAZATLAN                        ¡bad Ep",
+  "Requisicion: 20345",
+  "Póliza:0-0                                    Fecha: 14/10/2026     7",
+  "TED E EEE ENE SEED NO TE",
+  "Depto: DEPARTAMENTO DE:ASEO URBANO                                =D    7",
+  "PROVEEDOR: 004606 - PEREA CAMBEROS ALAN                     CTA: pg",
+  "Dirección: SANTA ROSA                            E ve   _",
+  "Ciudad: MAZATLAN                                      REC: PECABIOIOISA",
+  "Observaciones: SE SOLICITA EL SIGUIENTE MATERIAL DE LIMPIEZA PARA EL DEPARTAMENTO DE ASEO",
+  "URBANO                                                                  a          :",
+  "dedo tinta mambo tna ta ise num aerroropeya e",
+  "CODIGO CANTIDAD UNIDAD DESCRIPCION DEL ARTICULO O SERVICIO                     PRECIO IMPORTE",
+  "lb da tii",
+  "17414 150.00 PIEZA ESCOBA DE ESPIGA                              -         pra Leo",
+  "37072 100.00 PIEZA RECOGEDOR DE LAMINA REFORZADA                    — ¡18:43 AT",
+  "37312 20.00 BULTO BOLSA NEGRA JUMBO DE 25 KGS.                      2,132.08 42,64",
+  "37530 20.00 PIEZA ARAÑAS METALICAS REFORZADAS                              200.47 EAU",
+  "38795 5.00 PIEZA CEPILLO IXTLE                                         Bs     E",
+  "8074    10.00 PIEZA ESCOBAS DE PLASTICO                                   08.16     381,60",
+  "8972    5:00 PIEZA TRAPEADOR                                            —_91.64    458.2",
+  "9773   1,00 PIEZA CLORO DE 20 LITROS                            e   Ca",
+  "36192   1,00 PORRON FABULOSO DE 20 LITROS                       486.04",
+  "3984    3.00 METRO FRANELA                                              a",
+  "2562     1.00   PIEZA CUBETA PARA LAVAR LOS BAÑOS                            '     3",
+  "20593    10.00 BOLSA JABON C/9 KGS.                                          38",
+  "3952     1.00   CAJA   PAPEL P/WC JUMBO 400                                 a   e    :",
+  "2026-9-0912-211-6-4-7-216001-5121221600100000900091200 ARTICULOS DE ASEO Y LIMPIA - FONDOS FEDERALES - FORTAMUN",
+  "=                                            DEPARTAMENTO DE ASEO URBANO",
+  "Proyecto:    438   FORTAMUN - DEPARTAMENTO DE ASEO URBANO",
+  "cos:   216001 ARTICULOS DE ASEO Y LIMPIA                                    2.\"",
+  "SUB-TOTAL",
+  "— TOTAL",
+  "il",
+  "Li l",
+  "Fr",
+  "i                          Ne",
+  "Á          -",
+  "EN",
+  "\"Ne",
+  "'",
+  "U                      U",
+  "E       _           JESUS ALBERTO TIRADO BONILLA —",
+  "DEPARTAMENTO DE PROVEEDURIA                             \"",
+  "eo       ¡ota A A EA                 Est",
+  "LOTA: ENTREGAR FACTURAS DENTRO DE UN PLAZO NO MAYOR A2 DÍAS              “e",
+  "1",
+    ].join('\n'),
+  )
+
+  assert.deepEqual(
+    items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '17414|150|PIEZA|ESCOBA DE ESPIGA',
+      '37072|100|PIEZA|RECOGEDOR DE LAMINA REFORZADA',
+      '37312|20|BULTO|BOLSA NEGRA JUMBO DE 25 KGS',
+      '37530|20|PIEZA|ARAÑAS METALICAS REFORZADAS',
+      '38795|5|PIEZA|CEPILLO IXTLE',
+      '8074|10|PIEZA|ESCOBAS DE PLASTICO',
+      '8972|5|PIEZA|TRAPEADOR',
+      '9773|1|PIEZA|CLORO DE 20 LITROS',
+      '36192|1|PORRON|FABULOSO DE 20 LITROS',
+      '3984|3|METRO|FRANELA',
+      '2562|1|PIEZA|CUBETA PARA LAVAR LOS BAÑOS',
+      '20593|10|BOLSA|JABON C/9 KGS',
+      '3952|1|CAJA|PAPEL P/WC JUMBO 400',
+    ],
+  )
+})
+
+// Re-test de Alex (2026-11-07) con la misma requisición 20345: las líneas
+// exactas que el OCR de su teléfono produjo para las dos filas malas
+// (en Title Case, como las mostró el modal). "1840 Y Teno" es el importe
+// colado en la línea; "... Ta" es el precio leído como puntos y letras.
+test('limpia las colas exactas que el OCR del teléfono produjo en la 20345', () => {
+  const { items } = parseRequisicion(
+    [
+      '17414 150.00 PIEZA Escoba De Espiga 127.60 19,140.00',
+      '37072 100.00 PIEZA Recogedor De Lamina Reforzada 1840 Y Teno 75.40 7,540.00',
+      '37312 20.00 BULTO Bolsa Negra Jumbo De 25 KGS. 2,132.08 42,641.60',
+      '37530 20.00 PIEZA Arañas Metalicas Reforzadas 220.40 4,408.00',
+      '38795 5.00 PIEZA Cepillo Ixtle 150.80 754.00',
+      '8074 10.00 PIEZA Escobas De Plastico 88.16 881.60',
+      '8972 5.00 PIEZA Trapeador 91.64 458.20',
+      '9773 1.00 PIEZA Cloro De 20 Litros 371.20 371.20',
+      '36192 1.00 PORRON Fabuloso De 20 Litros 486.04 486.04',
+      '3984 3.00 METRO Franela 30.16 90.48',
+      '2562 1.00 PIEZA Cubeta Para Lavar Los Baños 365.40 365.40',
+      '20593 10.00 BOLSA Jabon C/9 KGS. 388.60 3,886.00',
+      '3952 1.00 CAJA Papel P/wc Jumbo 400 ... Ta 749.36 749.36',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 13)
+  assert.equal(items[1].descripcion_pdf, 'RECOGEDOR DE LAMINA REFORZADA')
+  assert.equal(items[12].descripcion_pdf, 'PAPEL P/WC JUMBO 400')
+})
+
+// El OCR confunde el punto decimal con dos puntos en la cantidad.
+test('acepta dos puntos como separador decimal en la cantidad', () => {
+  const { items } = parseRequisicion('8972 5:00 PIEZA TRAPEADOR 91.64 458.20')
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].cantidad, 5)
+  assert.equal(items[0].descripcion_pdf, 'TRAPEADOR')
+})
+
+// Un número suelto al final no es basura por sí solo: "400" es parte del
+// nombre, pero "38" después de una unidad es resto del precio 388.60.
+test('conserva el número del nombre y quita el número resto del precio', () => {
+  const { items } = parseRequisicion(
+    [
+      '3952 1.00 CAJA PAPEL P/WC JUMBO 400 749.36 749.36',
+      '20593 10.00 BOLSA JABON C/9 KGS. 38',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].descripcion_pdf, 'PAPEL P/WC JUMBO 400')
+  assert.equal(items[1].descripcion_pdf, 'JABON C/9 KGS')
 })

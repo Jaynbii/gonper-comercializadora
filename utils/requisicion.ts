@@ -15,7 +15,7 @@ export type ResultadoParseo = {
 const UNIDADES = patronUnidades()
 
 const FILA_REQUISICION = new RegExp(
-  `(?:^|\\D)(\\d{3,8})\\s+(\\d+(?:[.,]\\d{1,3})?)\\s+((?:${UNIDADES})[.,]?\\s+)?((?!\\d).+)$`,
+  `(?:^|\\D)(\\d{3,8})\\s+(\\d+(?:[.,:]\\d{1,3})?)\\s+((?:${UNIDADES})[.,]?\\s+)?((?!\\d).+)$`,
   'i',
 )
 
@@ -51,6 +51,11 @@ function esLineaInformativa(linea: string) {
 function parseCantidad(valor: string): number {
   const limpio = valor.trim()
 
+  // El OCR confunde el punto decimal con dos puntos ("5:00" por "5.00").
+  if (limpio.includes(':')) {
+    return Number(limpio.replace(':', '.'))
+  }
+
   if (limpio.includes(',') && limpio.includes('.')) {
     if (limpio.lastIndexOf(',') < limpio.lastIndexOf('.')) {
       return Number(limpio.replace(/,/g, ''))
@@ -76,9 +81,14 @@ function parseCantidad(valor: string): number {
  * el texto de las columnas vecinas se cuela en la fila ("ROLLO E",
  * "MANOS ANE16 - A7E.16", "MANOS O"). Los números internos de la
  * descripción (12/200) se conservan: solo se tocan los tokens del final.
+ * Un número suelto al final NO es basura por sí solo: los nombres reales
+ * llevan números ("400", "12/200"). Por eso aquí solo se quitan los
+ * decimales (restos de precio) y los enteros de 1 dígito o de 4+ dígitos;
+ * los enteros de 2-3 dígitos los decide el paso 5 según lo que tengan
+ * antes ("JUMBO 400" se queda, "KGS. 38" se va).
  */
 const TOKEN_BASURA_FINAL =
-  /^(?:\d+(?:[.,]\d+)?|[A-Za-zÁÉÍÓÚÜÑ]|[^\p{L}\p{N}]+)$/u
+  /^(?:\d+[.,]\d+|\d{4,}(?:[.,]\d+)?|\d|[A-Za-zÁÉÍÓÚÜÑ]|[^\p{L}\p{N}]+)$/u
 // Letras y dígitos mezclados ("ANE16", "A7E.16"): un precio mal leído.
 // Se exceptúan las medidas tipo 12/200, que sí son parte del nombre.
 const TOKEN_MIXTO_BASURA =
@@ -115,31 +125,130 @@ function limpiarDescripcion(texto: string) {
     tokens.shift()
   }
 
-  // 5. Quitar la cola de fragmentos cortos: el OCR a veces pega al final
-  // de la descripción restos de palabras de las columnas vecinas
-  // ("DES LO", de "DESCRIPCIÓN..." o de la línea del pie). Una cola de
-  // 2+ tokens seguidos de 2-3 letras que no son medidas conocidas no es
-  // parte del nombre: los nombres reales terminan en una palabra
-  // completa ("MANOS", "LITROS") o en una medida ("12/200 MTS"). Se
-  // exige una cola de 2+ para no tocar nombres que terminan en una sola
-  // palabra corta real ("GAS", "PRO", "JR"), y siempre quedan 2+ tokens.
-  // OJO: normalizarUnidad devuelve MAYÚSCULAS, así que la comparación
-  // debe hacerse en la misma caja: el OCR del teléfono devuelve la cola
-  // a veces en Title Case ("Des Lo") o minúsculas y la regla no la
-  // atrapaba — los tests solo alimentaban MAYÚSCULAS y pasaban.
+  // 5. Quitar la cola de basura: el OCR a veces pega al final de la
+  // descripción restos de las columnas vecinas. Tres formas vistas en
+  // fotos reales:
+  //  - fragmentos cortos ("DES LO", restos de "DESCRIPCIÓN" o del pie);
+  //  - restos del precio/importe leídos como basura ("1840 Y Teno",
+  //    "— ¡18:43 AT": el importe 7,540.00 o 19,140.00 colado en la
+  //    línea, con un número de 4+ dígitos y fragmentos);
+  //  - puntos y letras sueltas del precio ("... Ta", "a e :").
+  // Un número suelto NO es basura por sí solo: los nombres reales
+  // llevan números ("400", "12/200", "20 LITROS", "C/9 KG"). Por eso
+  // la cola solo se quita con evidencia: 2+ fragmentos cortos, o un
+  // número de 4+ dígitos / puntuación junto con un fragmento, o un
+  // fragmento final de 2 letras. Un número de 2-3 dígitos solo se
+  // quita si no sigue a una palabra real del nombre ("JUMBO 400" se
+  // queda; "KGS. 38" se va porque 38 sigue a una unidad y es resto
+  // del precio 388.60). Se exige que queden 2+ tokens para no tocar
+  // nombres cortos ("TANQUE DE GAS").
+  const esUnidadConocida = (token: string) => {
+    const mayus = token.toUpperCase()
+    return (
+      (UNIDADES_COMUNES as readonly string[]).includes(mayus) ||
+      normalizarUnidad(mayus) !== mayus
+    )
+  }
+  // Palabra real del nombre: 3+ letras que no es una unidad conocida.
+  const esPalabraNombre = (token: string) =>
+    /^[A-Za-zÁÉÍÓÚÜÑ]{3,}$/.test(token) && !esUnidadConocida(token)
   const esFragmentoCorto = (token: string) => {
     if (!/^[A-Za-zÁÉÍÓÚÜÑ]{2,3}$/.test(token)) return false
-    const mayus = token.toUpperCase()
-    return normalizarUnidad(mayus) === mayus
+    // OJO: normalizarUnidad devuelve MAYÚSCULAS, así que la comparación
+    // debe hacerse en la misma caja: el OCR del teléfono devuelve la cola
+    // a veces en Title Case ("Des Lo") o minúsculas y la regla no la
+    // atrapaba — los tests solo alimentaban MAYÚSCULAS y pasaban.
+    return !esUnidadConocida(token.toUpperCase())
   }
-  let colaFragmentos = 0
-  for (let i = tokens.length - 1; i >= 0 && esFragmentoCorto(tokens[i]); i--) {
-    colaFragmentos++
+  // Fragmento de 4 letras ("TENO", "BAÑOS"): solo cuenta como cola
+  // cuando hay evidencia fuerte; solo no se toca ("PINO AZUL" es un
+  // nombre real). Las unidades de 4 letras ("CAJA", "KILO") no son
+  // fragmentos.
+  const esFragmentoCuatro = (token: string) => {
+    if (!/^[A-Za-zÁÉÍÓÚÜÑ]{4}$/.test(token)) return false
+    return !esUnidadConocida(token.toUpperCase())
   }
-  if (colaFragmentos >= 2 && tokens.length - colaFragmentos >= 2) {
-    tokens.length -= colaFragmentos
+  const esEntero = (token: string) => /^\d+$/.test(token)
+  const esPuntuacionSola = (token: string) => /^[^\p{L}\p{N}]+$/u.test(token)
+
+  let cola = 0
+  let fragmentosCortos = 0
+  let fragmentos = 0
+  let evidenciaFuerte = false
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = tokens[i]
+    if (esFragmentoCorto(token)) {
+      cola++
+      fragmentosCortos++
+      fragmentos++
+    } else if (esFragmentoCuatro(token)) {
+      cola++
+      fragmentos++
+    } else if (esEntero(token)) {
+      // Un número de 4+ dígitos siempre es resto de precio. Uno de
+      // 2-3 dígitos solo sigue en la cola si NO sigue a una palabra
+      // real del nombre (es medida del producto: "JUMBO 400"); si
+      // sigue a una unidad, un fragmento o un número, es resto del
+      // precio.
+      if (token.length >= 4) {
+        cola++
+        evidenciaFuerte = true
+      } else {
+        const anterior = tokens[i - 1]
+        if (anterior !== undefined && esPalabraNombre(anterior)) break
+        cola++
+      }
+    } else if (/^[A-Za-zÁÉÍÓÚÜÑ]$/.test(token)) {
+      cola++
+    } else if (esPuntuacionSola(token)) {
+      cola++
+      evidenciaFuerte = true
+    } else {
+      break
+    }
   }
-  limpio = tokens.join(' ')
+
+  const ultimoToken = tokens[tokens.length - 1]
+  const tokenAntesDeCola = cola > 0 ? tokens[tokens.length - cola - 1] : undefined
+  // Fragmento final de 2 letras ("BS", "TA", "CA"): un nombre real no
+  // termina en una palabra de 2 letras que no sea medida (las medidas
+  // de 2 letras como "KG" están protegidas como unidades). Se quita si
+  // la cola trae una letra suelta ("E CA") o si es el único token de
+  // la cola y sigue a una palabra real ("CEPILLO IXTLE BS"); no se
+  // quita si sigue a un número ("500 ML" se queda: ML sigue a 500).
+  const esFragmentoDosLetras =
+    ultimoToken !== undefined &&
+    /^[A-Za-zÁÉÍÓÚÜÑ]{2}$/.test(ultimoToken) &&
+    esFragmentoCorto(ultimoToken)
+  const colaTieneLetraSuelta = tokens
+    .slice(tokens.length - cola)
+    .some((token) => /^[A-Za-zÁÉÍÓÚÜÑ]$/.test(token))
+  const quitarPorFragmentoDosLetras =
+    esFragmentoDosLetras &&
+    (colaTieneLetraSuelta ||
+      (cola === 1 &&
+        tokenAntesDeCola !== undefined &&
+        esPalabraNombre(tokenAntesDeCola)))
+  // Un número suelto al final de la cola solo se quita si no sigue a
+  // una palabra real del nombre ("KGS. 38" se va; "JUMBO 400" se queda).
+  const quitarPorEnteroSuelto =
+    cola === 1 &&
+    ultimoToken !== undefined &&
+    esEntero(ultimoToken) &&
+    !(tokenAntesDeCola !== undefined && esPalabraNombre(tokenAntesDeCola))
+
+  if (
+    tokens.length - cola >= 2 &&
+    (fragmentosCortos >= 2 ||
+      quitarPorFragmentoDosLetras ||
+      (evidenciaFuerte && fragmentos >= 1) ||
+      quitarPorEnteroSuelto)
+  ) {
+    tokens.length -= cola
+  }
+  // Al quitar la cola puede quedar puntuación colgando ("KGS." de
+  // "KGS. 38"); se limpia el final como en el paso 3.
+  limpio = tokens.join(' ').replace(/[\s/#,.+-]+$/g, '')
 
   return limpio.toUpperCase()
 }
@@ -238,7 +347,7 @@ function esLineaUtilParaRevision(linea: string) {
 const RE_ENCABEZADO_COLUMNAS = /CODIGO.*CANTIDAD.*UNIDAD.*DESCRIPCION/i
 const RE_FIN_BLOQUE = /\b(SUBTOTAL|TOTAL|IVA|FIRMA|OBSERVACIONES|CONDICIONES)\b/i
 const RE_SOLO_CODIGOS = /^\d{3,8}(?:\s+\d{3,8})*$/
-const RE_CANTIDAD_UNIDAD = new RegExp(`(\\d+(?:[.,]\\d{1,3})?)\\s*((?:${UNIDADES})[.,]?)(?=\\s|$)`, 'gi')
+const RE_CANTIDAD_UNIDAD = new RegExp(`(\\d+(?:[.,:]\\d{1,3})?)\\s*((?:${UNIDADES})[.,]?)(?=\\s|$)`, 'gi')
 
 function parsearBloquesColumnas(lineas: string[]): { items: ItemRequisicion[], consumidas: Set<number> } {
   const sinResultado = { items: [], consumidas: new Set<number>() }
