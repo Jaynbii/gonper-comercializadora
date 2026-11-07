@@ -337,6 +337,28 @@ test('limpia los fragmentos cortos que el OCR pega al final de la descripción',
   assert.equal(items[1].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
 })
 
+// Re-test 2 de Alex (2026-11-07 00:20): el código ya se corregía a
+// 35980 (el pulido estaba vivo en el preview) pero "Des Lo" SEGUÍA en
+// el modal. Causa: la regla comparaba normalizarUnidad(token) === token
+// y normalizarUnidad devuelve MAYÚSCULAS, así que con la cola en Title
+// Case ("Des Lo") o minúsculas — que es como la devuelve el OCR del
+// teléfono — la regla no se disparaba. Los tests solo alimentaban
+// MAYÚSCULAS y pasaban. La cola debe limpiarse en cualquier caja.
+test('limpia los fragmentos cortos aunque el OCR los devuelva en Title Case o minúsculas', () => {
+  const { items } = parseRequisicion(
+    [
+      '13747 3.00 CAJA Papel Para Manos En Rollo Des Lo 736.60 2,209.80',
+      '13747 3.00 CAJA papel para manos en rollo des lo 736.60 2,209.80',
+      '13747 3.00 CAJA Papel Para Manos En Rollo Des Lo I 736.60 2,209.80',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 3)
+  assert.equal(items[0].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+  assert.equal(items[1].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+  assert.equal(items[2].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
+})
+
 test('no quita medidas ni palabras cortas reales al final de la descripción', () => {
   const { items } = parseRequisicion(
     [

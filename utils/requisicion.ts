@@ -123,8 +123,15 @@ function limpiarDescripcion(texto: string) {
   // completa ("MANOS", "LITROS") o en una medida ("12/200 MTS"). Se
   // exige una cola de 2+ para no tocar nombres que terminan en una sola
   // palabra corta real ("GAS", "PRO", "JR"), y siempre quedan 2+ tokens.
-  const esFragmentoCorto = (token: string) =>
-    /^[A-Za-zÁÉÍÓÚÜÑ]{2,3}$/.test(token) && normalizarUnidad(token) === token
+  // OJO: normalizarUnidad devuelve MAYÚSCULAS, así que la comparación
+  // debe hacerse en la misma caja: el OCR del teléfono devuelve la cola
+  // a veces en Title Case ("Des Lo") o minúsculas y la regla no la
+  // atrapaba — los tests solo alimentaban MAYÚSCULAS y pasaban.
+  const esFragmentoCorto = (token: string) => {
+    if (!/^[A-Za-zÁÉÍÓÚÜÑ]{2,3}$/.test(token)) return false
+    const mayus = token.toUpperCase()
+    return normalizarUnidad(mayus) === mayus
+  }
   let colaFragmentos = 0
   for (let i = tokens.length - 1; i >= 0 && esFragmentoCorto(tokens[i]); i--) {
     colaFragmentos++
