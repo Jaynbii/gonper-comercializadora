@@ -677,3 +677,60 @@ test('no confunde una requisición en tabla con una carta aunque diga "siguiente
   assert.equal(items[0].codigo_pdf, '13747')
   assert.equal(items[0].descripcion_pdf, 'PAPEL PARA MANOS EN ROLLO')
 })
+
+// El OCR real del teléfono (Tesseract + el preprocesado de la app)
+// deforma las viñetas de la carta: la • sale como "e" o "+", la
+// cantidad va pegada a la palabra ("2porrones", "5escobas") y el ½
+// desaparece o sale como "Ya"/"Ys" pegado a la unidad ("Yabulto").
+// Con ese texto la carta debe leer los mismos 5 artículos que con el
+// texto transcrito limpio.
+const CARTA_PINO_SUAREZ_OCR_PROCESADO = [
+  'Se hace entrega del siguiente material (mes de octubre):',
+  'e 2porrones de cloro',
+  'e bulto de bolsas negras medianas',
+  'e bulto de bolsas negras jumbo',
+  'e 5escobas de espiga reforzadas',
+  'e 5cepillos de mango largo',
+].join('\n')
+
+const CARTA_PINO_SUAREZ_OCR_CRUDO = [
+  'Se hace entrega del siguiente material (mes de octubre):',
+  '+ 2 porrones de cloro',
+  '+ Yabulto de bolsas negras medianas',
+  '+ Ysbulto de bolsas negras jumbo',
+  '* 5escobas de espiga reforzadas',
+  '+ 5cepillos de mango largo',
+].join('\n')
+
+test('lee la carta con el texto real del OCR (viñetas como "e"/"+", cantidad pegada, ½ perdido)', () => {
+  for (const texto of [CARTA_PINO_SUAREZ_OCR_PROCESADO, CARTA_PINO_SUAREZ_OCR_CRUDO]) {
+    const { items } = parseRequisicion(texto)
+
+    assert.deepEqual(
+      items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+      [
+        '|2|PORRON|CLORO',
+        '|0.5|BULTO|BOLSAS NEGRAS MEDIANAS',
+        '|0.5|BULTO|BOLSAS NEGRAS JUMBO',
+        '|5|PIEZA|ESCOBAS DE ESPIGA REFORZADAS',
+        '|5|PIEZA|CEPILLOS DE MANGO LARGO',
+      ],
+    )
+  }
+})
+
+// "%bulto": otra lectura típica del ½ pegado a la unidad.
+test('recupera el ½ cuando el OCR lo lee como "%" pegado a la unidad', () => {
+  const { items } = parseRequisicion(
+    [
+      'Se hace entrega del siguiente material:',
+      '• %bulto de bolsas negras jumbo',
+      '• 2 porron de cloro',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].cantidad, 0.5)
+  assert.equal(items[0].unidad, 'BULTO')
+  assert.equal(items[0].descripcion_pdf, 'BOLSAS NEGRAS JUMBO')
+})

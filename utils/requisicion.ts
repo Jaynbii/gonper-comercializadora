@@ -445,14 +445,18 @@ const FRACCIONES_VINETA: Record<string, number> = {
   '⅞': 0.875,
 }
 
+// El OCR del teléfono pega la cantidad a la palabra ("2porrones",
+// "5escobas"), así que el espacio tras la cantidad es opcional.
+// OJO: con \s* la fracción "1/2" se rompería ("1" + "/2 ..."), por
+// eso la alternativa \d+/\d+ va primero: se intenta antes que \d+.
 const CANTIDAD_VINETA =
-  '(?:\\d+(?:[.,:]\\d{1,3})?|\\d+/\\d+|[½¼¾⅓⅔⅛⅜⅝⅞])'
+  '(?:\\d+/\\d+|\\d+(?:[.,:]\\d{1,3})?|[½¼¾⅓⅔⅛⅜⅝⅞])'
 const LINEA_VINETA = new RegExp(
-  `^(?:[•\\-\\*·▪◦–—]\\s*)?(${CANTIDAD_VINETA})\\s+(.+)$`,
+  `^(?:[•\\-\\*·▪◦–—]\\s*)?(${CANTIDAD_VINETA})\\s*(.+)$`,
   'u',
 )
 const LINEA_VINETA_CON_MARCA = new RegExp(
-  `^[•\\-\\*·▪◦–—]\\s*${CANTIDAD_VINETA}\\s+\\S`,
+  `^[•\\-\\*·▪◦–—]\\s*${CANTIDAD_VINETA}\\s*\\S`,
   'u',
 )
 
@@ -465,6 +469,79 @@ function parseCantidadVineta(valor: string): number {
     return denominador === 0 ? NaN : Number(fraccion[1]) / denominador
   }
   return parseCantidad(limpio)
+}
+
+const esUnidadCarta = (token: string) =>
+  (UNIDADES_COMUNES as readonly string[]).includes(normalizarUnidad(token))
+
+// El OCR del teléfono deforma las viñetas de la carta de tres formas
+// vistas en la foto real del Mercado Pino Suárez:
+//  - la viñeta • sale como "e" o "+" ("e 2porrones de cloro");
+//  - la cantidad va pegada a la palabra ("2porrones", "5escobas");
+//  - el ½ desaparece ("e bulto de bolsas...") o sale como "Ya"/"Ys"
+//    pegado a la unidad ("Yabulto", "Ysbulto").
+// Antes de detectar la carta, cada línea se canoniza: la marca se
+// vuelve "•", el artefacto de ½ se vuelve "½" y una línea que empieza
+// por una unidad conocida sin cantidad se lee como ½ (es el único
+// caso en que la cantidad se pierde del todo). Solo se usa en la ruta
+// de la carta; la tabla y la factura no pasan por aquí.
+function normalizarLineaCarta(linea: string): string {
+  let texto = linea.trim()
+  if (!texto) return texto
+
+  // 1. Marca de viñeta → "•". La "e" solo es marca cuando lo que sigue
+  // es una cantidad o una unidad conocida: una línea que empiece por
+  // una palabra con "e" ("Escobas de espiga...") no se toca.
+  const marca = texto.match(/^[•\-\*·▪◦–—+]\s*/)
+  if (marca) {
+    texto = `• ${texto.slice(marca[0].length)}`.trimEnd()
+  } else {
+    const conE = texto.match(/^e\s+(.+)$/i)
+    if (conE) {
+      const siguiente = conE[1]
+      const primerToken = siguiente.split(/\s+/)[0] ?? ''
+      if (
+        /^(?:\d|[½¼¾⅓⅔⅛⅜⅝⅞])/.test(primerToken) ||
+        esUnidadCarta(primerToken)
+      ) {
+        texto = `• ${siguiente}`
+      }
+    } else {
+      // "e2porrones...": la "e" pegada a la cantidad.
+      const pegada = texto.match(/^e(\d.*)$/i)
+      if (pegada) texto = `• ${pegada[1]}`
+    }
+  }
+
+  // 2. Resto después de la marca (o la línea entera si no hay marca).
+  const conMarca = texto.match(/^•\s*(.*)$/)
+  const resto = conMarca ? conMarca[1] : texto
+  const prefijo = conMarca ? '• ' : ''
+
+  // 3. "Yabulto" / "Ysbulto" / "%bulto": el ½ pegado a la unidad.
+  // El resto del token debe ser una unidad de 2+ letras: "Ya" + "m"
+  // (METRO) no basta, que "Yam..." no es un artefacto.
+  const tokens = resto.split(/\s+/).filter(Boolean)
+  const primer = tokens[0] ?? ''
+  const artefacto = primer.match(/^(ya|ys|%)(.+)$/i)
+  if (artefacto) {
+    const restoToken = artefacto[2]
+    if (restoToken.length >= 2 && esUnidadCarta(restoToken)) {
+      return `${prefijo}½ ${restoToken}${resto.slice(primer.length)}`
+    }
+  }
+
+  // 4. Sin cantidad y empieza por unidad conocida ("bulto de bolsas
+  // negras medianas"): es el ½ que el OCR se comió.
+  if (
+    primer &&
+    !/^(?:\d|[½¼¾⅓⅔⅛⅜⅝⅞])/.test(primer) &&
+    esUnidadCarta(primer)
+  ) {
+    return `${prefijo}½ ${resto}`
+  }
+
+  return texto
 }
 
 function parsearLineaVineta(linea: string): ItemRequisicion | null {
@@ -514,18 +591,22 @@ function esCartaEntrega(lineas: string[]): boolean {
 }
 
 function parsearCartaEntrega(lineas: string[]): ResultadoParseo | null {
-  if (!esCartaEntrega(lineas)) return null
+  // El OCR deforma las viñetas: se detecta y se lee sobre las líneas
+  // canonizadas, pero las no reconocidas se reportan con su texto
+  // original para que la revisión muestre lo que de verdad se leyó.
+  const lineasCarta = lineas.map(normalizarLineaCarta)
+  if (!esCartaEntrega(lineasCarta)) return null
 
   const items: ItemRequisicion[] = []
   const lineasNoReconocidas: string[] = []
 
-  for (const linea of lineas) {
-    const item = parsearLineaVineta(linea)
+  for (const [indice, lineaOriginal] of lineas.entries()) {
+    const item = parsearLineaVineta(lineasCarta[indice] ?? '')
     if (item) {
       items.push(item)
       continue
     }
-    if (esLineaUtilParaRevision(linea)) lineasNoReconocidas.push(linea)
+    if (esLineaUtilParaRevision(lineaOriginal)) lineasNoReconocidas.push(lineaOriginal)
   }
 
   return items.length > 0 ? { items, lineasNoReconocidas } : null
