@@ -570,6 +570,26 @@ test('conserva el número del nombre y quita el número resto del precio', () =>
   assert.equal(items[1].descripcion_pdf, 'JABON C/9 KGS')
 })
 
+// Un solo fragmento de 2 letras tras una unidad ("CLORO DE 20 LITROS
+// Ae", requisición 20345 leída en el preview del PR #10): es resto de
+// la columna del precio y ensuciaba el nombre, así que la fila no se
+// vinculaba con el catálogo. "500 ML" se queda (ML sigue a un número)
+// y una palabra real de 2 letras ("DE") tampoco se toca.
+test('quita un fragmento de 2 letras tras una unidad sin tocar medidas reales', () => {
+  const { items } = parseRequisicion(
+    [
+      '9773 1.00 PIEZA CLORO DE 20 LITROS Ae 371.20 371.20',
+      '1234 1.00 PIEZA JABON 500 ML 100.00 100.00',
+      '9774 1.00 PIEZA CLORO DE 20 LITROS DE',
+    ].join('\n'),
+  )
+
+  assert.equal(items.length, 3)
+  assert.equal(items[0].descripcion_pdf, 'CLORO DE 20 LITROS')
+  assert.equal(items[1].descripcion_pdf, 'JABON 500 ML')
+  assert.equal(items[2].descripcion_pdf, 'CLORO DE 20 LITROS DE')
+})
+
 // Carta de entrega (Mercado Municipal "José María Pino Suárez",
 // 19/10/2026): otra forma en que les piden material. No es una tabla —
 // es una lista de viñetas "cantidad unidad descripción", sin códigos
@@ -702,6 +722,19 @@ const CARTA_PINO_SUAREZ_OCR_CRUDO = [
   '+ 5cepillos de mango largo',
 ].join('\n')
 
+// Misma foto, otra corrida del OCR con el preprocesado de la app: el 5
+// de la última viñeta sale como "S" pegada a la palabra ("Scepillos")
+// y el ½ de la segunda como una "Y" suelta ("e Y bulto..."). Sin el
+// arreglo, esas dos líneas se perdían y la carta leía 3 de 5.
+const CARTA_PINO_SUAREZ_OCR_APP = [
+  'Se hace entrega del siguiente material (mes de octubre):',
+  'e 2porrones de cloro',
+  'e Y bulto de bolsas negras medianas',
+  'e bulto de bolsas negras jumbo',
+  'e 5escobas de espiga reforzadas',
+  'e Scepillos de mango largo',
+].join('\n')
+
 test('lee la carta con el texto real del OCR (viñetas como "e"/"+", cantidad pegada, ½ perdido)', () => {
   for (const texto of [CARTA_PINO_SUAREZ_OCR_PROCESADO, CARTA_PINO_SUAREZ_OCR_CRUDO]) {
     const { items } = parseRequisicion(texto)
@@ -733,4 +766,43 @@ test('recupera el ½ cuando el OCR lo lee como "%" pegado a la unidad', () => {
   assert.equal(items[0].cantidad, 0.5)
   assert.equal(items[0].unidad, 'BULTO')
   assert.equal(items[0].descripcion_pdf, 'BOLSAS NEGRAS JUMBO')
+})
+
+// El 5 leído como "S" y el ½ leído como "Y" suelta (texto real del OCR
+// con el preprocesado de la app): la carta debe leer los 5 artículos.
+test('lee la carta aunque el OCR lea el 5 como S y el ½ como Y suelta', () => {
+  const { items } = parseRequisicion(CARTA_PINO_SUAREZ_OCR_APP)
+
+  assert.deepEqual(
+    items.map((item) => `${item.codigo_pdf}|${item.cantidad}|${item.unidad}|${item.descripcion_pdf}`),
+    [
+      '|2|PORRON|CLORO',
+      '|0.5|BULTO|BOLSAS NEGRAS MEDIANAS',
+      '|0.5|BULTO|BOLSAS NEGRAS JUMBO',
+      '|5|PIEZA|ESCOBAS DE ESPIGA REFORZADAS',
+      '|5|PIEZA|CEPILLOS DE MANGO LARGO',
+    ],
+  )
+})
+
+// El 5 como S también vale con viñeta real y con la "e" pegada.
+test('recupera el 5 leído como S con viñeta real o con la "e" pegada', () => {
+  for (const texto of [
+    [
+      'Se hace entrega del siguiente material:',
+      '• Scepillos de mango largo',
+      '• 2 porron de cloro',
+    ].join('\n'),
+    [
+      'Se hace entrega del siguiente material:',
+      'eScepillos de mango largo',
+      'e2porrones de cloro',
+    ].join('\n'),
+  ]) {
+    const { items } = parseRequisicion(texto)
+
+    assert.equal(items.length, 2)
+    assert.equal(items[0].cantidad, 5)
+    assert.equal(items[0].descripcion_pdf, 'CEPILLOS DE MANGO LARGO')
+  }
 })

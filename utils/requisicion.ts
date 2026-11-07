@@ -213,9 +213,12 @@ function limpiarDescripcion(texto: string) {
   // Fragmento final de 2 letras ("BS", "TA", "CA"): un nombre real no
   // termina en una palabra de 2 letras que no sea medida (las medidas
   // de 2 letras como "KG" están protegidas como unidades). Se quita si
-  // la cola trae una letra suelta ("E CA") o si es el único token de
-  // la cola y sigue a una palabra real ("CEPILLO IXTLE BS"); no se
-  // quita si sigue a un número ("500 ML" se queda: ML sigue a 500).
+  // la cola trae una letra suelta ("E CA"), si es el único token de
+  // la cola y sigue a una palabra real ("CEPILLO IXTLE BS"), o si
+  // sigue a una unidad ("CLORO DE 20 LITROS Ae", requisición 20345:
+  // el "Ae" es resto de la columna del precio, no parte del nombre).
+  // No se quita si sigue a un número ("500 ML" se queda: ML sigue a
+  // 500) ni si es una palabra real de 2 letras.
   const esFragmentoDosLetras =
     ultimoToken !== undefined &&
     /^[A-Za-zÁÉÍÓÚÜÑ]{2}$/.test(ultimoToken) &&
@@ -223,12 +226,27 @@ function limpiarDescripcion(texto: string) {
   const colaTieneLetraSuelta = tokens
     .slice(tokens.length - cola)
     .some((token) => /^[A-Za-zÁÉÍÓÚÜÑ]$/.test(token))
+  // Palabras reales de 2 letras: un nombre sí puede terminar en una
+  // de estas (aunque en este catálogo no se ha visto), así que nunca
+  // se quitan; la basura del OCR ("AE", "BS", "TA", "CA") nunca es
+  // una de estas.
+  const PALABRAS_CORTAS_REALES = new Set([
+    'DE', 'EN', 'EL', 'LA', 'UN', 'ES', 'SE', 'SU', 'AL',
+    'MI', 'TU', 'SI', 'NO', 'YA', 'ME', 'TE', 'LE', 'LO',
+  ])
+  const esPalabraRealCorta = (token: string) =>
+    PALABRAS_CORTAS_REALES.has(token.toUpperCase())
   const quitarPorFragmentoDosLetras =
     esFragmentoDosLetras &&
     (colaTieneLetraSuelta ||
       (cola === 1 &&
         tokenAntesDeCola !== undefined &&
-        esPalabraNombre(tokenAntesDeCola)))
+        esPalabraNombre(tokenAntesDeCola)) ||
+      (cola === 1 &&
+        tokenAntesDeCola !== undefined &&
+        ultimoToken !== undefined &&
+        esUnidadConocida(tokenAntesDeCola) &&
+        !esPalabraRealCorta(ultimoToken)))
   // Un número suelto al final de la cola solo se quita si no sigue a
   // una palabra real del nombre ("KGS. 38" se va; "JUMBO 400" se queda).
   const quitarPorEnteroSuelto =
@@ -474,23 +492,35 @@ function parseCantidadVineta(valor: string): number {
 const esUnidadCarta = (token: string) =>
   (UNIDADES_COMUNES as readonly string[]).includes(normalizarUnidad(token))
 
-// El OCR del teléfono deforma las viñetas de la carta de tres formas
+// El 5 leído como "S" pegada a la palabra ("Scepillos", foto de la
+// carta Pino Suárez con el preprocesado de la app): S mayúscula
+// seguida de 3+ minúsculas. El mínimo de 3 deja fuera "Se"/"Sin"/
+// "Sal", que sí son palabras reales.
+const CINCO_COMO_S = /^S[a-záéíóúüñ]{3,}$/
+
+// El OCR del teléfono deforma las viñetas de la carta de varias formas
 // vistas en la foto real del Mercado Pino Suárez:
 //  - la viñeta • sale como "e" o "+" ("e 2porrones de cloro");
 //  - la cantidad va pegada a la palabra ("2porrones", "5escobas");
-//  - el ½ desaparece ("e bulto de bolsas...") o sale como "Ya"/"Ys"
-//    pegado a la unidad ("Yabulto", "Ysbulto").
+//  - el ½ desaparece ("e bulto de bolsas..."), sale como "Ya"/"Ys"
+//    pegado a la unidad ("Yabulto", "Ysbulto") o como una "Y" suelta
+//    ("e Y bulto de bolsas...");
+//  - el 5 sale como "S" pegada a la palabra ("e Scepillos de mango
+//    largo", con el preprocesado de la app).
 // Antes de detectar la carta, cada línea se canoniza: la marca se
-// vuelve "•", el artefacto de ½ se vuelve "½" y una línea que empieza
-// por una unidad conocida sin cantidad se lee como ½ (es el único
-// caso en que la cantidad se pierde del todo). Solo se usa en la ruta
-// de la carta; la tabla y la factura no pasan por aquí.
+// vuelve "•", el artefacto de ½ se vuelve "½", la "S" que es un 5 se
+// vuelve "5" y una línea que empieza por una unidad conocida sin
+// cantidad se lee como ½ (es el único caso en que la cantidad se
+// pierde del todo). Solo se usa en la ruta de la carta; la tabla y
+// la factura no pasan por aquí.
 function normalizarLineaCarta(linea: string): string {
   let texto = linea.trim()
   if (!texto) return texto
 
   // 1. Marca de viñeta → "•". La "e" solo es marca cuando lo que sigue
-  // es una cantidad o una unidad conocida: una línea que empiece por
+  // es una cantidad, una unidad conocida, el 5 leído como S pegada a
+  // la palabra ("e Scepillos...") o el ½ leído como una "Y" suelta
+  // antes de la unidad ("e Y bulto..."): una línea que empiece por
   // una palabra con "e" ("Escobas de espiga...") no se toca.
   const marca = texto.match(/^[•\-\*·▪◦–—+]\s*/)
   if (marca) {
@@ -499,17 +529,28 @@ function normalizarLineaCarta(linea: string): string {
     const conE = texto.match(/^e\s+(.+)$/i)
     if (conE) {
       const siguiente = conE[1]
-      const primerToken = siguiente.split(/\s+/)[0] ?? ''
+      const tokensSiguiente = siguiente.split(/\s+/)
+      const primerToken = tokensSiguiente[0] ?? ''
+      const segundoToken = tokensSiguiente[1] ?? ''
       if (
         /^(?:\d|[½¼¾⅓⅔⅛⅜⅝⅞])/.test(primerToken) ||
-        esUnidadCarta(primerToken)
+        esUnidadCarta(primerToken) ||
+        CINCO_COMO_S.test(primerToken) ||
+        (/^y$/i.test(primerToken) && esUnidadCarta(segundoToken))
       ) {
         texto = `• ${siguiente}`
       }
     } else {
-      // "e2porrones...": la "e" pegada a la cantidad.
-      const pegada = texto.match(/^e(\d.*)$/i)
-      if (pegada) texto = `• ${pegada[1]}`
+      // "e2porrones..." o "eScepillos...": la "e" pegada a la cantidad.
+      const pegada = texto.match(/^e(.+)$/i)
+      if (pegada) {
+        const restoPegado = pegada[1]
+        if (/^\d/.test(restoPegado)) {
+          texto = `• ${restoPegado}`
+        } else if (CINCO_COMO_S.test(restoPegado.split(/\s+/)[0] ?? '')) {
+          texto = `• 5 ${restoPegado.slice(1)}`
+        }
+      }
     }
   }
 
@@ -517,6 +558,27 @@ function normalizarLineaCarta(linea: string): string {
   const conMarca = texto.match(/^•\s*(.*)$/)
   const resto = conMarca ? conMarca[1] : texto
   const prefijo = conMarca ? '• ' : ''
+
+  // 2.5. Artefactos del 5 y del ½ en el primer token tras la viñeta:
+  // "Scepillos" (el 5 leído como S pegada a la palabra) y "Y" suelta
+  // (el ½ leído como una letra) antes de una unidad. Solo con marca
+  // de viñeta: sin ella, una línea que empiece por una palabra con S
+  // ("Saludos", "Sin otro particular") no se toca. El falso positivo
+  // que queda: una viñeta sin cantidad que empiece por una palabra
+  // real con S ("Sosa cáustica") se leería como "5 osa cáustica" —
+  // se corrige en el modal, y sin esta regla esa línea se perdía
+  // entera.
+  if (prefijo) {
+    const tokensResto = resto.split(/\s+/).filter(Boolean)
+    const primerResto = tokensResto[0] ?? ''
+    if (CINCO_COMO_S.test(primerResto)) {
+      return `${prefijo}5 ${resto.slice(1)}`
+    }
+    const segundoResto = tokensResto[1] ?? ''
+    if (/^y$/i.test(primerResto) && esUnidadCarta(segundoResto)) {
+      return `${prefijo}½ ${resto.slice(primerResto.length).trimStart()}`
+    }
+  }
 
   // 3. "Yabulto" / "Ysbulto" / "%bulto": el ½ pegado a la unidad.
   // El resto del token debe ser una unidad de 2+ letras: "Ya" + "m"

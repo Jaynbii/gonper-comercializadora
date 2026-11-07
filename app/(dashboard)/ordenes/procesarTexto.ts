@@ -31,3 +31,20 @@ export async function procesarTextoOrden(textoCrudo: string) {
     lineasNoReconocidas,
   }
 }
+
+// El catálogo para volver a cotejar en el modal: el cotejo inicial lo
+// hace procesarTextoOrden, pero si el usuario corrige el nombre a mano
+// la fila debe cotejarse de nuevo sin volver a leer el archivo. El
+// modal carga el catálogo una sola vez (lo guarda en caché) y coteja
+// en el cliente con el mismo vincularItems.
+export async function obtenerCatalogoProductos() {
+  const supabase = await createClient()
+
+  const { data: productosDB, error: dbError } = await supabase
+    .from('productos')
+    .select('id, sku, nombre, unidad_medida, codigo_sat')
+
+  if (dbError) throw new Error('No se pudo conectar a la base de datos')
+
+  return (productosDB ?? []) as ProductoCatalogo[]
+}
