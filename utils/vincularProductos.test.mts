@@ -59,6 +59,49 @@ test('A570: si el segundo producto sí está en el catálogo, se vincula por nom
   assert.equal(vinculados[1].id_bd, 'prod-manos')
   assert.equal(vinculados[1].existe_en_bd, true)
   assert.equal(vinculados[1].descripcion_pdf, 'Papel para Manos en Rollo')
+  // El código del documento NO se corrige aquí: 14111704 sí coincidió
+  // con un producto (JUMBO), así que es el código correcto del documento
+  // aunque el producto vinculado tenga otro codigo_sat.
+  assert.equal(vinculados[1].codigo_pdf, '14111704')
+})
+
+// Foto 20759, re-test de Alex (2026-11-07): el OCR leyó 35580 en vez de
+// 35980, pero el artículo se vinculó por nombre al producto correcto.
+test('corrige un dígito mal leído cuando el artículo se vincula por nombre y el código no coincidió con nada', () => {
+  const vinculados = vincularItems(
+    [{ codigo_pdf: '35580', cantidad: 1, unidad: 'CAJA', descripcion_pdf: 'PAPEL HIGIENICO JUMBO 12/200 MTS' }],
+    [
+      {
+        id: 'prod-higienico',
+        sku: 'ART0010',
+        nombre: 'Papel Higienico Jumbo 12/200 Mts',
+        unidad_medida: 'CAJA',
+        codigo_sat: '35980',
+      },
+    ],
+  )
+
+  assert.equal(vinculados[0].id_bd, 'prod-higienico')
+  assert.equal(vinculados[0].existe_en_bd, true)
+  assert.equal(vinculados[0].codigo_pdf, '35980')
+})
+
+test('no corrige el código si difiere en más de un dígito', () => {
+  const vinculados = vincularItems(
+    [{ codigo_pdf: '99999999', cantidad: 5, unidad: 'PIEZA', descripcion_pdf: 'ESCOBA DE PLASTICO ABANICO' }],
+    [
+      {
+        id: 'prod-escoba',
+        sku: 'ART0004',
+        nombre: 'Escoba de plástico abanico',
+        unidad_medida: 'PIEZA',
+        codigo_sat: '47131600',
+      },
+    ],
+  )
+
+  assert.equal(vinculados[0].id_bd, 'prod-escoba')
+  assert.equal(vinculados[0].codigo_pdf, '99999999')
 })
 
 test('coincidencia por código con nombre que concuerda sigue auto-vinculando', () => {

@@ -208,10 +208,34 @@ export function vincularItems(
     }
 
     // 3. Sin vínculo, la descripción es la del PDF, no la de otro producto.
+    // Corrección de un dígito mal leído por el OCR (foto 20759: el OCR
+    // leyó 35580 en vez de 35980): si el artículo se vinculó por nombre
+    // y su código NO coincidió con ningún producto del catálogo, y el
+    // producto vinculado tiene un código de cliente (codigo_sat) que
+    // difiere del leído en exactamente un dígito, ese dígito es casi
+    // seguro un error de lectura. No se usa el sku: es un código interno
+    // (ARTXXXX); el código del documento vive en codigo_sat. La
+    // corrección solo hace visible el código del producto al que la fila
+    // YA quedó vinculada por nombre; no crea un vínculo nuevo y no se
+    // aplica cuando el código leído sí coincidió con algo (Factura A570:
+    // 14111704 es un código SAT de clase compartido por dos productos,
+    // y ahí el código del documento es el correcto).
+    let codigoPdf = item.codigo_pdf
+    if (candidatosPorCodigo.length === 0 && productoFinal?.codigo_sat) {
+      const sat = productoFinal.codigo_sat.trim()
+      if (/^\d+$/.test(sat) && /^\d+$/.test(codigoPdf) && sat.length === codigoPdf.length) {
+        let diferencias = 0
+        for (let i = 0; i < sat.length; i++) {
+          if (sat[i] !== codigoPdf[i]) diferencias++
+        }
+        if (diferencias === 1) codigoPdf = sat
+      }
+    }
+
     const nombre = productoFinal?.nombre || formatearNombre(item.descripcion_pdf)
 
     return {
-      codigo_pdf: item.codigo_pdf,
+      codigo_pdf: codigoPdf,
       cantidad: item.cantidad,
       unidad: normalizarUnidad(productoFinal?.unidad_medida) || item.unidad || '',
       descripcion_pdf: nombre,
