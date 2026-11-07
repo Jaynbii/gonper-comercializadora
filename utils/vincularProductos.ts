@@ -73,6 +73,32 @@ export function limpiarParaBusqueda(texto: string) {
     .trim()
 }
 
+// Tokens de un nombre ya limpio, separando número y unidad pegados
+// ("9kgs" -> ["9", "kgs"], "20l" -> ["20", "l"]) para que "c/9kgs" y
+// "c/9 kgs" comparen igual.
+export function tokenizarNombre(nombreLimpio: string): string[] {
+  return nombreLimpio
+    .split(' ')
+    .flatMap((token) => token.match(/\d+|[a-z]+/g) ?? [token])
+    .filter((token) => token.length > 0)
+}
+
+// Cobertura por tokens: qué fracción de los tokens del nombre del catálogo
+// aparece en el nombre escrito. Complementa a Fuse: Fuse castiga las
+// palabras de más ("Jabón en polvo c/9kgs" contra "Jabón c/9 kgs" puntúa
+// 0.624 y no sugiere nada), pero si todas las palabras del catálogo están
+// en lo escrito, es el mismo producto aunque el usuario haya agregado
+// palabras ("en polvo") o el peso venga pegado ("9kgs").
+function coberturaPorTokens(
+  tokensConsulta: string[],
+  tokensCatalogo: string[],
+): { cobertura: number; coincidencias: number } {
+  if (tokensCatalogo.length === 0) return { cobertura: 0, coincidencias: 0 }
+  const enConsulta = new Set(tokensConsulta)
+  const coincidencias = tokensCatalogo.filter((t) => enConsulta.has(t)).length
+  return { cobertura: coincidencias / tokensCatalogo.length, coincidencias }
+}
+
 function crearFuse(productos: ProductoCatalogo[]) {
   return new Fuse(
     productos.map((p) => ({ ...p, nombreLimpio: limpiarParaBusqueda(p.nombre) })),
@@ -148,9 +174,16 @@ function agruparPorCodigo(
  * 1. Candidatos por código (SAT o SKU): se consideran TODOS los productos
  *    que comparten ese código y solo se confía en el que además concuerda
  *    en nombre (score Fuse <= 0.4 contra la descripción del PDF).
- * 2. Si ningún candidato por código concuerda en nombre, búsqueda difusa
- *    por nombre sobre todo el catálogo: score <= 0.35 auto-vincula,
- *    <= 0.4 solo sugiere.
+ * 2. Si ningún candidato por código concuerda en nombre, búsqueda por
+ *    nombre sobre todo el catálogo: Fuse (score <= 0.35 auto-vincula,
+ *    <= 0.4 solo sugiere) más cobertura por tokens — si todos los tokens
+ *    del nombre del catálogo (2 o más) están en lo escrito, auto-vincula;
+ *    si están el 75% o más, solo sugiere. Entre varios candidatos gana
+ *    el que tenga más tokens coincidentes (el más específico) y, en
+ *    empate, el menor puntaje Fuse. Así "Jabón en polvo c/9kgs" vincula
+ *    a "Jabón c/9 kgs" aunque Fuse lo puntúe 0.624, y con solo el de
+ *    3 kilos en el catálogo solo sugiere (no auto-vincula el peso
+ *    equivocado).
  * 3. Sin vínculo, la descripción mostrada es la del PDF (formateada),
  *    nunca el nombre de otro producto.
  */
@@ -190,18 +223,50 @@ export function vincularItems(
     if (candidatosQueConcuerdan.length > 0) {
       productoFinal = candidatosQueConcuerdan[0]
     } else {
-      // 2. Sin código confiable, búsqueda difusa por nombre.
-      const mejor = fuse.search(descripcionLimpia)[0]
+      // 2. Sin código confiable, búsqueda por nombre: Fuse + cobertura
+      // por tokens. La cobertura cubre lo que Fuse castiga: palabras de
+      // más en lo escrito y peso pegado ("9kgs" vs "9 kgs").
+      const tokensConsulta = tokenizarNombre(descripcionLimpia)
+      const candidatos = productos
+        .map((producto) => {
+          const tokensCatalogo = tokenizarNombre(
+            limpiarParaBusqueda(producto.nombre),
+          )
+          const { cobertura, coincidencias } = coberturaPorTokens(
+            tokensConsulta,
+            tokensCatalogo,
+          )
+          const fuseScore = puntajesPorId.get(producto.id) ?? 1
+          const autoPorTokens = tokensCatalogo.length >= 2 && cobertura === 1
+          const sugerirPorTokens =
+            tokensCatalogo.length >= 2 &&
+            coincidencias >= 2 &&
+            cobertura >= 0.75
+          return {
+            producto,
+            auto: fuseScore <= UMBRAL_VINCULO_AUTO || autoPorTokens,
+            sugerir: fuseScore <= UMBRAL_SUGERENCIA || sugerirPorTokens,
+            fuseScore,
+            coincidencias,
+          }
+        })
+        .filter((c) => c.auto || c.sugerir)
+        .sort((a, b) => {
+          if (a.auto !== b.auto) return a.auto ? -1 : 1
+          if (a.coincidencias !== b.coincidencias)
+            return b.coincidencias - a.coincidencias
+          return a.fuseScore - b.fuseScore
+        })
+      const mejor = candidatos[0]
       if (mejor) {
-        const score = mejor.score ?? 1
-        if (score <= UMBRAL_VINCULO_AUTO) {
-          productoFinal = mejor.item
-        } else if (score <= UMBRAL_SUGERENCIA) {
+        if (mejor.auto) {
+          productoFinal = mejor.producto
+        } else {
           sugerencia = {
-            id: mejor.item.id,
-            sku: mejor.item.sku,
-            nombre: mejor.item.nombre,
-            unidad_medida: mejor.item.unidad_medida,
+            id: mejor.producto.id,
+            sku: mejor.producto.sku,
+            nombre: mejor.producto.nombre,
+            unidad_medida: mejor.producto.unidad_medida,
           }
         }
       }

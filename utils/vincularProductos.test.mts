@@ -172,3 +172,71 @@ test('nombresSimilares distingue el mismo producto de uno distinto', () => {
   assert.equal(nombresSimilares('Papel para Manos en Rollo', 'Papel P/wc Jumbo Junior'), false)
   assert.equal(nombresSimilares('Fabuloso De 20 Litros', 'Jabón C/3 Kgs'), false)
 })
+
+// Alex (2026-11-07): escribió "Jabón en polvo c/9kgs" en el modal y no
+// sugirió nada, aunque el catálogo tiene "Jabón c/9 kgs". Fuse puntúa
+// ese par 0.624 (límite 0.40) por las palabras de más ("en polvo") y el
+// peso pegado ("9kgs" contra "9 kgs").
+const JABON_9: ProductoCatalogo = {
+  id: 'prod-jabon-9',
+  sku: 'ART0020',
+  nombre: 'Jabón c/9 kgs',
+  unidad_medida: 'BULTO',
+  codigo_sat: '12345678',
+}
+const JABON_3: ProductoCatalogo = {
+  id: 'prod-jabon-3',
+  sku: 'ART0021',
+  nombre: 'Jabón c/3 kgs',
+  unidad_medida: 'BULTO',
+  codigo_sat: '12345679',
+}
+const JABON_POLVO: ProductoCatalogo = {
+  id: 'prod-jabon-polvo',
+  sku: 'ART0022',
+  nombre: 'Jabón en polvo',
+  unidad_medida: 'BULTO',
+  codigo_sat: '12345680',
+}
+const ITEM_JABON_9KGS = {
+  codigo_pdf: '99999999',
+  cantidad: 1,
+  unidad: 'BULTO',
+  descripcion_pdf: 'Jabón en polvo c/9kgs',
+}
+
+test('palabras de más y peso pegado no impiden vincular: "Jabón en polvo c/9kgs" vincula a "Jabón c/9 kgs"', () => {
+  const vinculados = vincularItems([ITEM_JABON_9KGS], [JABON_9, JABON_3, JABON_POLVO])
+
+  // Gana el de 9 kilos (4 tokens coincidentes) sobre el genérico
+  // "Jabón en polvo" (2) y el de 3 kilos (que solo sugiere).
+  assert.equal(vinculados[0].id_bd, 'prod-jabon-9')
+  assert.equal(vinculados[0].existe_en_bd, true)
+  assert.equal(vinculados[0].sugerencia, null)
+})
+
+test('con solo "Jabón en polvo" en el catálogo, lo escrito con el peso se vincula a él', () => {
+  const vinculados = vincularItems([ITEM_JABON_9KGS], [JABON_POLVO])
+
+  assert.equal(vinculados[0].id_bd, 'prod-jabon-polvo')
+  assert.equal(vinculados[0].existe_en_bd, true)
+})
+
+test('con solo el de 3 kilos, no auto-vincula el peso equivocado: solo sugiere', () => {
+  const vinculados = vincularItems([ITEM_JABON_9KGS], [JABON_3])
+
+  assert.equal(vinculados[0].id_bd, null)
+  assert.equal(vinculados[0].existe_en_bd, false)
+  assert.equal(vinculados[0].sugerencia?.id, 'prod-jabon-3')
+})
+
+test('la regla de tokens no vincula un producto claramente distinto', () => {
+  const vinculados = vincularItems(
+    [{ codigo_pdf: '99999999', cantidad: 1, unidad: 'PIEZA', descripcion_pdf: 'Cloro de 20 litros' }],
+    [JABON_9],
+  )
+
+  assert.equal(vinculados[0].id_bd, null)
+  assert.equal(vinculados[0].existe_en_bd, false)
+  assert.equal(vinculados[0].sugerencia, null)
+})
