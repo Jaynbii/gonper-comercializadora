@@ -130,9 +130,15 @@ async function prepararImagenParaOcr(fileUrl: string) {
 export default function ProcesarPdfButton({
   ordenId,
   pdfPath,
+  grande = false,
 }: {
   ordenId: string
   pdfPath: string
+  // Variante grande: botón a todo lo ancho para la tarjeta de
+  // "siguiente paso" (después de subir el archivo). Un usuario nuevo
+  // no debe tener que buscar qué hacer: la acción principal tiene
+  // que ser lo primero que ve el ojo.
+  grande?: boolean
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -456,7 +462,10 @@ export default function ProcesarPdfButton({
       // al detalle de la requisición, donde ve el cotejo y puede
       // surtir o ir a Compras por lo que falta. El detalle mismo,
       // con los artículos ya listados, es la confirmación.
-      router.push(`/ordenes/${ordenId}`)
+      // ?guardado=1 muestra arriba del detalle un aviso de que los
+      // artículos quedaron guardados, para que no parezca que "no
+      // pasó nada" al confirmar.
+      router.push(`/ordenes/${ordenId}?guardado=1`)
     } catch (error) {
       setErrorRevision(mensajeDeError(error))
     } finally {
@@ -469,14 +478,29 @@ export default function ProcesarPdfButton({
     itemsDetectados.length > 0 &&
     seleccionados.size === itemsDetectados.length
 
+  // Artículos nuevos: no están en el inventario y hay que tocar
+  // "Registrar" en cada uno antes de poder confirmar. El conteo se
+  // recalcula solo cada vez que se registra uno.
+  const nuevosSinRegistrar = itemsDetectados
+    ? itemsDetectados.filter((item) => !item.existe_en_bd).length
+    : 0
+
   return (
     <>
-      <div className="flex flex-col items-end gap-1">
+      <div
+        className={
+          grande ? 'flex flex-col gap-1.5' : 'flex flex-col items-end gap-1'
+        }
+      >
         <button
           type="button"
           onClick={handleProcesar}
           disabled={isLoading || isSaving}
-          className="btn btn-primary px-3 text-[12px]"
+          className={
+            grande
+              ? 'btn btn-primary min-h-12 w-full text-[14px]'
+              : 'btn btn-primary px-3 text-[12px]'
+          }
         >
           {isLoading ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
@@ -486,14 +510,24 @@ export default function ProcesarPdfButton({
           {isLoading ? 'Leyendo…' : 'Leer archivo'}
         </button>
         {statusMsg && (
-          <span className="max-w-[16rem] text-right text-[11px] leading-snug text-gonper-muted">
+          <span
+            className={
+              grande
+                ? 'text-[12.5px] leading-snug text-gonper-muted'
+                : 'max-w-[16rem] text-right text-[11px] leading-snug text-gonper-muted'
+            }
+          >
             {statusMsg}
           </span>
         )}
         {errorProceso && (
           <span
             role="alert"
-            className="max-w-[18rem] text-right text-[11px] leading-snug text-gonper-danger"
+            className={
+              grande
+                ? 'text-[12.5px] leading-snug text-gonper-danger'
+                : 'max-w-[18rem] text-right text-[11px] leading-snug text-gonper-danger'
+            }
           >
             {errorProceso}
           </span>
@@ -507,18 +541,26 @@ export default function ProcesarPdfButton({
           setItemsDetectados(null)
           setErrorRevision('')
         }}
-        title="Revisión de la requisición"
-        description="Corrige lo que el OCR haya leído mal. Las filas nuevas se registran en el catálogo con su unidad."
+        title="Revisa los artículos"
+        description="Esto es lo que leímos del archivo. Revisa que los nombres y las cantidades estén bien antes de confirmar."
         size="wide"
         footer={
           <>
             <p className="mr-auto w-full text-[12px] text-gonper-muted sm:w-auto">
-              <span className="font-semibold text-gonper-text">
-                {seleccionados.size}
-              </span>{' '}
-              {seleccionados.size === 1
-                ? 'artículo seleccionado'
-                : 'artículos seleccionados'}
+              {seleccionados.size === 0 ? (
+                // El botón de confirmar está deshabilitado sin selección:
+                // decir por qué, en vez de dejarlo muerto sin explicación.
+                'Marca al menos un artículo para continuar.'
+              ) : (
+                <>
+                  <span className="font-semibold text-gonper-text">
+                    {seleccionados.size}
+                  </span>{' '}
+                  {seleccionados.size === 1
+                    ? 'artículo seleccionado'
+                    : 'artículos seleccionados'}
+                </>
+              )}
             </p>
             <button
               type="button"
@@ -553,6 +595,36 @@ export default function ProcesarPdfButton({
               <option key={unidad} value={unidad} />
             ))}
           </datalist>
+
+          {/* Resumen en palabras simples de lo que falta para poder
+              confirmar. Sin esto, un usuario nuevo ve filas atenuadas,
+              un botón de confirmar deshabilitado y no sabe por qué. */}
+          {itemsDetectados && itemsDetectados.length > 0 && (
+            <p
+              className={`mb-3 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed ${
+                nuevosSinRegistrar > 0
+                  ? 'border-gonper-warning-border bg-gonper-warning-bg text-gonper-warning'
+                  : 'border-gonper-success-border bg-gonper-success-bg text-gonper-success'
+              }`}
+            >
+              {nuevosSinRegistrar > 0 ? (
+                <>
+                  <span className="font-semibold">
+                    {nuevosSinRegistrar} de {itemsDetectados.length}{' '}
+                    {itemsDetectados.length === 1 ? 'artículo es nuevo' : 'artículos son nuevos'}
+                  </span>{' '}
+                  y no están en tu inventario. Toca{' '}
+                  <span className="font-semibold">Registrar</span> en cada uno
+                  para poder agregarlos a la requisición.
+                </>
+              ) : (
+                <>
+                  Todos los artículos ya están en tu inventario. Revisa las
+                  cantidades y confirma.
+                </>
+              )}
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="flex items-center gap-2 text-[12.5px] font-medium">
