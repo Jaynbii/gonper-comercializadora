@@ -2,32 +2,30 @@
 @import "tailwindcss";
 
 /*
- * Lime + Concrete (Alex, 2026-11-11): fondo Concrete #F2F2F2,
- * tarjetas blancas, Lime #7BB601 / #B3CF32 como acento (botones,
- * enlaces, estados activos, detalles), neutros #BDBDBD y #808080.
- * Texto principal casi negro neutro y texto sobre Lime oscuro
- * (--color-gonper-on-primary) por contraste para usuarios de 38+.
- * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo para
- * urgente/faltante y errores, a validar por Alex (la paleta no
- * trae color para esos roles).
+ * Neutral minimalista (revisión 1x1 de paletas, Alex 2026-11-11):
+ * fondo #CAD2C5, tarjetas blancas, acento #354F52 con hover
+ * #2F3E46, neutros #84A98C y #52796F, texto #2F3E46.
+ * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo
+ * para urgente/faltante y errores, a validar por Alex.
+ * Siguiente en la revisión: Sage & Grey (cuando Alex lo indique).
  */
 @theme {
-  --color-gonper-bg: #f2f2f2;
+  --color-gonper-bg: #cad2c5;
   --color-gonper-surface: #ffffff;
-  --color-gonper-surface-muted: #ececec;
-  --color-gonper-hover: #e2e2e2;
-  --color-gonper-border: #bdbdbd;
-  --color-gonper-text: #1f1f1f;
-  --color-gonper-muted: #808080;
-  --color-gonper-primary: #7bb601;
-  --color-gonper-primary-hover: #6aa200;
-  --color-gonper-on-primary: #1f1f1f;
-  --color-gonper-success: #7bb601;
+  --color-gonper-surface-muted: #dde4d6;
+  --color-gonper-hover: #d5ddcd;
+  --color-gonper-border: #84a98c;
+  --color-gonper-text: #2f3e46;
+  --color-gonper-muted: #52796f;
+  --color-gonper-primary: #354f52;
+  --color-gonper-primary-hover: #2f3e46;
+  --color-gonper-on-primary: #ffffff;
+  --color-gonper-success: #52796f;
   --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 
-  --color-gonper-success-bg: #f1f7e3;
-  --color-gonper-success-border: #b3cf32;
+  --color-gonper-success-bg: #e9f0e7;
+  --color-gonper-success-border: #84a98c;
   --color-gonper-warning-bg: #ffedd5;
   --color-gonper-warning-border: #fdba74;
   --color-gonper-danger-bg: #f7e8e4;
