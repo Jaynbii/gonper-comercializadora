@@ -1843,6 +1843,15 @@ export default function ComprasClient({
                     </li>
                   ))}
                 </ul>
+                <div className="mt-2.5 flex justify-end">
+                  <Link
+                    href="/proveedores"
+                    className="btn btn-quiet text-[12.5px]"
+                  >
+                    Asignar precios en Proveedores
+                    <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </Link>
+                </div>
               </div>
             )}
 
