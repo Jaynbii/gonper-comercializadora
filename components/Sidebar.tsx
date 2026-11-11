@@ -10,6 +10,7 @@ import {
   Package,
   ShoppingCart,
 } from 'lucide-react'
+import LogoRequisa from './LogoRequisa'
 
 const MENU = [
   { name: 'Inicio', path: '/', icon: LayoutDashboard },
@@ -33,8 +34,11 @@ export default function Sidebar() {
     <>
       <aside className="hidden w-59 shrink-0 flex-col border-r border-gonper-border bg-gonper-surface md:flex">
         <div className="flex h-16 shrink-0 items-center gap-2 border-b border-gonper-border px-5">
-          <span className="font-serif text-[24px] leading-none tracking-[-0.01em]">
-            Gonper
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] bg-gonper-primary text-gonper-on-primary">
+            <LogoRequisa className="h-5 w-5" />
+          </span>
+          <span className="font-serif text-[19px] leading-none tracking-[-0.01em]">
+            Requisa Software
           </span>
         </div>
 

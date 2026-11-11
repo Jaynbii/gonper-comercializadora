@@ -21,7 +21,7 @@ export default function Header({ userEmail }: { userEmail: string }) {
   const [abierto, setAbierto] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const seccion = SECCIONES[pathname.split('/')[1] ?? ''] ?? 'Gonper'
+  const seccion = SECCIONES[pathname.split('/')[1] ?? ''] ?? 'Requisa Software'
   const inicial = userEmail.charAt(0).toUpperCase()
 
   useEffect(() => {

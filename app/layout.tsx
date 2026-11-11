@@ -23,7 +23,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gonper | Comercializadora",
+  title: "Requisa Software",
   description: "Inventario, requisiciones y compras",
 };
 
