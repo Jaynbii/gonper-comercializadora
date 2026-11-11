@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MoreHorizontal, Trash2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { mostrarToast } from '@/components/ui/Toast'
 import { editarOrden, eliminarOrden } from './actions'
 
 const ESTADOS = [
@@ -59,6 +60,7 @@ export default function AccionesOrden({
     try {
       await editarOrden(orden.id, cliente_id, estado)
       setIsOpen(false)
+      mostrarToast('Requisición actualizada.')
       router.refresh()
     } catch (error) {
       setErrorMsg(
@@ -77,6 +79,7 @@ export default function AccionesOrden({
       await eliminarOrden(orden.id, orden.pdf_path)
       setEliminarOpen(false)
       setIsOpen(false)
+      mostrarToast('Requisición eliminada.')
       router.refresh()
     } catch (error) {
       setErrorEliminar(

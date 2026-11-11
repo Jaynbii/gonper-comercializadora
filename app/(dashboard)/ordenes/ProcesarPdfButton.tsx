@@ -923,6 +923,7 @@ export default function ProcesarPdfButton({
         </button>
         {statusMsg && (
           <span
+            aria-live="polite"
             className={
               grande
                 ? 'text-[12.5px] leading-snug text-gonper-muted'

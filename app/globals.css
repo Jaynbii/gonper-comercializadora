@@ -339,6 +339,44 @@
   transform-origin: top right;
 }
 
+/* Esqueleto de carga (loading.tsx): brillo que barre de izquierda a
+   derecha sobre el gris del fondo. Sobrio: solo cambia el fondo. */
+@keyframes skeleton-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-gonper-surface-muted) 25%,
+    var(--color-gonper-hover) 50%,
+    var(--color-gonper-surface-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Entrada de los avisos toast: sube un poco y aparece. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-in {
+  animation: toast-in 260ms var(--ease-out-quint) both;
+}
+
 /* ---- Diálogo nativo: foco atrapado, Escape y backdrop gratis ---- */
 
 dialog.modal-panel {

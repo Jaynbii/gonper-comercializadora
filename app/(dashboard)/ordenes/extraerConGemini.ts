@@ -6,6 +6,7 @@ import {
   construirCuerpoGemini,
   parsearRespuestaGemini,
 } from '@/utils/geminiExtraccion'
+import { crearLimiteUso } from '@/utils/limiteUso'
 
 // Lectura de la foto de una requisición con Gemini (la que ya usa el
 // generador de títulos de Patología Oscura): el modelo lee la imagen
@@ -18,6 +19,13 @@ import {
 const MODELO_GEMINI = 'gemini-3.5-flash-lite'
 const TAMANO_MAXIMO_IMAGEN = 10 * 1024 * 1024
 const TIPOS_IMAGEN_ACEPTADOS = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+// Freno suave contra bucles o doble envio de fotos a Gemini
+// (10 por minuto y por usuario). En serverless el contador vive en
+// memoria por instancia: no es un control global exacto, pero corta
+// el abuso accidental; al excederlo se devuelve null y el cliente
+// sigue con Tesseract, sin romper el flujo.
+const limiteGemini = crearLimiteUso(10, 60_000)
 
 export async function extraerItemsConGemini(pdfPath: string) {
   const apiKey = process.env.GEMINI_API_KEY
@@ -32,6 +40,7 @@ export async function extraerItemsConGemini(pdfPath: string) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return null
+  if (!limiteGemini.permitir(`gemini:${user.id}`, Date.now())) return null
 
   const { data: firmado, error: errorFirma } = await supabase.storage
     .from('pdf-facturas')

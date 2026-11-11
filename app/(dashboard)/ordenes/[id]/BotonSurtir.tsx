@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PackageCheck, TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { mostrarToast } from '@/components/ui/Toast'
 import { surtirOrden } from '../actions'
 import { mensajeErrorSurtir } from '@/utils/surtir'
 
@@ -35,6 +36,9 @@ export default function BotonSurtir({
         return
       }
       setConfirmOpen(false)
+      mostrarToast(
+        esParcial ? 'Surtido parcial registrado.' : 'Requisición surtida.',
+      )
       router.refresh()
     } catch (error) {
       // Red de seguridad: si algo fuera de surtirOrden() lanzara
