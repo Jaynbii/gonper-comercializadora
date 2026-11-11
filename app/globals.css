@@ -2,31 +2,32 @@
 @import "tailwindcss";
 
 /*
- * Sage & Grey (revisión 1x1 de paletas, Alex 2026-11-11, 2 de 6):
- * fondo #DFE6DA, tarjetas blancas, acento sage oscuro #5F6C52
- * (oscurecido un paso desde #758467 para que el texto blanco del
- * botón se lea bien), neutros #9CAF88 y #758467, texto #49523F.
+ * Grey Green elegante (revisión 1x1 de paletas, Alex 2026-11-11, 3 de 6):
+ * fondo verde-gris muy claro derivado de #9AB69B, tarjetas blancas,
+ * acento #55765C (oscurecido un paso desde #5D8064 para que el texto
+ * blanco del botón se lea bien; hover #49654E), neutros #909590 y
+ * #6E7370, texto #4E5652.
  * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo
  * para urgente/faltante y errores, a validar por Alex.
- * Siguiente en la revisión: Grey Green elegante (cuando Alex lo indique).
+ * Siguiente en la revisión: Verde vibrante + grises (cuando Alex lo indique).
  */
 @theme {
-  --color-gonper-bg: #dfe6da;
+  --color-gonper-bg: #e9efe9;
   --color-gonper-surface: #ffffff;
-  --color-gonper-surface-muted: #e9efe3;
-  --color-gonper-hover: #cbd5c0;
-  --color-gonper-border: #9caf88;
-  --color-gonper-text: #49523f;
-  --color-gonper-muted: #758467;
-  --color-gonper-primary: #5f6c52;
-  --color-gonper-primary-hover: #4c5841;
+  --color-gonper-surface-muted: #dde6dc;
+  --color-gonper-hover: #c4d6c2;
+  --color-gonper-border: #909590;
+  --color-gonper-text: #4e5652;
+  --color-gonper-muted: #6e7370;
+  --color-gonper-primary: #55765c;
+  --color-gonper-primary-hover: #49654e;
   --color-gonper-on-primary: #ffffff;
-  --color-gonper-success: #5f6c52;
+  --color-gonper-success: #5d8064;
   --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 
-  --color-gonper-success-bg: #edf1e6;
-  --color-gonper-success-border: #819171;
+  --color-gonper-success-bg: #edf3ed;
+  --color-gonper-success-border: #9ab69b;
   --color-gonper-warning-bg: #ffedd5;
   --color-gonper-warning-border: #fdba74;
   --color-gonper-danger-bg: #f7e8e4;
