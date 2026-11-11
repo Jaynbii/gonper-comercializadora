@@ -1,4 +1,5 @@
 import type { ItemRequisicion } from './requisicion.ts'
+import { normalizarUnidad, UNIDADES_COMUNES } from './unidades.ts'
 
 // Lectura de fotos de requisiciones con Gemini (gemini-3.5-flash-lite).
 // El modelo lee la imagen directamente y devuelve los artículos en
@@ -9,10 +10,11 @@ import type { ItemRequisicion } from './requisicion.ts'
 export const PROMPT_EXTRACCION_REQUISICION = `Eres un lector de requisiciones de compra del municipio de Mazatlán. La imagen es una foto o escaneo de una requisición (tabla o lista de artículos). Extrae SOLO los artículos solicitados.
 
 Devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, con esta forma exacta:
-{"items":[{"codigo_pdf":"código tal como aparece, o cadena vacía si no se ve","cantidad":número,"unidad":"unidad tal como aparece, o PIEZA si no hay","descripcion_pdf":"nombre del artículo en MAYÚSCULAS"}]}
+{"items":[{"codigo_pdf":"código tal como aparece, o cadena vacía si no se ve","cantidad":número,"unidad":"una de ${UNIDADES_COMUNES.join(', ')}, según se vea en la imagen, o PIEZA si no hay","descripcion_pdf":"nombre del artículo en MAYÚSCULAS"}]}
 
 Reglas:
 - cantidad como número; las fracciones (½, 1/4) como decimal (0.5, 0.25).
+- La unidad va en singular y mayúsculas, elegida de la lista del JSON; nunca inventes otra unidad (ni plurales como "porrones").
 - Ignora encabezados, totales, precios, importes, firmas, sellos y observaciones.
 - No inventes artículos, códigos ni cantidades: solo lo que se lea en la imagen.
 - Si un artículo se lee a medias, inclúyelo con lo que se alcance a leer.
@@ -77,7 +79,7 @@ export function parsearRespuestaGemini(texto: string): ItemRequisicion[] {
     items.push({
       codigo_pdf: String(fila.codigo_pdf ?? '').trim(),
       cantidad,
-      unidad: String(fila.unidad ?? '').trim().toUpperCase(),
+      unidad: normalizarUnidad(String(fila.unidad ?? '')),
       descripcion_pdf: descripcion.toUpperCase(),
     })
     if (items.length >= 200) break

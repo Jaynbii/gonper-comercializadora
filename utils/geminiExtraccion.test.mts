@@ -76,3 +76,17 @@ test('el cuerpo de la petición lleva el prompt y la imagen en línea', () => {
   })
   assert.equal(cuerpo.generationConfig.responseMimeType, 'application/json')
 })
+
+test('la unidad se normaliza a singular aunque el modelo la devuelva en plural', () => {
+  const items = parsearRespuestaGemini(
+    '{"items":[{"codigo_pdf":"","cantidad":2,"unidad":"porrones","descripcion_pdf":"porrones de cloro"}]}',
+  )
+
+  assert.equal(items[0]?.unidad, 'PORRON')
+})
+
+test('el prompt limita la unidad a la lista permitida', () => {
+  assert.ok(PROMPT_EXTRACCION_REQUISICION.includes('PORRON'))
+  assert.ok(PROMPT_EXTRACCION_REQUISICION.includes('BULTO'))
+  assert.ok(PROMPT_EXTRACCION_REQUISICION.includes('nunca inventes otra unidad'))
+})

@@ -6,6 +6,7 @@ import {
   buscarCandidatos,
   buscarProductoSimilarPorNombre,
   nombresSimilares,
+  variantesToken,
   type ProductoCatalogo,
 } from './vincularProductos.ts'
 
@@ -273,5 +274,105 @@ test('buscarCandidatos: respeta el límite y trae sku y unidad para mostrar', ()
 
   assert.equal(candidatos.length, 2)
   assert.ok(candidatos.every((c) => c.sku.startsWith('ART') && c.unidad_medida))
+})
+
+// Plurales en las cartas de entrega ("2 porrones de cloro"): el
+// stemming solo ordena mejor las sugerencias del combobox; el
+// auto-vínculo sigue con umbrales exactos (regla de Alex: la
+// sugerencia propone, el usuario dispone con el toque).
+const PORRON: ProductoCatalogo = {
+  id: 'prod-porron',
+  sku: 'ART0009',
+  nombre: 'Porrón de cloro de 20 litros',
+  unidad_medida: 'PORRON',
+  codigo_sat: null,
+}
+const BOLSAS_MEDIANAS: ProductoCatalogo = {
+  id: 'prod-bolsas-medianas',
+  sku: 'ART0013',
+  nombre: 'Bolsas negras medianas 70x90',
+  unidad_medida: 'BULTO',
+  codigo_sat: null,
+}
+const BOLSAS_JUMBO: ProductoCatalogo = {
+  id: 'prod-bolsas-jumbo',
+  sku: 'ART0004',
+  nombre: 'Bolsas negras jumbo de 25 KGS',
+  unidad_medida: 'BULTO',
+  codigo_sat: null,
+}
+const BOLSA_CAMISETA: ProductoCatalogo = {
+  id: 'prod-bolsa-camiseta',
+  sku: 'ART0027',
+  nombre: 'Bolsa Camiseta Jumbo 25 Kg',
+  unidad_medida: 'BULTO',
+  codigo_sat: null,
+}
+const ESCOBA_ESPIGA: ProductoCatalogo = {
+  id: 'prod-escoba-espiga',
+  sku: 'ART0002',
+  nombre: 'Escoba de espigas reforzadas',
+  unidad_medida: 'PIEZA',
+  codigo_sat: null,
+}
+const ESCOBA_COCO: ProductoCatalogo = {
+  id: 'prod-escoba-coco',
+  sku: 'ART0039',
+  nombre: 'Escoba De Coco',
+  unidad_medida: 'PIEZA',
+  codigo_sat: null,
+}
+const CATALOGO_CARTA = [
+  PORRON,
+  BOLSAS_MEDIANAS,
+  BOLSAS_JUMBO,
+  BOLSA_CAMISETA,
+  ESCOBA_ESPIGA,
+  ESCOBA_COCO,
+]
+
+test('variantesToken: quita el plural sin tocar singulares ni palabras cortas', () => {
+  assert.ok(variantesToken('porrones').includes('porron'))
+  assert.ok(variantesToken('escobas').includes('escoba'))
+  assert.deepEqual(variantesToken('mes'), ['mes'])
+  assert.deepEqual(variantesToken('cloro'), ['cloro'])
+})
+
+test('buscarCandidatos: el plural "porrones" encuentra el porrón del catálogo', () => {
+  const candidatos = buscarCandidatos('porrones de cloro', CATALOGO_CARTA, 5)
+
+  assert.equal(candidatos[0]?.id, 'prod-porron')
+  assert.ok((candidatos[0]?.similitud ?? 0) >= 50)
+})
+
+test('buscarCandidatos: con plurales, "bolsas negras medianas" sigue poniendo primero las medianas', () => {
+  const candidatos = buscarCandidatos('bolsas negras medianas', CATALOGO_CARTA, 5)
+
+  assert.equal(candidatos[0]?.id, 'prod-bolsas-medianas')
+})
+
+test('buscarCandidatos: "escobas de coco" pone primero la de coco y no la de espiga', () => {
+  const candidatos = buscarCandidatos('escobas de coco', CATALOGO_CARTA, 5)
+
+  assert.equal(candidatos[0]?.id, 'prod-escoba-coco')
+})
+
+test('vincularItems: un plural por sí solo NO auto-vincula (la sugerencia propone, el usuario dispone)', () => {
+  const [fila] = vincularItems(
+    [
+      {
+        codigo_pdf: '',
+        cantidad: 2,
+        unidad: 'porrones',
+        descripcion_pdf: 'PORRONES DE CLORO',
+      },
+    ],
+    CATALOGO_CARTA,
+  )
+
+  assert.equal(fila?.existe_en_bd, false)
+  assert.equal(fila?.id_bd, null)
+  // Y la unidad del documento sí se normaliza a singular.
+  assert.equal(fila?.unidad, 'PORRON')
 })
 

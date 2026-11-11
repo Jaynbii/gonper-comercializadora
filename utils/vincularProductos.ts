@@ -83,19 +83,43 @@ export function tokenizarNombre(nombreLimpio: string): string[] {
     .filter((token) => token.length > 0)
 }
 
+/**
+ * Variantes de un token para tratar plurales como el mismo token
+ * ("porrones" ~ "porron", "escobas" ~ "escoba"). SOLO se usa al
+ * calcular sugerencias (buscarCandidatos): vincularItems compara
+ * sin variantes para que el auto-vínculo conserve sus umbrales
+ * exactos y un plural nunca vincule solo. Regla de Alex: la
+ * sugerencia propone, el usuario dispone con el toque en el modal.
+ */
+export function variantesToken(token: string): string[] {
+  const variantes = new Set([token])
+  if (token.length > 4 && token.endsWith('es')) variantes.add(token.slice(0, -2))
+  else if (token.length > 3 && token.endsWith('s')) variantes.add(token.slice(0, -1))
+  return [...variantes]
+}
+
 // Cobertura por tokens: qué fracción de los tokens del nombre del catálogo
 // aparece en el nombre escrito. Complementa a Fuse: Fuse castiga las
 // palabras de más ("Jabón en polvo c/9kgs" contra "Jabón c/9 kgs" puntúa
 // 0.624 y no sugiere nada), pero si todas las palabras del catálogo están
 // en lo escrito, es el mismo producto aunque el usuario haya agregado
-// palabras ("en polvo") o el peso venga pegado ("9kgs").
+// palabras ("en polvo") o el peso venga pegado ("9kgs"). Con stem=true
+// (solo sugerencias) los plurales cuentan como el mismo token.
 function coberturaPorTokens(
   tokensConsulta: string[],
   tokensCatalogo: string[],
+  stem = false,
 ): { cobertura: number; coincidencias: number } {
   if (tokensCatalogo.length === 0) return { cobertura: 0, coincidencias: 0 }
-  const enConsulta = new Set(tokensConsulta)
-  const coincidencias = tokensCatalogo.filter((t) => enConsulta.has(t)).length
+  if (!stem) {
+    const enConsulta = new Set(tokensConsulta)
+    const coincidencias = tokensCatalogo.filter((t) => enConsulta.has(t)).length
+    return { cobertura: coincidencias / tokensCatalogo.length, coincidencias }
+  }
+  const variantesConsulta = new Set(tokensConsulta.flatMap(variantesToken))
+  const coincidencias = tokensCatalogo.filter((t) =>
+    variantesToken(t).some((v) => variantesConsulta.has(v)),
+  ).length
   return { cobertura: coincidencias / tokensCatalogo.length, coincidencias }
 }
 
@@ -117,6 +141,9 @@ function puntuarProducto(
   tokensConsulta: string[],
   producto: ProductoCatalogo,
   fuseScore: number,
+  // stem=true solo desde buscarCandidatos: ordena mejor las
+  // sugerencias con plurales, sin tocar los umbrales de auto-vínculo.
+  stem = false,
 ): {
   fuseScore: number
   cobertura: number
@@ -128,20 +155,24 @@ function puntuarProducto(
   const { cobertura, coincidencias } = coberturaPorTokens(
     tokensConsulta,
     tokensCatalogo,
+    stem,
   )
   // Un token cuenta como prefijo solo si el lado corto tiene al menos
   // 3 letras: sin eso, "pol" contaría como prefijo de la "p" de
   // "P/wc" y cualquier palabra con p colaría un producto que no tiene
   // nada que ver ("jabon en pol" traía el Papel Jumbo).
-  const prefijos = tokensConsulta.filter((token) =>
-    tokensCatalogo.some((tokenCatalogo) => {
-      const corto = Math.min(token.length, tokenCatalogo.length)
-      if (corto < 3) return token === tokenCatalogo
-      return (
-        tokenCatalogo.startsWith(token) || token.startsWith(tokenCatalogo)
-      )
-    }),
-  ).length
+  const esPrefijo = (a: string, b: string) => {
+    const corto = Math.min(a.length, b.length)
+    if (corto < 3) return a === b
+    return b.startsWith(a) || a.startsWith(b)
+  }
+  const prefijos = tokensConsulta.filter((token) => {
+    const variantesQ = stem ? variantesToken(token) : [token]
+    return tokensCatalogo.some((tokenCatalogo) => {
+      const variantesC = stem ? variantesToken(tokenCatalogo) : [tokenCatalogo]
+      return variantesQ.some((vq) => variantesC.some((vc) => esPrefijo(vq, vc)))
+    })
+  }).length
   const coberturaPrefijo =
     tokensConsulta.length === 0 ? 0 : prefijos / tokensConsulta.length
   return { fuseScore, cobertura, coincidencias, coberturaPrefijo, tokensCatalogo: tokensCatalogo.length }
@@ -185,6 +216,10 @@ export function buscarCandidatos(
           tokensConsulta,
           producto,
           puntajesPorId.get(producto.id) ?? 1,
+          // stem=true: los plurales cuentan igual que el singular,
+          // pero solo para ordenar sugerencias; el auto-vínculo de
+          // vincularItems sigue con umbrales exactos.
+          true,
         )
       const esSubcadena =
         nombreLimpio.includes(textoLimpio) ||
@@ -422,7 +457,14 @@ export function vincularItems(
     return {
       codigo_pdf: codigoPdf,
       cantidad: item.cantidad,
-      unidad: normalizarUnidad(productoFinal?.unidad_medida) || item.unidad || '',
+      // La unidad del catálogo manda; sin vínculo se normaliza la
+      // del documento (plurales y alias a singular) en vez de
+      // mostrar el texto crudo que trajo la lectura.
+      unidad:
+        normalizarUnidad(productoFinal?.unidad_medida) ||
+        normalizarUnidad(item.unidad) ||
+        item.unidad ||
+        '',
       descripcion_pdf: nombre,
       producto_nombre: nombre,
       existe_en_bd: !!productoFinal,
