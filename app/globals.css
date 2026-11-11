@@ -2,34 +2,34 @@
 @import "tailwindcss";
 
 /*
- * Grey Green elegante (revisión 1x1 de paletas, Alex 2026-11-11, 3 de 6):
- * fondo #9AB69B (color firma de la paleta a fuerza completa, para que
- * se distinga de Sage & Grey; la primera versión usaba un fondo
- * derivado clarito y quedó gemela de la anterior), tarjetas blancas,
- * acento #55765C (oscurecido un paso desde #5D8064 para que el texto
- * blanco del botón se lea bien; hover #49654E), neutros #909590 y
- * #6E7370, texto #4E5652.
- * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo
- * para urgente/faltante y errores, a validar por Alex.
+ * Lime + Concrete (revisión 1x1 de paletas, Alex 2026-11-11, 5 de 6):
+ * fondo Concrete #F2F2F2, tarjetas blancas, Lime #7BB601 / #B3CF32
+ * como acento (botones, enlaces, estados activos, detalles),
+ * neutros #BDBDBD y #808080. Texto principal casi negro neutro y
+ * texto sobre Lime oscuro (--color-gonper-on-primary) por contraste
+ * para usuarios de 38+.
+ * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo para
+ * urgente/faltante y errores, a validar por Alex (la paleta no
+ * trae color para esos roles).
  * Siguiente en la revisión: Verde vibrante + grises (cuando Alex lo indique).
  */
 @theme {
-  --color-gonper-bg: #9ab69b;
+  --color-gonper-bg: #f2f2f2;
   --color-gonper-surface: #ffffff;
-  --color-gonper-surface-muted: #eef3ec;
-  --color-gonper-hover: #9ab69b;
-  --color-gonper-border: #909590;
-  --color-gonper-text: #4e5652;
-  --color-gonper-muted: #6e7370;
-  --color-gonper-primary: #55765c;
-  --color-gonper-primary-hover: #49654e;
-  --color-gonper-on-primary: #ffffff;
-  --color-gonper-success: #5d8064;
+  --color-gonper-surface-muted: #ececec;
+  --color-gonper-hover: #e2e2e2;
+  --color-gonper-border: #bdbdbd;
+  --color-gonper-text: #1f1f1f;
+  --color-gonper-muted: #808080;
+  --color-gonper-primary: #7bb601;
+  --color-gonper-primary-hover: #6aa200;
+  --color-gonper-on-primary: #1f1f1f;
+  --color-gonper-success: #7bb601;
   --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 
-  --color-gonper-success-bg: #edf3ed;
-  --color-gonper-success-border: #9ab69b;
+  --color-gonper-success-bg: #f1f7e3;
+  --color-gonper-success-border: #b3cf32;
   --color-gonper-warning-bg: #ffedd5;
   --color-gonper-warning-border: #fdba74;
   --color-gonper-danger-bg: #f7e8e4;
