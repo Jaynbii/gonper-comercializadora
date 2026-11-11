@@ -192,10 +192,12 @@ export default async function OrdenDetallePage({
             )}
 
             {/* Fase 1: lleva a Compras ya filtrado a ESTA orden
-                (?orden=<id>), no al faltante general. */}
+                (?orden=<id>), no al faltante general. Con &comprar=1
+                Compras abre directo el diálogo de compra del faltante
+                de esta requisición. */}
             {puedeIrACompras && hayFaltantes && (
               <Link
-                href={`/compras?orden=${orden.id}`}
+                href={`/compras?orden=${orden.id}&comprar=1`}
                 className="btn btn-primary w-full sm:w-auto"
               >
                 <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />

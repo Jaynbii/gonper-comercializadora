@@ -61,13 +61,18 @@ export default async function ComprasPage({
 }: {
   // ?orden=<id> llega desde el detalle de una requisición: abre Compras ya
   // filtrada a esa requisición (vista "Por requisición" y card seleccionada).
-  searchParams?: Promise<{ orden?: string | string[] }>
+  // &comprar=1 abre además el diálogo de compra de su faltante.
+  searchParams?: Promise<{ orden?: string | string[]; comprar?: string | string[] }>
 }) {
   const supabase = await createClient()
   const params = (await searchParams) || {}
   const ordenIdInicial = Array.isArray(params.orden)
     ? params.orden[0]
     : params.orden
+  const comprarRaw = Array.isArray(params.comprar)
+    ? params.comprar[0]
+    : params.comprar
+  const comprarInicial = comprarRaw === '1'
 
   // ¿El usuario actual es admin? Solo el admin ve la opción de
   // eliminar órdenes de compra (anidada en el menú "..." de la
@@ -241,6 +246,7 @@ export default async function ComprasPage({
       requisiciones={normalizarRequisiciones(requisicionesCrudas)}
       faltantesPorOrden={faltantesPorOrden}
       ordenIdInicial={ordenIdInicial}
+      comprarInicial={comprarInicial}
       esAdmin={esAdmin}
     />
   )

@@ -528,6 +528,7 @@ export default function ComprasClient({
   requisiciones,
   faltantesPorOrden,
   ordenIdInicial,
+  comprarInicial = false,
   esAdmin = false,
 }: {
   faltantes: Faltante[]
@@ -536,6 +537,7 @@ export default function ComprasClient({
   requisiciones: Requisicion[]
   faltantesPorOrden: FaltantePorOrden[]
   ordenIdInicial?: string
+  comprarInicial?: boolean
   esAdmin?: boolean
 }) {
   const router = useRouter()
@@ -808,8 +810,18 @@ export default function ComprasClient({
   // Agrupa por proveedor sugerido y genera una orden de compra por
   // proveedor, solo con artículos con precio. Los sin precio NO se
   // compran: se avisan en el diálogo para pedirlos por WhatsApp.
+  // Con &comprar=1 (botón "Ir a Compras por el faltante" del detalle
+  // de la requisición) el diálogo de compra de ESA requisición abre
+  // directo, sin buscarla. Misma guarda que abrirCompraRequisicion:
+  // sin faltantes no hay nada que comprar y no se abre.
   const [requisicionAComprar, setRequisicionAComprar] =
-    useState<FaltantePorOrden | null>(null)
+    useState<FaltantePorOrden | null>(() => {
+      if (!comprarInicial || !ordenInicialValida) return null
+      const orden = faltantesPorOrden.find(
+        (o) => o.ordenId === ordenInicialValida,
+      )
+      return orden && orden.faltantes.length > 0 ? orden : null
+    })
   const [comprandoRequisicionId, setComprandoRequisicionId] = useState<
     string | null
   >(null)
