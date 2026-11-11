@@ -66,7 +66,7 @@ export async function asignarPrecioAProducto(proveedorId: string, productoId: st
 
   if (yaAsignado) return { error: 'Este producto ya tiene un precio registrado con este proveedor.' }
 
-  // 👇 Agregamos .select().single() para obtener el ID de la relación recién creada
+  // Agregamos .select().single() para obtener el ID de la relación recién creada
   const { data: nuevaRelacion, error } = await supabase.from('producto_proveedores').insert({
     proveedor_id: proveedorId,
     producto_id: productoId,

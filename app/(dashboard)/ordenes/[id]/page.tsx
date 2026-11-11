@@ -94,7 +94,7 @@ export default async function OrdenDetallePage({
     (item) => Number(productoDe(item)?.stock_actual) > 0,
   )
 
-  // 👇 Faltante real: lo que queda por surtir después de lo ya
+  // Faltante real: lo que queda por surtir después de lo ya
   // surtido y del stock disponible. Así una requisición PARCIAL también
   // puede ir a Compras por lo que le falta (Fase 1).
   const hayFaltantes = items.some((item) => {
@@ -172,7 +172,7 @@ export default async function OrdenDetallePage({
 
         <div className="mt-5 flex flex-col gap-3 border-t border-gonper-border pt-4 sm:flex-row sm:items-center sm:justify-between">
           
-          {/* 👇 CONTENEDOR DE BOTONES MODIFICADO 👇 */}
+          {/* CONTENEDOR DE BOTONES MODIFICADO */}
           <div className="flex flex-col gap-2.5 w-full sm:w-auto">
             {puedeSurtir ? (
               hayStockParcial ? (

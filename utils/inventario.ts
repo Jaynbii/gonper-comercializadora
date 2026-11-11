@@ -42,6 +42,7 @@ export function clasificarStock(
   return 'disponible'
 }
 
+// Filtra el catálogo por término de búsqueda (sin acentos ni mayúsculas), categoría y estado de stock; no muta la lista original.
 export function filtrarInventario<T extends ProductoInventario>(
   productos: T[],
   filtros: {

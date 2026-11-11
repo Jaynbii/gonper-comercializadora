@@ -71,6 +71,7 @@ export type FaltantePorOrden = {
   demanda: { productoId: string; pendiente: number; enStock: number }[]
 }
 
+// Devuelve el vínculo con el precio unitario positivo más bajo (proveedor sugerido para comprar), o null si ninguno tiene precio válido.
 export function proveedorSugerido(
   precios: PrecioProveedor[],
 ): PrecioProveedor | null {
@@ -83,6 +84,7 @@ export function proveedorSugerido(
   )
 }
 
+// Calcula por requisición cuánto se puede surtir con el stock actual y cuánto falta comprar, con proveedor sugerido (el más barato) y costo estimado; el stock se descuenta una sola vez entre artículos del mismo producto.
 export function calcularFaltantePorOrden(args: {
   ordenId: string
   folio: string
@@ -183,6 +185,7 @@ export type ArticuloSinPrecio = {
   cantidad: number
 }
 
+// Agrupa los faltantes por proveedor sugerido para generar una orden de compra por proveedor; los artículos sin proveedor o sin precio quedan en la lista sinPrecio.
 export function agruparCompraPorProveedor(faltantes: FaltantePorOrdenItem[]): {
   grupos: GrupoCompraProveedor[]
   sinPrecio: ArticuloSinPrecio[]
@@ -263,6 +266,7 @@ export type ItemRecepcionCompra = {
   cantidad_recibida: number
 }
 
+// Cruza las cantidades recibidas con los renglones de la orden de compra (por producto) y arma los renglones de recepción; salta productos sin renglón o con cantidad cero o negativa.
 export function construirItemsRecepcion(
   itemsGenerados: ItemOrdenCompraGenerada[],
   itemsPedidos: { productoId: string; cantidad: number }[],
@@ -316,6 +320,7 @@ export function puedeEliminarOrdenCompra(
   return esAdmin && estado === 'PENDIENTE'
 }
 
+// Agrupa las órdenes de compra por la requisición vinculada; las que no tienen requisición quedan en un grupo con requisicion null.
 export function agruparComprasPorRequisicion<
   T extends { requisicion?: RequisicionVinculada | null },
 >(ordenes: T[]): GrupoComprasPorRequisicion<T>[] {

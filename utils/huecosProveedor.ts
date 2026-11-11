@@ -36,6 +36,7 @@ export type HuecoProveedor = {
   vinculos: VinculoHueco[]
 }
 
+// Detecta los productos sin proveedor asignado o sin ningún vínculo con precio mayor a cero, para la sección de huecos de Proveedores.
 export function detectarHuecos(
   productos: ProductoCatalogo[],
   vinculos: VinculoCrudo[],

@@ -60,7 +60,7 @@ export async function subirYProcesarPDF(formData: FormData) {
         .insert({
           folio,
           cliente_id,
-          pdf_path: nombreArchivo, // 👈 Aquí se guarda la ruta del archivo
+          pdf_path: nombreArchivo, // Aquí se guarda la ruta del archivo
           estado: 'BORRADOR',
           created_by: user.id,
         })

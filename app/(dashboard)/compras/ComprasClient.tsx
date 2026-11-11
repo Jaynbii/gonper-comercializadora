@@ -1542,7 +1542,7 @@ export default function ComprasClient({
                     <span className="flex min-w-0 items-center gap-2">
                       <span
                         aria-hidden="true"
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-gonper-success-bg text-gonper-primary"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-gonper-success-bg text-gonper-success"
                       >
                         <Folder className="h-5 w-5" strokeWidth={1.75} />
                       </span>

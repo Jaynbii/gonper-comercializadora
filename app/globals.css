@@ -7,7 +7,10 @@
  * Sage & Grey, Grey Green elegante):
  * fondo Concrete #F2F2F2, tarjetas blancas, Lime #7BB601 / #B3CF32
  * como acento (botones, enlaces, estados activos, detalles),
- * neutros #BDBDBD y #808080. Texto principal casi negro neutro y
+ * neutros #BDBDBD y #666666 (texto secundario oscurecido en la
+ * optimización del 2026-11-11 para legibilidad de usuarios de 38+; el
+ * texto de éxito usa un verde oscurecido #497300 sobre su fondo claro).
+ * Texto principal casi negro neutro y
  * texto sobre Lime oscuro (--color-gonper-on-primary) por contraste
  * para usuarios de 38+.
  * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo para
@@ -21,11 +24,11 @@
   --color-gonper-hover: #e2e2e2;
   --color-gonper-border: #bdbdbd;
   --color-gonper-text: #1f1f1f;
-  --color-gonper-muted: #808080;
+  --color-gonper-muted: #666666;
   --color-gonper-primary: #7bb601;
   --color-gonper-primary-hover: #6aa200;
   --color-gonper-on-primary: #1f1f1f;
-  --color-gonper-success: #7bb601;
+  --color-gonper-success: #497300;
   --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 

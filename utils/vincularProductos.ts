@@ -54,6 +54,7 @@ export const UMBRAL_VINCULO_AUTO = 0.35
 export const UMBRAL_SUGERENCIA = 0.4
 export const UMBRAL_ACUERDO_NOMBRE = 0.4
 
+// Pasa un nombre a Title Case (minúsculas con inicial mayúscula por palabra) para mostrarlo parejo sin importar cómo venga del documento.
 export function formatearNombre(str: string) {
   if (!str) return str
   return str

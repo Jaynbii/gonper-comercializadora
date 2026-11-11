@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { SupabaseClient } from '@supabase/supabase-js'
 
+// Cliente de Supabase para Server Components y acciones de servidor; lee y escribe la sesión en las cookies de la petición.
 export async function createClient() {
   const cookieStore = await cookies()
 

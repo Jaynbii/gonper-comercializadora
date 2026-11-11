@@ -1,3 +1,4 @@
+// Unidades permitidas en requisiciones y productos; la lectura con IA y el cotejo normalizan a una de estas.
 export const UNIDADES_COMUNES = [
   'PIEZA',
   'CAJA',

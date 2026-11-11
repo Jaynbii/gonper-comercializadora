@@ -12,7 +12,7 @@ export async function crearCliente(formData: FormData) {
 
   if (!nombre) return { error: 'El nombre del cliente es obligatorio' }
 
-  // 👇 Agregamos .select().single() para que nos devuelva el cliente recién creado
+  // Agregamos .select().single() para que nos devuelva el cliente recién creado
   const { data, error } = await supabase.from('clientes').insert({
     nombre, contacto_nombre: contacto_nombre || null, telefono: telefono || null, direccion: direccion || null
   }).select().single()

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Refresca la sesión de Supabase en cada petición para que el login no caduque a mitad de uso; lo llama el middleware raíz.
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,

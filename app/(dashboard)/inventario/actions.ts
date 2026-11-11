@@ -3,12 +3,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
-import { generarNuevoSku } from '@/utils/supabase/server' // 👈 NUEVO IMPORT
+import { generarNuevoSku } from '@/utils/supabase/server' // NUEVO IMPORT
 
 export async function crearProducto(formData: FormData) {
   const supabase = await createClient()
 
-  // 👇 Quitamos la lectura del SKU del formulario
+  // Quitamos la lectura del SKU del formulario
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
@@ -18,7 +18,7 @@ export async function crearProducto(formData: FormData) {
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
-  // 👇 GENERAMOS EL SKU AUTOMÁTICAMENTE (ARTXXXX)
+  // GENERAMOS EL SKU AUTOMÁTICAMENTE (ARTXXXX)
   const sku = await generarNuevoSku(supabase)
 
   const { error } = await supabase.from('productos').insert({
@@ -42,7 +42,7 @@ export async function crearProducto(formData: FormData) {
 export async function actualizarProducto(id: string, formData: FormData) {
   const supabase = await createClient()
 
-  // 👇 Quitamos también la lectura del SKU
+  // Quitamos también la lectura del SKU
   const nombre = formData.get('nombre') as string
   const categoria_id = formData.get('categoria_id') as string
   const unidad_medida = normalizarUnidad(formData.get('unidad_medida') as string) || null
@@ -50,7 +50,7 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const stock_actual = parseFloat(formData.get('stock_actual') as string) || 0
   const stock_minimo = parseFloat(formData.get('stock_minimo') as string) || 0
 
-  // 👇 EL SKU YA NO SE ACTUALIZA (es inmutable)
+  // EL SKU YA NO SE ACTUALIZA (es inmutable)
   const { error } = await supabase.from('productos').update({
     nombre, 
     categoria_id: categoria_id || null, 

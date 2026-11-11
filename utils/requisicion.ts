@@ -674,6 +674,7 @@ function parsearCartaEntrega(lineas: string[]): ResultadoParseo | null {
   return items.length > 0 ? { items, lineasNoReconocidas } : null
 }
 
+// Convierte el texto crudo de una requisición (texto de PDF u OCR) en artículos: intenta carta de entrega y bloques por columnas antes del parseo línea por línea, y junta las líneas no reconocidas.
 export function parseRequisicion(textoCrudo: string): ResultadoParseo {
   const lineasBase = (textoCrudo || '')
     .replace(/\u00a0/g, ' ')

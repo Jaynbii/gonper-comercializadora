@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient, generarNuevoSku } from '@/utils/supabase/server' // 👈 Importamos generarNuevoSku
+import { createClient, generarNuevoSku } from '@/utils/supabase/server' // Importamos generarNuevoSku
 import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
 import { buscarProductoSimilarPorNombre, type ProductoCatalogo } from '@/utils/vincularProductos'
@@ -38,7 +38,7 @@ export async function obtenerUrlParaOCR(pdfPath: string) {
 export async function registrarProductoEnInventario(item: ItemDetectado) {
   const supabase = await createClient()
 
-  // 👇 AHORA EL CÓDIGO DEL PDF ES EL CÓDIGO SAT
+  // AHORA EL CÓDIGO DEL PDF ES EL CÓDIGO SAT
   const codigo_sat = String(item.codigo_pdf ?? '').trim()
   const nombre = String(item.producto_nombre || item.descripcion_pdf || '').trim()
   const unidad = normalizarUnidad(item.unidad) || null
@@ -46,7 +46,7 @@ export async function registrarProductoEnInventario(item: ItemDetectado) {
   if (!codigo_sat) throw new Error('El artículo no tiene código SAT de referencia.')
   if (!nombre) throw new Error('El artículo no tiene descripción.')
 
-  // 🛡️ FRENO DE MANO: el código SAT es una CLASE, no la identidad del
+  // FRENO DE MANO: el código SAT es una CLASE, no la identidad del
   // producto — dos artículos distintos pueden compartirlo (Factura A570:
   // 14111704 es "Papel P/wc Jumbo Junior" y también "Papel para Manos en
   // Rollo"). Solo bloqueamos cuando YA existe un producto con ese código
@@ -66,15 +66,15 @@ export async function registrarProductoEnInventario(item: ItemDetectado) {
     throw new Error(`Este producto ya existe en tu inventario como "${duplicado.nombre}" (${duplicado.sku}). Por favor, usa la sugerencia en lugar de registrar uno nuevo.`)
   }
 
-  // 🏷️ GENERAMOS EL NUEVO SKU INTERNO (ARTXXXX)
+  // GENERAMOS EL NUEVO SKU INTERNO (ARTXXXX)
   const nuevoSku = await generarNuevoSku(supabase)
 
   const { data, error } = await supabase
     .from('productos')
     .insert({
-      sku: nuevoSku,           // 👈 El código interno ARTXXXX
-      nombre,                  // 👈 El nombre completo de la factura
-      codigo_sat,              // 👈 El código del SAT
+      sku: nuevoSku,           // El código interno ARTXXXX
+      nombre,                  // El nombre completo de la factura
+      codigo_sat,              // El código del SAT
       unidad_medida: unidad,
       stock_actual: 0,
       stock_minimo: 0,

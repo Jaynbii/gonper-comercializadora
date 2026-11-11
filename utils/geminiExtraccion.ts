@@ -20,6 +20,7 @@ Reglas:
 - Si un artículo se lee a medias, inclúyelo con lo que se alcance a leer.
 - Si no hay artículos legibles, devuelve {"items":[]}.`
 
+// Arma el cuerpo de la petición a la API de Gemini: prompt de extracción más la imagen en base64, con respuesta JSON forzada y temperatura 0.
 export function construirCuerpoGemini(mimeType: string, datosBase64: string) {
   return {
     contents: [
@@ -56,6 +57,7 @@ function extraerJson(texto: string): unknown | null {
   }
 }
 
+// Convierte la respuesta JSON de Gemini en artículos válidos: limpia la descripción, valida cantidad y unidad (normalizada) y descarta renglones sin descripción.
 export function parsearRespuestaGemini(texto: string): ItemRequisicion[] {
   const datos = extraerJson(texto ?? '')
   if (!datos || typeof datos !== 'object') return []
