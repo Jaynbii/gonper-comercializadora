@@ -15,14 +15,14 @@ export default async function LoginPage({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            'radial-gradient(60rem 40rem at 50% -12%, #fffdf8 0%, transparent 65%), linear-gradient(#0f766e08 1px, transparent 1px)',
+            'radial-gradient(60rem 40rem at 50% -12%, #ffffff 0%, transparent 65%), linear-gradient(#7bb60108 1px, transparent 1px)',
           backgroundSize: 'auto, 100% 3.25rem',
         }}
       />
 
       <div className="relative w-full max-w-100">
         <div className="flex flex-col items-center text-center">
-          <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary font-serif text-[26px] leading-none text-gonper-bg">
+          <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary font-serif text-[26px] leading-none text-gonper-on-primary">
             G
           </span>
           <h1 className="mt-4 font-serif text-[42px] leading-none tracking-[-0.02em]">

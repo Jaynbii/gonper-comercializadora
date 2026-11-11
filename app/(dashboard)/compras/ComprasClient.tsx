@@ -1052,7 +1052,7 @@ export default function ComprasClient({
           onClick={() => setTab('requisiciones')}
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'requisiciones'
-              ? 'bg-gonper-primary text-white'
+              ? 'bg-gonper-primary text-gonper-on-primary'
               : 'text-gonper-muted hover:text-gonper-text'
           }`}
         >
@@ -1060,7 +1060,7 @@ export default function ComprasClient({
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
               tab === 'requisiciones'
-                ? 'bg-white/15 text-white'
+                ? 'bg-gonper-text/10 text-gonper-on-primary'
                 : 'bg-gonper-surface-muted text-gonper-muted'
             }`}
           >
@@ -1073,7 +1073,7 @@ export default function ComprasClient({
           onClick={() => setTab('sugerencias')}
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'sugerencias'
-              ? 'bg-gonper-primary text-white'
+              ? 'bg-gonper-primary text-gonper-on-primary'
               : 'text-gonper-muted hover:text-gonper-text'
           }`}
         >
@@ -1081,7 +1081,7 @@ export default function ComprasClient({
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
               tab === 'sugerencias'
-                ? 'bg-white/15 text-white'
+                ? 'bg-gonper-text/10 text-gonper-on-primary'
                 : 'bg-gonper-surface-muted text-gonper-muted'
             }`}
           >
@@ -1094,7 +1094,7 @@ export default function ComprasClient({
           onClick={() => setTab('ordenes')}
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'ordenes'
-              ? 'bg-gonper-primary text-white'
+              ? 'bg-gonper-primary text-gonper-on-primary'
               : 'text-gonper-muted hover:text-gonper-text'
           }`}
         >
@@ -1102,7 +1102,7 @@ export default function ComprasClient({
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
               tab === 'ordenes'
-                ? 'bg-white/15 text-white'
+                ? 'bg-gonper-text/10 text-gonper-on-primary'
                 : 'bg-gonper-surface-muted text-gonper-muted'
             }`}
           >
@@ -1184,7 +1184,7 @@ export default function ComprasClient({
               onClick={() => setVista('general')}
               className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
                 vista === 'general'
-                  ? 'bg-gonper-primary text-white'
+                  ? 'bg-gonper-primary text-gonper-on-primary'
                   : 'text-gonper-muted hover:text-gonper-text'
               }`}
             >
@@ -1195,7 +1195,7 @@ export default function ComprasClient({
               onClick={() => setVista('por-orden')}
               className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
                 vista === 'por-orden'
-                  ? 'bg-gonper-primary text-white'
+                  ? 'bg-gonper-primary text-gonper-on-primary'
                   : 'text-gonper-muted hover:text-gonper-text'
               }`}
             >
@@ -1203,7 +1203,7 @@ export default function ComprasClient({
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
                   vista === 'por-orden'
-                    ? 'bg-white/15 text-white'
+                    ? 'bg-gonper-text/10 text-gonper-on-primary'
                     : 'bg-gonper-surface-muted text-gonper-muted'
                 }`}
               >

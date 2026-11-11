@@ -223,7 +223,7 @@ export default function InventoryClient({
                 aria-pressed={activo}
                 className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
                   activo
-                    ? 'border-gonper-primary bg-gonper-primary text-white'
+                    ? 'border-gonper-primary bg-gonper-primary text-gonper-on-primary'
                     : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
                 }`}
               >
@@ -244,7 +244,7 @@ export default function InventoryClient({
             aria-pressed={categoriaFiltro === 'todas'}
             className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
               categoriaFiltro === 'todas'
-                ? 'border-gonper-primary bg-gonper-primary text-white'
+                ? 'border-gonper-primary bg-gonper-primary text-gonper-on-primary'
                 : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
             }`}
           >
@@ -260,7 +260,7 @@ export default function InventoryClient({
                 aria-pressed={activo}
                 className={`flex min-h-11 shrink-0 items-center justify-center rounded-full border px-3.5 text-[12.5px] font-medium transition-colors duration-[120ms] ${
                   activo
-                    ? 'border-gonper-primary bg-gonper-primary text-white'
+                    ? 'border-gonper-primary bg-gonper-primary text-gonper-on-primary'
                     : 'border-gonper-border bg-gonper-surface text-gonper-muted hover:text-gonper-text'
                 }`}
               >

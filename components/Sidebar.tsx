@@ -50,7 +50,7 @@ export default function Sidebar() {
                 aria-current={activo ? 'page' : undefined}
                 className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-120 ${
                   activo
-                    ? 'bg-gonper-primary/10 text-gonper-primary'
+                    ? 'bg-gonper-primary/10 text-gonper-text'
                     : 'text-gonper-muted hover:bg-gonper-hover hover:text-gonper-text'
                 }`}
               >
@@ -62,7 +62,7 @@ export default function Sidebar() {
                 )}
                 <Icono
                   className={`h-4.25 w-4.25 ${
-                    activo ? 'text-gonper-primary' : 'text-gonper-muted'
+                    activo ? 'text-gonper-text' : 'text-gonper-muted'
                   }`}
                   strokeWidth={activo ? 2 : 1.75}
                 />
@@ -94,12 +94,12 @@ export default function Sidebar() {
                 aria-current={activo ? 'page' : undefined}
                 aria-label={item.name}
                 className={`flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-120 ${
-                  activo ? 'text-gonper-primary' : 'text-gonper-muted'
+                  activo ? 'text-gonper-text' : 'text-gonper-muted'
                 }`}
               >
                 <span
                   className={`grid h-6 w-9 place-items-center rounded-full transition-colors duration-120 ${
-                    activo ? 'bg-gonper-primary text-white' : ''
+                    activo ? 'bg-gonper-primary text-gonper-on-primary' : ''
                   }`}
                 >
                   <Icono

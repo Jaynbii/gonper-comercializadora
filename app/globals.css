@@ -2,37 +2,41 @@
 @import "tailwindcss";
 
 /*
- * Marfil y teal (propuesta "vivo", paleta del reel de Sergio Rovira)
- * Fondo Warm Ivory #FFFBEB, tarjetas blancas, Teal #0F766E SOLO como
- * acento (botones, enlaces, estados activos, detalles) y Orange #F97316
- * solo para lo urgente o lo que falta. Sobrio, para usuarios de 38+:
- * sin degradados brillantes, buen contraste, texto legible.
+ * Lime + Concrete (Alex, 2026-11-11): fondo Concrete #F2F2F2,
+ * tarjetas blancas, Lime #7BB601 / #B3CF32 como acento (botones,
+ * enlaces, estados activos, detalles), neutros #BDBDBD y #808080.
+ * Texto principal casi negro neutro y texto sobre Lime oscuro
+ * (--color-gonper-on-primary) por contraste para usuarios de 38+.
+ * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo para
+ * urgente/faltante y errores, a validar por Alex (la paleta no
+ * trae color para esos roles).
  */
 @theme {
-  --color-gonper-bg: #fffbeb;
+  --color-gonper-bg: #f2f2f2;
   --color-gonper-surface: #ffffff;
-  --color-gonper-surface-muted: #faf3dd;
-  --color-gonper-hover: #f7eed3;
-  --color-gonper-border: #e7dfc8;
-  --color-gonper-text: #1c1917;
-  --color-gonper-muted: #57534e;
-  --color-gonper-primary: #0f766e;
-  --color-gonper-primary-hover: #0b5e57;
-  --color-gonper-success: #0f766e;
+  --color-gonper-surface-muted: #ececec;
+  --color-gonper-hover: #e2e2e2;
+  --color-gonper-border: #bdbdbd;
+  --color-gonper-text: #1f1f1f;
+  --color-gonper-muted: #808080;
+  --color-gonper-primary: #7bb601;
+  --color-gonper-primary-hover: #6aa200;
+  --color-gonper-on-primary: #1f1f1f;
+  --color-gonper-success: #7bb601;
   --color-gonper-warning: #c2410c;
   --color-gonper-danger: #a33b2b;
 
-  --color-gonper-success-bg: #e6f4f1;
-  --color-gonper-success-border: #bfe0da;
+  --color-gonper-success-bg: #f1f7e3;
+  --color-gonper-success-border: #b3cf32;
   --color-gonper-warning-bg: #ffedd5;
   --color-gonper-warning-border: #fdba74;
   --color-gonper-danger-bg: #f7e8e4;
   --color-gonper-danger-border: #e9cfc7;
 
   /* Profundidad sobria: 3 niveles de elevación, sombras suaves. */
-  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.05), 0 6px 20px -8px rgb(28 25 23 / 0.12);
-  --shadow-raise: 0 2px 4px rgb(28 25 23 / 0.06), 0 16px 36px -12px rgb(28 25 23 / 0.18);
-  --shadow-pop: 0 24px 64px -16px rgb(28 25 23 / 0.28), 0 2px 6px rgb(28 25 23 / 0.06);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 20px -8px rgb(0 0 0 / 0.12);
+  --shadow-raise: 0 2px 4px rgb(0 0 0 / 0.06), 0 16px 36px -12px rgb(0 0 0 / 0.18);
+  --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.28), 0 2px 6px rgb(0 0 0 / 0.06);
 }
 
 @theme inline {
@@ -67,7 +71,7 @@
 
   ::selection {
     background-color: var(--color-gonper-primary);
-    color: var(--color-gonper-bg);
+    color: var(--color-gonper-on-primary);
   }
 
   :focus-visible {
@@ -101,7 +105,7 @@
   }
 
   .btn-primary {
-    @apply bg-gonper-primary text-white shadow-card hover:bg-gonper-primary-hover;
+    @apply bg-gonper-primary text-gonper-on-primary shadow-card hover:bg-gonper-primary-hover;
   }
 
   .btn-quiet {

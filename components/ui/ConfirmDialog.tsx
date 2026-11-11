@@ -48,10 +48,10 @@ export default function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className={`btn flex-1 border text-white sm:flex-none ${
+            className={`btn flex-1 border sm:flex-none ${
               tono === 'primary'
-                ? 'border-gonper-primary bg-gonper-primary hover:bg-gonper-primary-hover'
-                : 'border-gonper-danger bg-gonper-danger hover:bg-gonper-danger/90'
+                ? 'border-gonper-primary bg-gonper-primary text-gonper-on-primary hover:bg-gonper-primary-hover'
+                : 'border-gonper-danger bg-gonper-danger text-white hover:bg-gonper-danger/90'
             }`}
           >
             {pending ? pendingLabel : confirmLabel}
