@@ -17,11 +17,19 @@ import {
   registrarProductoEnInventario,
 } from './actions'
 import { procesarTextoOrden, obtenerCatalogoProductos } from './procesarTexto'
+import { extraerItemsConGemini } from './extraerConGemini'
 import { extraerTextoDelPDF } from './procesarPdf'
 import * as pdfjsLib from 'pdfjs-dist'
 import Tesseract from 'tesseract.js'
 import { parseRequisicion } from '@/utils/requisicion'
-import { vincularItems, type ProductoCatalogo } from '@/utils/vincularProductos'
+import {
+  vincularItems,
+  buscarCandidatos,
+  limpiarParaBusqueda,
+  tokenizarNombre,
+  type CandidatoProducto,
+  type ProductoCatalogo,
+} from '@/utils/vincularProductos'
 import { normalizarUnidad, UNIDADES_COMUNES } from '@/utils/unidades'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
@@ -128,6 +136,116 @@ async function prepararImagenParaOcr(fileUrl: string) {
   }
 }
 
+// Nombre de un candidato con las palabras que coinciden con lo escrito
+// en negrita: así se ve letra por letra qué comparó el cotejo, en vez
+// de una sola sugerencia que aparece o no aparece sin explicar por qué.
+function NombreConCoincidencias({
+  nombre,
+  texto,
+}: {
+  nombre: string
+  texto: string
+}) {
+  const tokens = tokenizarNombre(limpiarParaBusqueda(texto))
+  return (
+    <>
+      {nombre.split(/(\s+)/).map((parte, i) => {
+        const limpio = limpiarParaBusqueda(parte)
+        const coincide =
+          limpio.length >= 2 &&
+          tokens.some(
+            (token) =>
+              token.length >= 2 &&
+              (limpio.startsWith(token) || token.startsWith(limpio)),
+          )
+        return coincide ? (
+          <strong key={i} className="font-semibold text-gonper-primary">
+            {parte}
+          </strong>
+        ) : (
+          <span key={i}>{parte}</span>
+        )
+      })}
+    </>
+  )
+}
+
+// Lista de productos del inventario que van coincidiendo con lo que el
+// usuario escribe en la descripción. Va en flujo (no flotante) para
+// que no la recorte la tabla en escritorio ni se despegue al hacer
+// scroll en el teléfono: la fila crece y la lista queda debajo del
+// campo. Elegir un candidato vincula la fila a ese producto del
+// inventario, igual que hacía el botón "Usar" de la sugerencia única.
+function ListaCandidatos({
+  candidatos,
+  resaltado,
+  texto,
+  onElegir,
+  onResaltar,
+}: {
+  candidatos: CandidatoProducto[]
+  resaltado: number
+  texto: string
+  onElegir: (candidato: CandidatoProducto) => void
+  onResaltar: (indice: number) => void
+}) {
+  return (
+    <div
+      role="listbox"
+      aria-label="Productos del inventario que coinciden"
+      className="mt-1 overflow-hidden rounded-md border border-gonper-border bg-white"
+    >
+      {candidatos.length === 0 ? (
+        <p className="px-2.5 py-2 text-[12px] leading-snug text-gonper-muted">
+          Sin coincidencias en tu inventario — si lo confirmas así, se
+          registrará como producto nuevo.
+        </p>
+      ) : (
+        <ul className="max-h-56 divide-y divide-gonper-border overflow-y-auto">
+          {candidatos.map((candidato, i) => (
+            <li key={candidato.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === resaltado}
+                onMouseDown={(e) => {
+                  // onMouseDown antes que el blur del campo: si se
+                  // esperara al click, el campo ya habría cerrado la
+                  // lista y el toque no llegaría al candidato.
+                  e.preventDefault()
+                  onElegir(candidato)
+                }}
+                onMouseEnter={() => onResaltar(i)}
+                className={`flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left ${
+                  i === resaltado ? 'bg-gonper-primary/[0.06]' : ''
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium leading-snug text-gonper-text">
+                    <NombreConCoincidencias
+                      nombre={candidato.nombre}
+                      texto={texto}
+                    />
+                  </span>
+                  <span className="block text-[11px] text-gonper-muted">
+                    {candidato.sku}
+                    {candidato.unidad_medida
+                      ? ` · ${candidato.unidad_medida}`
+                      : ''}
+                  </span>
+                </span>
+                <span className="mt-0.5 shrink-0 rounded-full bg-gonper-bg px-1.5 py-0.5 text-[11px] font-semibold text-gonper-primary">
+                  {candidato.similitud}%
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function ProcesarPdfButton({
   ordenId,
   pdfPath,
@@ -159,25 +277,33 @@ export default function ProcesarPdfButton({
   const etiquetaOcr = useRef('Analizando imagen')
 
   // Re-cotejo al editar la descripción: el catálogo se carga una sola
-  // vez y se guarda en caché; el temporizador espera a que el usuario
-  // pare de escribir; el ref espeja las filas para no aplicar un
-  // cotejo que ya quedó viejo.
+  // vez y se guarda en caché; el ref espeja las filas para no aplicar
+  // un cotejo que ya quedó viejo. Los temporizadores son POR FILA: con
+  // uno solo compartido, escribir en una fila cancelaba el cotejo de
+  // la anterior y la sugerencia nunca llegaba (por eso "no funciona").
   const catalogoRef = useRef<ProductoCatalogo[] | null>(null)
-  const temporizadorCotejoRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
+  const temporizadoresRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const itemsDetectadosRef = useRef<ItemDetectado[] | null>(null)
+
+  // Combobox: la fila que está mostrando sus candidatos del inventario
+  // y cuál va resaltado para elegirlo con el teclado.
+  const [combobox, setCombobox] = useState<{
+    key: string
+    candidatos: CandidatoProducto[]
+    resaltado: number
+  } | null>(null)
 
   useEffect(() => {
     itemsDetectadosRef.current = itemsDetectados
   }, [itemsDetectados])
 
-  // Si el modal se cierra con un cotejo pendiente, no se aplica.
+  // Si el modal se cierra con cotejos pendientes, no se aplican.
   useEffect(
     () => () => {
-      if (temporizadorCotejoRef.current) {
-        clearTimeout(temporizadorCotejoRef.current)
+      for (const temporizador of temporizadoresRef.current.values()) {
+        clearTimeout(temporizador)
       }
+      temporizadoresRef.current.clear()
     },
     [],
   )
@@ -257,6 +383,9 @@ export default function ProcesarPdfButton({
 
     try {
       let textoCompleto = cacheTexto.get(pdfPath) ?? ''
+      let resultadoIa: Awaited<
+        ReturnType<typeof procesarTextoOrden>
+      > | null = null
 
       if (!textoCompleto) {
         const esPDF = pdfPath.toLowerCase().endsWith('.pdf')
@@ -277,15 +406,46 @@ export default function ProcesarPdfButton({
             textoCompleto = await leerPdfConOcr(fileUrl)
           }
         } else {
-          const fileUrl = await obtenerUrlParaOCR(pdfPath)
-          textoCompleto = await leerImagenConOcr(fileUrl)
+          // Foto: primero la lee Gemini (si está configurada) y el
+          // resultado ya viene cotejado con el catálogo; si la IA no
+          // está disponible o no lee nada, se sigue con Tesseract
+          // como siempre. El resultado de la IA se cachea igual que
+          // el texto para no volver a llamarla en la misma sesión.
+          const cacheIa = cacheTexto.get(`ia:${pdfPath}`)
+          if (cacheIa) {
+            try {
+              const previo = JSON.parse(cacheIa) as Awaited<
+                ReturnType<typeof procesarTextoOrden>
+              >
+              if (previo.items.length > 0) resultadoIa = previo
+            } catch {
+              resultadoIa = null
+            }
+          }
+
+          if (!resultadoIa) {
+            setStatusMsg('Leyendo la foto con IA...')
+            const conIa = await extraerItemsConGemini(pdfPath).catch(
+              () => null,
+            )
+            if (conIa && conIa.items.length > 0) {
+              resultadoIa = conIa
+              cacheTexto.set(`ia:${pdfPath}`, JSON.stringify(conIa))
+            } else {
+              const fileUrl = await obtenerUrlParaOCR(pdfPath)
+              textoCompleto = await leerImagenConOcr(fileUrl)
+            }
+          }
         }
 
         if (textoCompleto.trim()) cacheTexto.set(pdfPath, textoCompleto)
       }
 
-      setStatusMsg('Cotejando con el catálogo...')
-      const result = await procesarTextoOrden(textoCompleto)
+      let result = resultadoIa
+      if (!result) {
+        setStatusMsg('Cotejando con el catálogo...')
+        result = await procesarTextoOrden(textoCompleto)
+      }
 
       const detectados: ItemDetectado[] = result.items.map((item) => ({
         key: nuevaLlave(),
@@ -440,18 +600,22 @@ export default function ProcesarPdfButton({
 
   // Al escribir se espera a que el usuario pare (500 ms) para no
   // cotejar en cada tecla; al salir del campo se coteja de inmediato.
+  // Temporizador por fila: uno compartido cancelaba el cotejo de la
+  // fila anterior al escribir en otra.
   const programarCotejo = (
     key: string,
     descripcion: string,
     codigoPdf: string,
     unidad: string,
   ) => {
-    if (temporizadorCotejoRef.current) {
-      clearTimeout(temporizadorCotejoRef.current)
-    }
-    temporizadorCotejoRef.current = setTimeout(() => {
-      void reCotejarDescripcion(key, descripcion, codigoPdf, unidad)
-    }, 500)
+    const anterior = temporizadoresRef.current.get(`${key}:cotejo`)
+    if (anterior) clearTimeout(anterior)
+    temporizadoresRef.current.set(
+      `${key}:cotejo`,
+      setTimeout(() => {
+        void reCotejarDescripcion(key, descripcion, codigoPdf, unidad)
+      }, 500),
+    )
   }
 
   const cotejarAhora = (
@@ -460,33 +624,84 @@ export default function ProcesarPdfButton({
     codigoPdf: string,
     unidad: string,
   ) => {
-    if (temporizadorCotejoRef.current) {
-      clearTimeout(temporizadorCotejoRef.current)
+    const anterior = temporizadoresRef.current.get(`${key}:cotejo`)
+    if (anterior) {
+      clearTimeout(anterior)
+      temporizadoresRef.current.delete(`${key}:cotejo`)
     }
     void reCotejarDescripcion(key, descripcion, codigoPdf, unidad)
+  }
+
+  // Combobox: al escribir se comparan las letras contra el inventario
+  // y se muestra la lista de candidatos con su parecido, para elegir
+  // uno con un toque. Con menos de 2 letras no hay nada que comparar.
+  const abrirCombobox = async (key: string, descripcion: string) => {
+    const texto = descripcion.trim()
+    if (texto.length < 2) {
+      setCombobox((prev) => (prev?.key === key ? null : prev))
+      return
+    }
+    try {
+      if (!catalogoRef.current) {
+        catalogoRef.current = await obtenerCatalogoProductos()
+      }
+      const candidatos = buscarCandidatos(texto, catalogoRef.current, 5)
+      // Si el usuario ya escribió otra cosa, esta lista quedó vieja.
+      const filaActual = itemsDetectadosRef.current?.find(
+        (fila) => fila.key === key,
+      )
+      if (!filaActual || filaActual.descripcion_pdf.trim() !== texto) return
+      setCombobox({ key, candidatos, resaltado: 0 })
+    } catch (error) {
+      // Sin catálogo no hay lista; el cotejo de fondo sigue como antes.
+      console.error('No se pudo cargar el catálogo para el combobox:', error)
+    }
+  }
+
+  const programarCombobox = (key: string, descripcion: string) => {
+    const anterior = temporizadoresRef.current.get(`${key}:combobox`)
+    if (anterior) clearTimeout(anterior)
+    temporizadoresRef.current.set(
+      `${key}:combobox`,
+      setTimeout(() => {
+        void abrirCombobox(key, descripcion)
+      }, 250),
+    )
+  }
+
+  const cerrarCombobox = (key: string) => {
+    // Con un poco de espera para que el toque en un candidato llegue
+    // antes de que la lista se cierre al salir del campo.
+    setTimeout(() => {
+      setCombobox((prev) => (prev?.key === key ? null : prev))
+    }, 150)
   }
 
   const actualizarDescripcion = (item: ItemDetectado, descripcion: string) => {
     actualizarItem(item.key, { descripcion_pdf: descripcion })
     programarCotejo(item.key, descripcion, item.codigo_pdf, item.unidad)
+    programarCombobox(item.key, descripcion)
   }
 
-  const aplicarSugerencia = (item: ItemDetectado) => {
-    if (!item.sugerencia) return
-    const sugerencia = item.sugerencia
-
+  // Elegir un candidato del combobox vincula la fila a ese producto
+  // del inventario: nombre, código, unidad y estado, igual que hacía
+  // el botón "Usar" de la sugerencia única.
+  const aplicarCandidato = (
+    item: ItemDetectado,
+    candidato: CandidatoProducto,
+  ) => {
     setItemsDetectados((prev) =>
       prev
         ? prev.map((fila) =>
             fila.key === item.key
               ? {
                   ...fila,
-                  codigo_pdf: sugerencia.sku,
-                  descripcion_pdf: sugerencia.nombre,
+                  codigo_pdf: candidato.sku,
+                  descripcion_pdf: candidato.nombre,
                   unidad:
-                    normalizarUnidad(sugerencia.unidad_medida) || fila.unidad,
+                    normalizarUnidad(candidato.unidad_medida) || fila.unidad,
                   existe_en_bd: true,
-                  id_bd: sugerencia.id,
+                  id_bd: candidato.id,
                   sugerencia: null,
                 }
               : fila,
@@ -494,6 +709,40 @@ export default function ProcesarPdfButton({
         : null,
     )
     setSeleccionados((prev) => new Set(prev).add(item.key))
+    setCombobox(null)
+  }
+
+  // Teclado dentro del combobox: bajar/subir con las flechas, elegir
+  // con Enter, cerrar con Escape.
+  const teclaEnCombobox = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    item: ItemDetectado,
+  ) => {
+    if (!combobox || combobox.key !== item.key) return
+    if (e.key === 'ArrowDown' && combobox.candidatos.length > 0) {
+      e.preventDefault()
+      setCombobox((prev) =>
+        prev
+          ? {
+              ...prev,
+              resaltado: Math.min(
+                prev.resaltado + 1,
+                prev.candidatos.length - 1,
+              ),
+            }
+          : prev,
+      )
+    } else if (e.key === 'ArrowUp' && combobox.candidatos.length > 0) {
+      e.preventDefault()
+      setCombobox((prev) =>
+        prev ? { ...prev, resaltado: Math.max(prev.resaltado - 1, 0) } : prev,
+      )
+    } else if (e.key === 'Enter' && combobox.candidatos.length > 0) {
+      e.preventDefault()
+      aplicarCandidato(item, combobox.candidatos[combobox.resaltado])
+    } else if (e.key === 'Escape') {
+      setCombobox(null)
+    }
   }
 
   const toggleSeleccion = (key: string) => {
@@ -891,32 +1140,41 @@ export default function ProcesarPdfButton({
                               onChange={(e) =>
                                 actualizarDescripcion(item, e.target.value)
                               }
-                              onBlur={(e) =>
+                              onFocus={() =>
+                                void abrirCombobox(
+                                  item.key,
+                                  item.descripcion_pdf,
+                                )
+                              }
+                              onKeyDown={(e) => teclaEnCombobox(e, item)}
+                              onBlur={(e) => {
                                 cotejarAhora(
                                   item.key,
                                   e.target.value,
                                   item.codigo_pdf,
                                   item.unidad,
                                 )
-                              }
+                                cerrarCombobox(item.key)
+                              }}
                               placeholder="Descripción del artículo"
                               aria-label="Descripción"
+                              autoComplete="off"
                               className="field h-9 px-2 text-[13px] font-medium"
                             />
-                            {item.sugerencia && (
-                              <div className="mt-1 flex items-start gap-1.5 text-[11px] leading-snug text-gonper-warning">
-                                <span className="min-w-0">
-                                  Sugerencia: {item.sugerencia.nombre} (
-                                  {item.sugerencia.sku})
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => aplicarSugerencia(item)}
-                                  className="shrink-0 font-semibold text-gonper-primary hover:underline"
-                                >
-                                  Usar
-                                </button>
-                              </div>
+                            {combobox?.key === item.key && (
+                              <ListaCandidatos
+                                candidatos={combobox.candidatos}
+                                resaltado={combobox.resaltado}
+                                texto={item.descripcion_pdf}
+                                onElegir={(candidato) =>
+                                  aplicarCandidato(item, candidato)
+                                }
+                                onResaltar={(indice) =>
+                                  setCombobox((prev) =>
+                                    prev ? { ...prev, resaltado: indice } : prev,
+                                  )
+                                }
+                              />
                             )}
                           </td>
                           <td className="px-2 py-2">
@@ -1088,34 +1346,39 @@ export default function ProcesarPdfButton({
                           onChange={(e) =>
                             actualizarDescripcion(item, e.target.value)
                           }
-                          onBlur={(e) =>
+                          onFocus={() =>
+                            void abrirCombobox(item.key, item.descripcion_pdf)
+                          }
+                          onKeyDown={(e) => teclaEnCombobox(e, item)}
+                          onBlur={(e) => {
                             cotejarAhora(
                               item.key,
                               e.target.value,
                               item.codigo_pdf,
                               item.unidad,
                             )
-                          }
+                            cerrarCombobox(item.key)
+                          }}
                           placeholder="Descripción del artículo"
+                          autoComplete="off"
                           className="field h-10 text-[13px] font-medium"
                         />
+                        {combobox?.key === item.key && (
+                          <ListaCandidatos
+                            candidatos={combobox.candidatos}
+                            resaltado={combobox.resaltado}
+                            texto={item.descripcion_pdf}
+                            onElegir={(candidato) =>
+                              aplicarCandidato(item, candidato)
+                            }
+                            onResaltar={(indice) =>
+                              setCombobox((prev) =>
+                                prev ? { ...prev, resaltado: indice } : prev,
+                              )
+                            }
+                          />
+                        )}
                       </div>
-
-                      {item.sugerencia && (
-                        <div className="mt-1.5 flex items-start gap-2 text-[11.5px] leading-snug text-gonper-warning">
-                          <span className="min-w-0">
-                            Sugerencia: {item.sugerencia.nombre} (
-                            {item.sugerencia.sku})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => aplicarSugerencia(item)}
-                            className="shrink-0 font-semibold text-gonper-primary hover:underline"
-                          >
-                            Usar
-                          </button>
-                        </div>
-                      )}
 
                       <div className="mt-2 flex items-end justify-between gap-2">
                         <div className="w-28">

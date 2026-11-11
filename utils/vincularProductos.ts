@@ -99,6 +99,130 @@ function coberturaPorTokens(
   return { cobertura: coincidencias / tokensCatalogo.length, coincidencias }
 }
 
+export type CandidatoProducto = {
+  id: string
+  sku: string
+  nombre: string
+  unidad_medida: string | null
+  /** 0-100: qué tanto se parece lo escrito al producto del catálogo. */
+  similitud: number
+}
+
+// Puntaje de un producto del catálogo contra un texto ya limpio: el
+// puntaje Fuse, la cobertura por tokens y cuántos tokens de la consulta
+// son prefijo de algún token del catálogo ("pol" de "polvo"). El
+// prefijo es lo que hace que el combobox responda letra por letra
+// mientras el usuario escribe, antes de que el nombre esté completo.
+function puntuarProducto(
+  tokensConsulta: string[],
+  producto: ProductoCatalogo,
+  fuseScore: number,
+): {
+  fuseScore: number
+  cobertura: number
+  coincidencias: number
+  coberturaPrefijo: number
+  tokensCatalogo: number
+} {
+  const tokensCatalogo = tokenizarNombre(limpiarParaBusqueda(producto.nombre))
+  const { cobertura, coincidencias } = coberturaPorTokens(
+    tokensConsulta,
+    tokensCatalogo,
+  )
+  // Un token cuenta como prefijo solo si el lado corto tiene al menos
+  // 3 letras: sin eso, "pol" contaría como prefijo de la "p" de
+  // "P/wc" y cualquier palabra con p colaría un producto que no tiene
+  // nada que ver ("jabon en pol" traía el Papel Jumbo).
+  const prefijos = tokensConsulta.filter((token) =>
+    tokensCatalogo.some((tokenCatalogo) => {
+      const corto = Math.min(token.length, tokenCatalogo.length)
+      if (corto < 3) return token === tokenCatalogo
+      return (
+        tokenCatalogo.startsWith(token) || token.startsWith(tokenCatalogo)
+      )
+    }),
+  ).length
+  const coberturaPrefijo =
+    tokensConsulta.length === 0 ? 0 : prefijos / tokensConsulta.length
+  return { fuseScore, cobertura, coincidencias, coberturaPrefijo, tokensCatalogo: tokensCatalogo.length }
+}
+
+/**
+ * Candidatos del catálogo para un texto que el usuario está escribiendo,
+ * ordenados del más parecido al menos. Es lo que alimenta el combobox
+ * del modal de revisión: al corregir un artículo letra por letra se ven
+ * los productos del inventario que van coincidiendo, con su porcentaje
+ * de parecido, y se elige uno con un toque en vez de depender de una
+ * sola sugerencia que solo aparece en una banda estrecha de puntaje.
+ *
+ * Un producto entra a la lista si Fuse lo acerca (score <= 0.55), si
+ * la mitad o más de sus tokens ya están en lo escrito, si la mitad o
+ * más de lo escrito son prefijos de sus tokens, o si lo escrito es
+ * parte de su nombre. Sin texto (menos de 2 caracteres) no hay nada
+ * que comparar y la lista sale vacía.
+ */
+export function buscarCandidatos(
+  texto: string,
+  productos: ProductoCatalogo[],
+  limite = 5,
+): CandidatoProducto[] {
+  const textoLimpio = limpiarParaBusqueda(texto)
+  if (textoLimpio.length < 2) return []
+
+  const fuse = crearFuse(productos)
+  const puntajesPorId = new Map<string, number>()
+  for (const resultado of fuse.search(textoLimpio)) {
+    puntajesPorId.set(resultado.item.id, resultado.score ?? 1)
+  }
+
+  const tokensConsulta = tokenizarNombre(textoLimpio)
+
+  return productos
+    .map((producto) => {
+      const nombreLimpio = limpiarParaBusqueda(producto.nombre)
+      const { fuseScore, cobertura, coincidencias, coberturaPrefijo } =
+        puntuarProducto(
+          tokensConsulta,
+          producto,
+          puntajesPorId.get(producto.id) ?? 1,
+        )
+      const esSubcadena =
+        nombreLimpio.includes(textoLimpio) ||
+        textoLimpio.includes(nombreLimpio)
+      // Similitud 0-100: manda la señal más fuerte (Fuse invertido,
+      // cobertura por tokens o por prefijos); una subcadena directa
+      // vale al menos 85 para que "papel" no quede por debajo de un
+      // parecido difuso cualquiera.
+      const similitud = Math.max(
+        Math.round((1 - fuseScore) * 100),
+        Math.round(cobertura * 100),
+        Math.round(coberturaPrefijo * 100),
+        esSubcadena ? 85 : 0,
+      )
+      const entra =
+        fuseScore <= 0.55 ||
+        cobertura >= 0.5 ||
+        coberturaPrefijo >= 0.5 ||
+        esSubcadena
+      return { producto, fuseScore, cobertura, coincidencias, similitud, entra }
+    })
+    .filter((c) => c.entra)
+    .sort((a, b) => {
+      if (a.similitud !== b.similitud) return b.similitud - a.similitud
+      if (a.coincidencias !== b.coincidencias)
+        return b.coincidencias - a.coincidencias
+      return a.fuseScore - b.fuseScore
+    })
+    .slice(0, limite)
+    .map(({ producto, similitud }) => ({
+      id: producto.id,
+      sku: producto.sku,
+      nombre: producto.nombre,
+      unidad_medida: producto.unidad_medida,
+      similitud,
+    }))
+}
+
 function crearFuse(productos: ProductoCatalogo[]) {
   return new Fuse(
     productos.map((p) => ({ ...p, nombreLimpio: limpiarParaBusqueda(p.nombre) })),
@@ -229,19 +353,15 @@ export function vincularItems(
       const tokensConsulta = tokenizarNombre(descripcionLimpia)
       const candidatos = productos
         .map((producto) => {
-          const tokensCatalogo = tokenizarNombre(
-            limpiarParaBusqueda(producto.nombre),
-          )
-          const { cobertura, coincidencias } = coberturaPorTokens(
-            tokensConsulta,
-            tokensCatalogo,
-          )
-          const fuseScore = puntajesPorId.get(producto.id) ?? 1
-          const autoPorTokens = tokensCatalogo.length >= 2 && cobertura === 1
+          const { cobertura, coincidencias, fuseScore, tokensCatalogo } =
+            puntuarProducto(
+              tokensConsulta,
+              producto,
+              puntajesPorId.get(producto.id) ?? 1,
+            )
+          const autoPorTokens = tokensCatalogo >= 2 && cobertura === 1
           const sugerirPorTokens =
-            tokensCatalogo.length >= 2 &&
-            coincidencias >= 2 &&
-            cobertura >= 0.75
+            tokensCatalogo >= 2 && coincidencias >= 2 && cobertura >= 0.75
           return {
             producto,
             auto: fuseScore <= UMBRAL_VINCULO_AUTO || autoPorTokens,

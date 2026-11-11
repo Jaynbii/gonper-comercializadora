@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   vincularItems,
+  buscarCandidatos,
   buscarProductoSimilarPorNombre,
   nombresSimilares,
   type ProductoCatalogo,
@@ -240,3 +241,37 @@ test('la regla de tokens no vincula un producto claramente distinto', () => {
   assert.equal(vinculados[0].existe_en_bd, false)
   assert.equal(vinculados[0].sugerencia, null)
 })
+
+// Combobox del modal de revisión: al corregir letra por letra se ven
+// los productos del inventario que van coincidiendo, ordenados del más
+// parecido al menos, para elegir uno con un toque.
+test('buscarCandidatos: con el nombre a medias ("jabon en pol") ya aparecen los jabones', () => {
+  const candidatos = buscarCandidatos('jabon en pol', [JABON_9, JABON_3, JABON_POLVO, JUMBO])
+
+  assert.ok(candidatos.length >= 2)
+  assert.ok(candidatos.every((c) => c.nombre.toLowerCase().includes('jab')))
+  assert.ok(candidatos[0].similitud >= candidatos[candidatos.length - 1].similitud)
+})
+
+test('buscarCandidatos: "papel jumbo" pone primero el Jumbo Junior y no el de manos', () => {
+  const candidatos = buscarCandidatos('papel jumbo', [JUMBO, MANOS])
+
+  assert.equal(candidatos[0].id, 'prod-jumbo')
+})
+
+test('buscarCandidatos: con 1 letra o vacío no hay nada que comparar', () => {
+  assert.deepEqual(buscarCandidatos('', [JABON_9]), [])
+  assert.deepEqual(buscarCandidatos('j', [JABON_9]), [])
+})
+
+test('buscarCandidatos: un texto sin relación con el catálogo no devuelve nada', () => {
+  assert.deepEqual(buscarCandidatos('cloro de 20 litros', [JABON_9, JUMBO]), [])
+})
+
+test('buscarCandidatos: respeta el límite y trae sku y unidad para mostrar', () => {
+  const candidatos = buscarCandidatos('jabon', [JABON_9, JABON_3, JABON_POLVO], 2)
+
+  assert.equal(candidatos.length, 2)
+  assert.ok(candidatos.every((c) => c.sku.startsWith('ART') && c.unidad_medida))
+})
+
