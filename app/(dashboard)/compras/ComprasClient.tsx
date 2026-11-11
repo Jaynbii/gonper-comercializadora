@@ -539,8 +539,6 @@ export default function ComprasClient({
   esAdmin?: boolean
 }) {
   const router = useRouter()
-  const [tab, setTab] = useState<'sugerencias' | 'ordenes'>('sugerencias')
-
   // Fase 1 — Vista por requisición: si se llega con ?orden=<id> (desde el
   // detalle de una requisición), se abre directamente en "Por requisición" con
   // esa card seleccionada.
@@ -549,6 +547,13 @@ export default function ComprasClient({
     faltantesPorOrden.some((orden) => orden.ordenId === ordenIdInicial)
       ? ordenIdInicial
       : undefined
+
+  // Secciones aparte: cada vista vive en su pestaña. Con ?orden= se
+  // aterriza en Sugerencias (donde está "Por requisición"); sin él,
+  // en Requisiciones, que es por donde empieza el día.
+  const [tab, setTab] = useState<'requisiciones' | 'sugerencias' | 'ordenes'>(
+    ordenInicialValida ? 'sugerencias' : 'requisiciones',
+  )
   const [vista, setVista] = useState<'general' | 'por-orden'>(
     ordenInicialValida ? 'por-orden' : 'general',
   )
@@ -1032,6 +1037,27 @@ export default function ComprasClient({
       <div className="mt-5 flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
         <button
           type="button"
+          onClick={() => setTab('requisiciones')}
+          className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
+            tab === 'requisiciones'
+              ? 'bg-gonper-primary text-white'
+              : 'text-gonper-muted hover:text-gonper-text'
+          }`}
+        >
+          Requisiciones
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
+              tab === 'requisiciones'
+                ? 'bg-white/15 text-white'
+                : 'bg-gonper-surface-muted text-gonper-muted'
+            }`}
+          >
+            {requisiciones.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setTab('sugerencias')}
           className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
             tab === 'sugerencias'
@@ -1101,7 +1127,9 @@ export default function ComprasClient({
         </div>
       )}
 
-      <section className="mt-4">
+      {tab === 'requisiciones' && (
+        <div key="requisiciones" className="animate-fade mt-4">
+          <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[14px] font-semibold tracking-[-0.01em]">
@@ -1129,7 +1157,9 @@ export default function ComprasClient({
             onVerFaltante={verFaltante}
           />
         )}
-      </section>
+          </section>
+        </div>
+      )}
 
       {tab === 'sugerencias' && (
         <div key="sugerencias" ref={porRequisicionRef} className="animate-fade mt-4 scroll-mt-4">
