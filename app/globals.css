@@ -2,7 +2,9 @@
 @import "tailwindcss";
 
 /*
- * Lime + Concrete (revisión 1x1 de paletas, Alex 2026-11-11, 5 de 6):
+ * Lime + Concrete — paleta DEFINITIVA de Gonper (elegida por Alex
+ * 2026-11-11 tras la revisión 1x1; antes: Neutral minimalista,
+ * Sage & Grey, Grey Green elegante):
  * fondo Concrete #F2F2F2, tarjetas blancas, Lime #7BB601 / #B3CF32
  * como acento (botones, enlaces, estados activos, detalles),
  * neutros #BDBDBD y #808080. Texto principal casi negro neutro y
@@ -11,7 +13,6 @@
  * El naranja (#c2410c) y el rojo de peligro se MANTIENEN solo para
  * urgente/faltante y errores, a validar por Alex (la paleta no
  * trae color para esos roles).
- * Siguiente en la revisión: Verde vibrante + grises (cuando Alex lo indique).
  */
 @theme {
   --color-gonper-bg: #f2f2f2;
