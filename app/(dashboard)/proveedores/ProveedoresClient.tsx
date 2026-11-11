@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Check,
   ChevronRight,
@@ -27,6 +27,10 @@ import {
   actualizarPrecioProducto,
   quitarProductoAProveedor,
 } from './actions'
+import {
+  detectarHuecos,
+  type HuecoProveedor,
+} from '@/utils/huecosProveedor'
 
 type Producto = { id: string; nombre: string; sku: string }
 
@@ -95,10 +99,39 @@ export default function ProveedoresClient({
   const [isRemovingProduct, setIsRemovingProduct] = useState(false)
   const [errorQuitar, setErrorQuitar] = useState('')
 
+  // Sección "Productos sin proveedor o sin precio": cada fila lleva
+  // su propia elección de proveedor, precio, guardado y error.
+  const [eleccionHueco, setEleccionHueco] = useState<Record<string, string>>({})
+  const [precioHueco, setPrecioHueco] = useState<Record<string, string>>({})
+  const [guardandoHueco, setGuardandoHueco] = useState<string | null>(null)
+  const [errorHueco, setErrorHueco] = useState<Record<string, string>>({})
+
   const termino = normalizar(busqueda.trim())
 
   const proveedoresFiltrados = listaProveedores.filter((proveedor) =>
     normalizar(proveedor.nombre).includes(termino),
+  )
+
+  // Huecos: productos del catálogo sin vínculo con precio > 0.
+  // Se deriva del estado local para que la fila desaparezca en
+  // cuanto se guarda sin recargar la página.
+  const vinculosCrudos = useMemo(
+    () =>
+      listaProveedores.flatMap((proveedor) =>
+        (proveedor.producto_proveedores || []).map((relacion) => ({
+          productoId: relacion.productos?.id ?? '',
+          proveedorId: proveedor.id,
+          proveedorNombre: proveedor.nombre,
+          relacionId: relacion.id,
+          precio: relacion.precio_unitario,
+        })),
+      ),
+    [listaProveedores],
+  )
+
+  const huecos = useMemo(
+    () => detectarHuecos(catalogoProductos, vinculosCrudos),
+    [catalogoProductos, vinculosCrudos],
   )
 
   const abrirCrear = () => {
@@ -342,6 +375,112 @@ export default function ProveedoresClient({
     setIsRemovingProduct(false)
   }
 
+  // Guarda un hueco desde la sección de productos sin proveedor o
+  // sin precio: vínculo nuevo (asignarPrecioAProducto) o precio
+  // nuevo sobre un vínculo existente (actualizarPrecioProducto).
+  // Al guardar, el estado local se actualiza y la fila sale sola.
+  const guardarHueco = async (hueco: HuecoProveedor) => {
+    const eleccion = eleccionHueco[hueco.productoId] || ''
+    const precioTexto = (precioHueco[hueco.productoId] || '').trim()
+    const precio = parseFloat(precioTexto)
+
+    if (!eleccion) {
+      setErrorHueco((prev) => ({
+        ...prev,
+        [hueco.productoId]: 'Elige un proveedor.',
+      }))
+      return
+    }
+    if (!precioTexto || !Number.isFinite(precio) || precio <= 0) {
+      setErrorHueco((prev) => ({
+        ...prev,
+        [hueco.productoId]: 'Escribe un precio mayor a 0.',
+      }))
+      return
+    }
+
+    setGuardandoHueco(hueco.productoId)
+    setErrorHueco((prev) => ({ ...prev, [hueco.productoId]: '' }))
+
+    if (hueco.tipo === 'sin-proveedor') {
+      const result = await asignarPrecioAProducto(
+        eleccion,
+        hueco.productoId,
+        precio,
+      )
+
+      if (result?.error) {
+        setErrorHueco((prev) => ({
+          ...prev,
+          [hueco.productoId]: result.error,
+        }))
+        setGuardandoHueco(null)
+        return
+      }
+
+      const nuevaRelacion: Relacion = {
+        id: result.id as string,
+        precio_unitario: precio,
+        productos: {
+          id: hueco.productoId,
+          nombre: hueco.nombre,
+          sku: hueco.sku,
+        },
+      }
+      setListaProveedores((prev) =>
+        prev.map((proveedor) =>
+          proveedor.id === eleccion
+            ? {
+                ...proveedor,
+                producto_proveedores: [
+                  ...(proveedor.producto_proveedores || []),
+                  nuevaRelacion,
+                ],
+              }
+            : proveedor,
+        ),
+      )
+      setProveedorActivo((prev) =>
+        prev?.id === eleccion
+          ? {
+              ...prev,
+              producto_proveedores: [
+                ...(prev.producto_proveedores || []),
+                nuevaRelacion,
+              ],
+            }
+          : prev,
+      )
+    } else {
+      const result = await actualizarPrecioProducto(eleccion, precio)
+
+      if (result?.error) {
+        setErrorHueco((prev) => ({
+          ...prev,
+          [hueco.productoId]: result.error,
+        }))
+        setGuardandoHueco(null)
+        return
+      }
+
+      const parchearPrecio = (proveedor: Proveedor): Proveedor => ({
+        ...proveedor,
+        producto_proveedores: (proveedor.producto_proveedores || []).map(
+          (relacion) =>
+            relacion.id === eleccion
+              ? { ...relacion, precio_unitario: precio }
+              : relacion,
+        ),
+      })
+      setListaProveedores((prev) => prev.map(parchearPrecio))
+      setProveedorActivo((prev) => (prev ? parchearPrecio(prev) : prev))
+    }
+
+    setEleccionHueco((prev) => ({ ...prev, [hueco.productoId]: '' }))
+    setPrecioHueco((prev) => ({ ...prev, [hueco.productoId]: '' }))
+    setGuardandoHueco(null)
+  }
+
   return (
     <div className="mx-auto max-w-[1180px] pb-6">
       <PageHeader
@@ -360,6 +499,127 @@ export default function ProveedoresClient({
           </button>
         }
       />
+
+      <section
+        className="card mt-5 p-4 sm:p-5"
+        aria-label="Productos sin proveedor o sin precio"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+            Productos sin proveedor o sin precio
+          </h2>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
+              huecos.length > 0
+                ? 'border-gonper-warning-border bg-gonper-warning-bg text-gonper-warning'
+                : 'border-gonper-success-border bg-gonper-success-bg text-gonper-primary'
+            }`}
+          >
+            {huecos.length}
+          </span>
+        </div>
+
+        {huecos.length === 0 ? (
+          <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-gonper-muted">
+            <Check className="h-4 w-4 text-gonper-primary" strokeWidth={1.75} />
+            Todos los productos tienen proveedor y precio.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-gonper-muted">
+              Asigna el proveedor y el precio sin salir de aquí. Al guardar,
+              el producto sale de esta lista.
+            </p>
+            <div className="mt-3 max-h-[440px] divide-y divide-gonper-border overflow-y-auto rounded-[8px] border border-gonper-border">
+              {huecos.map((hueco) => (
+                <div key={hueco.productoId} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13.5px] font-medium">
+                        {hueco.nombre}
+                      </p>
+                      <p className="text-[11.5px] text-gonper-muted">
+                        {hueco.sku}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-gonper-warning-border bg-gonper-warning-bg px-2.5 py-0.5 text-[11px] font-semibold text-gonper-warning">
+                      {hueco.tipo === 'sin-proveedor'
+                        ? 'Sin proveedor'
+                        : 'Sin precio'}
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <select
+                      className="field sm:max-w-[240px]"
+                      aria-label={`Proveedor para ${hueco.nombre}`}
+                      value={eleccionHueco[hueco.productoId] || ''}
+                      onChange={(e) =>
+                        setEleccionHueco((prev) => ({
+                          ...prev,
+                          [hueco.productoId]: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="" disabled>
+                        {hueco.tipo === 'sin-proveedor'
+                          ? 'Elige proveedor'
+                          : 'Elige proveedor vinculado'}
+                      </option>
+                      {hueco.tipo === 'sin-proveedor'
+                        ? listaProveedores.map((proveedor) => (
+                            <option key={proveedor.id} value={proveedor.id}>
+                              {proveedor.nombre}
+                            </option>
+                          ))
+                        : hueco.vinculos.map((vinculo) => (
+                            <option
+                              key={vinculo.relacionId}
+                              value={vinculo.relacionId}
+                            >
+                              {vinculo.proveedorNombre}
+                            </option>
+                          ))}
+                    </select>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      placeholder="Precio"
+                      className="field sm:w-32"
+                      aria-label={`Precio para ${hueco.nombre}`}
+                      value={precioHueco[hueco.productoId] || ''}
+                      onChange={(e) =>
+                        setPrecioHueco((prev) => ({
+                          ...prev,
+                          [hueco.productoId]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void guardarHueco(hueco)}
+                      disabled={guardandoHueco === hueco.productoId}
+                      className="btn btn-primary text-[13px] sm:ml-auto"
+                    >
+                      {guardandoHueco === hueco.productoId
+                        ? 'Guardando…'
+                        : 'Guardar'}
+                    </button>
+                  </div>
+
+                  {errorHueco[hueco.productoId] ? (
+                    <p className="mt-2 text-[12px] text-gonper-danger">
+                      {errorHueco[hueco.productoId]}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       <div className="relative mt-5 max-w-sm">
         <Search
