@@ -271,6 +271,10 @@ export default function ProcesarPdfButton({
   )
   const [errorProceso, setErrorProceso] = useState('')
   const [errorRevision, setErrorRevision] = useState('')
+  // Con qué se leyó el archivo actual: la IA (Gemini) o el OCR de
+  // respaldo. Se muestra en el modal para que la prueba piloto se
+  // pueda juzgar sin depender del mensaje transitorio de estado.
+  const [metodoLectura, setMetodoLectura] = useState<'ia' | 'ocr' | null>(null)
 
   const router = useRouter()
   const contadorFilas = useRef(0)
@@ -380,6 +384,7 @@ export default function ProcesarPdfButton({
     setErrorProceso('')
     setErrorRevision('')
     setItemsDetectados(null)
+    setMetodoLectura(null)
 
     try {
       let textoCompleto = cacheTexto.get(pdfPath) ?? ''
@@ -402,6 +407,7 @@ export default function ProcesarPdfButton({
           ) {
             textoCompleto = extraido.textoExtraido
           } else {
+            setMetodoLectura('ocr')
             const fileUrl = await obtenerUrlParaOCR(pdfPath)
             textoCompleto = await leerPdfConOcr(fileUrl)
           }
@@ -417,7 +423,10 @@ export default function ProcesarPdfButton({
               const previo = JSON.parse(cacheIa) as Awaited<
                 ReturnType<typeof procesarTextoOrden>
               >
-              if (previo.items.length > 0) resultadoIa = previo
+              if (previo.items.length > 0) {
+                resultadoIa = previo
+                setMetodoLectura('ia')
+              }
             } catch {
               resultadoIa = null
             }
@@ -431,7 +440,9 @@ export default function ProcesarPdfButton({
             if (conIa && conIa.items.length > 0) {
               resultadoIa = conIa
               cacheTexto.set(`ia:${pdfPath}`, JSON.stringify(conIa))
+              setMetodoLectura('ia')
             } else {
+              setMetodoLectura('ocr')
               const fileUrl = await obtenerUrlParaOCR(pdfPath)
               textoCompleto = await leerImagenConOcr(fileUrl)
             }
@@ -996,6 +1007,15 @@ export default function ProcesarPdfButton({
               <option key={unidad} value={unidad} />
             ))}
           </datalist>
+
+          {/* De dónde salió la lectura: con la IA o con el OCR de
+              respaldo. Queda visible en el modal (no solo en el
+              mensaje transitorio de estado) para poder comparar. */}
+          {metodoLectura && (
+            <p className="mb-2 text-[12px] font-medium text-gonper-muted">
+              {metodoLectura === 'ia' ? 'Leído con IA' : 'Leído con OCR'}
+            </p>
+          )}
 
           {/* Resumen en palabras simples de lo que falta para poder
               confirmar. Sin esto, un usuario nuevo ve filas atenuadas,
