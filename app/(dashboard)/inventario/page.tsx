@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import InventoryClient from './InventoryClient'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 export default async function InventarioPage() {
   const supabase = await createClient()
@@ -21,9 +22,11 @@ export default async function InventarioPage() {
   }
 
   return (
+    <TransicionPagina>
     <InventoryClient 
       productosIniciales={productos || []} 
       categorias={categorias || []} 
     />
+    </TransicionPagina>
   )
 }

@@ -7,6 +7,7 @@ import ProcesarPdfButton from './ProcesarPdfButton'
 import AccionesOrden from './AccionesOrden'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import EmptyState from '@/components/ui/EmptyState'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 import Fab from '@/components/ui/Fab'
 import PageHeader from '@/components/ui/PageHeader'
 
@@ -66,6 +67,7 @@ export default async function OrdenesPage({
     : undefined
 
   return (
+    <TransicionPagina>
     <div className="mx-auto max-w-[1180px] pb-6">
       <PageHeader
         eyebrow={`${lista.length} ${
@@ -180,29 +182,21 @@ export default async function OrdenesPage({
                       </ViewTransition>
                       <span className="mx-1.5 text-gonper-border">/</span>
                       {fecha.format(new Date(orden.created_at))}
+                      {/* En móvil el estado va junto al folio (ley de
+                          proximidad); en escritorio sigue en la fila de
+                          acciones. */}
+                      <span className="ml-2 inline-flex items-center gap-1 align-middle md:hidden">
+                        {nuevaOrden?.id === orden.id && (
+                          <Badge tono="success">Nueva</Badge>
+                        )}
+                        <EstadoBadge estado={orden.estado} />
+                      </span>
                     </span>
                   </Link>
-                  <div className="flex shrink-0 items-center gap-1.5 md:hidden">
-                    {nuevaOrden?.id === orden.id && (
-                      <Badge tono="success">Nueva</Badge>
-                    )}
-                    <EstadoBadge estado={orden.estado} />
-                  </div>
                 </div>
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-0 md:shrink-0 md:justify-end">
-                {/* Enlace discreto al detalle, además de la zona
-                    nombre/folio, que también es enlace. */}
-                <Link
-                  href={`/ordenes/${orden.id}`}
-                  transitionTypes={['nav-forward']}
-                  className="inline-flex min-h-11 items-center gap-0.5 px-1 text-[12.5px] font-medium text-gonper-primary hover:underline md:min-h-0"
-                >
-                  Ver requisición
-                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
-                </Link>
-
                 {orden.pdf_path ? (
                   <>
                     {/* En BORRADOR, "Leer archivo" es la acción primaria
@@ -245,5 +239,6 @@ export default async function OrdenesPage({
         icon={<Plus className="h-6 w-6" strokeWidth={2} />}
       />
     </div>
+    </TransicionPagina>
   )
 }

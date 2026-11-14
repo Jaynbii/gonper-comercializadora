@@ -118,8 +118,10 @@
     @apply border border-gonper-border bg-gonper-surface text-gonper-text hover:bg-gonper-surface-muted;
   }
 
+  /* Botón de icono: 44 px en móvil, mínimo táctil (ley de Fitts).
+     En escritorio (ratón) se achica a 32 px. */
   .btn-icon {
-    @apply grid h-10 w-10 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-200 ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-90 sm:h-8 sm:w-8;
+    @apply grid h-11 w-11 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-200 ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-90 sm:h-8 sm:w-8;
   }
 
   .badge {

@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import ClientesClient from './ClientesClient'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 export default async function ClientesPage() {
   const supabase = await createClient()
@@ -13,5 +14,9 @@ export default async function ClientesPage() {
     return <div className="p-8 text-red-500">Error al cargar clientes</div>
   }
 
-  return <ClientesClient clientesIniciales={clientes || []} />
+  return (
+    <TransicionPagina>
+      <ClientesClient clientesIniciales={clientes || []} />
+    </TransicionPagina>
+  )
 }

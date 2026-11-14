@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import ProveedoresClient from './ProveedoresClient'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 type Relacion<T> = T | T[] | null
 
@@ -51,7 +52,11 @@ export default async function ProveedoresPage() {
     )
   }
 
-  return <ProveedoresClient proveedoresIniciales={normalizarProveedores(proveedores)} catalogoProductos={catalogoProductos || []} />
+  return (
+    <TransicionPagina>
+      <ProveedoresClient proveedoresIniciales={normalizarProveedores(proveedores)} catalogoProductos={catalogoProductos || []} />
+    </TransicionPagina>
+  )
 }
 
 // Supabase devuelve la relación uno-a-uno como arreglo cuando no hay tipos

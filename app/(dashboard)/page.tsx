@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import DashboardView, { type FilaProyeccion, type UltimaOrden } from './DashboardView'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 type OrdenActiva = {
   id: string
@@ -93,6 +94,7 @@ export default async function DashboardPage() {
   const hoy = hoyCrudo.charAt(0).toUpperCase() + hoyCrudo.slice(1)
 
   return (
+    <TransicionPagina>
     <DashboardView
       hoy={hoy}
       pendientes={ordenesPendientes ?? 0}
@@ -102,5 +104,6 @@ export default async function DashboardPage() {
       ultimasOrdenes={(ultimasOrdenes ?? []) as UltimaOrden[]}
       proyeccion={proyeccion}
     />
+    </TransicionPagina>
   )
 }

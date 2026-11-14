@@ -1,5 +1,6 @@
 import { createClient, esUsuarioAdmin } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 import {
   calcularFaltantePorOrden,
   type FaltantePorOrden,
@@ -239,6 +240,7 @@ export default async function ComprasPage({
   }
 
   return (
+    <TransicionPagina>
     <ComprasClient
       faltantes={faltantes}
       proveedores={proveedores || []}
@@ -249,6 +251,7 @@ export default async function ComprasPage({
       comprarInicial={comprarInicial}
       esAdmin={esAdmin}
     />
+    </TransicionPagina>
   )
 }
 

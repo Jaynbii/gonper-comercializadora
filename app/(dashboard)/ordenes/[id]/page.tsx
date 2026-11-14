@@ -5,7 +5,9 @@ import { notFound } from 'next/navigation'
 import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
 import BotonFacturaFirmada from './BotonFacturaFirmada'
+import ProcesarPdfButton from '../ProcesarPdfButton'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 type Producto = {
   nombre: string
@@ -28,6 +30,7 @@ type Orden = {
   folio: string
   estado: string
   created_at: string
+  pdf_path: string | null
   clientes: { nombre: string } | { nombre: string }[] | null
   orden_items: ItemOrden[]
 }
@@ -65,7 +68,7 @@ export default async function OrdenDetallePage({
     .from('ordenes')
     .select(
       `
-      id, folio, estado, created_at,
+      id, folio, estado, created_at, pdf_path,
       clientes (nombre),
       orden_items (
         id, cantidad_solicitada, cantidad_surtida, estado_item, unidad,
@@ -135,6 +138,7 @@ export default async function OrdenDetallePage({
     orden.estado !== 'ENTREGADA' && orden.estado !== 'CANCELADA'
 
   return (
+    <TransicionPagina>
     <div className="mx-auto max-w-245 pb-6">
       <Link
         href="/ordenes"
@@ -285,15 +289,27 @@ export default async function OrdenDetallePage({
               Esta orden todavía no tiene artículos
             </p>
             <p className="mt-1 text-[12px] text-gonper-muted">
-              Lee el archivo para capturar sus artículos.
+              {orden.estado === 'BORRADOR' && orden.pdf_path
+                ? 'Lee el archivo para capturar sus artículos.'
+                : 'Esta requisición no tiene artículos.'}
             </p>
-            <Link
-              href="/ordenes"
-              transitionTypes={['nav-back']}
-              className="btn btn-primary mt-4 inline-flex min-h-12"
-            >
-              Leer el archivo
-            </Link>
+            {orden.estado === 'BORRADOR' && orden.pdf_path ? (
+              <div className="mt-4">
+                <ProcesarPdfButton
+                  ordenId={orden.id}
+                  pdfPath={orden.pdf_path}
+                  grande
+                />
+              </div>
+            ) : (
+              <Link
+                href="/ordenes"
+                transitionTypes={['nav-back']}
+                className="btn btn-primary mt-4 inline-flex min-h-12"
+              >
+                Volver a requisiciones
+              </Link>
+            )}
           </div>
         ) : (
           <>
@@ -508,5 +524,6 @@ export default async function OrdenDetallePage({
         )}
       </section>
     </div>
+    </TransicionPagina>
   )
 }

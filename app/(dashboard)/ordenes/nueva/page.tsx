@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import UploadClient from './UploadClient'
+import TransicionPagina from '@/components/ui/TransicionPagina'
 
 export default async function NuevaOrdenPage() {
   const supabase = await createClient()
@@ -10,5 +11,9 @@ export default async function NuevaOrdenPage() {
     .select('id, nombre')
     .order('nombre')
 
-  return <UploadClient clientes={clientes || []} />
+  return (
+    <TransicionPagina>
+      <UploadClient clientes={clientes || []} />
+    </TransicionPagina>
+  )
 }

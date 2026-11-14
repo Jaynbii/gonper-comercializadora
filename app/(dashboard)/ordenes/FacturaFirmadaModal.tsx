@@ -93,14 +93,12 @@ export default function FacturaFirmadaModal({
       }
       footer={
         <>
-          <button
-            type="button"
-            onClick={cerrar}
-            disabled={subiendo}
-            className="btn btn-quiet"
-          >
-            Cancelar
-          </button>
+          {/*
+            Solo un botón para posponer (ley de Hick): antes había
+            "Cancelar" y "Subir después" y los dos hacían lo mismo
+            (cerrar sin guardar). Quedó "Subir después" porque dice
+            lo que pasa: la foto queda pendiente.
+          */}
           <button
             type="button"
             onClick={cerrar}

@@ -216,7 +216,7 @@ export default function ClientesClient({
                 </div>
               </div>
 
-              <div className="-mr-1 -mt-1 flex shrink-0 items-center">
+              <div className="-mr-1 -mt-1 flex shrink-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={() => abrirEditar(cliente)}
