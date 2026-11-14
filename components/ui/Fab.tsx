@@ -16,11 +16,16 @@ export default function Fab({
   onClick,
   href,
   icon,
+  transitionTypes,
 }: {
   label: string
   onClick?: () => void
   href?: string
   icon?: ReactNode
+  // Tipo de transición de página al navegar con href (ver
+  // TransicionPagina). Sin él, el Link navega con el fundido
+  // por defecto. Los Fab con onClick (abren un modal) no navegan.
+  transitionTypes?: string[]
 }) {
   const montado = useSyncExternalStore(
     () => () => {},
@@ -34,6 +39,7 @@ export default function Fab({
     href ? (
       <Link
         href={href}
+        transitionTypes={transitionTypes}
         aria-label={label}
         title={label}
         style={ESTILO}

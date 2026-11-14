@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ViewTransition } from 'react'
 import { ArrowRight, ArrowUpRight, CheckCircle2, Inbox, Plus } from 'lucide-react'
 import EstadoBadge from '@/components/EstadoBadge'
 import FaltantesStat from './FaltantesStat'
@@ -68,18 +69,20 @@ export default function DashboardView({
           </h1>
         </div>
 
-        <Link href="/ordenes/nueva" className="btn btn-primary w-full justify-center self-start sm:w-auto sm:self-auto">
+        <Link
+          href="/ordenes/nueva"
+          transitionTypes={['nav-zoom']}
+          className="btn btn-primary w-full justify-center self-start sm:w-auto sm:self-auto"
+        >
           <Plus className="h-4 w-4" strokeWidth={2} />
           Nueva requisición
         </Link>
       </header>
 
-      <div
-        className="animate-rise card mt-6 grid grid-cols-3 divide-x divide-gonper-border sm:mt-7"
-        style={{ animationDelay: '40ms' }}
-      >
+      <div className="card mt-6 grid grid-cols-3 divide-x divide-gonper-border sm:mt-7">
         <Link
           href="/ordenes"
+          transitionTypes={['nav-section']}
           className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
@@ -104,6 +107,7 @@ export default function DashboardView({
 
         <Link
           href="/inventario"
+          transitionTypes={['nav-section']}
           className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
@@ -129,15 +133,13 @@ export default function DashboardView({
         <FaltantesStat data={proyeccion} ordenesActivas={activas} />
       </div>
 
-      <div
-        className="animate-rise mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]"
-        style={{ animationDelay: '90ms' }}
-      >
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <section className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-gonper-border px-5 py-3.5">
             <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Últimas requisiciones</h2>
             <Link
               href="/ordenes"
+              transitionTypes={['nav-section']}
               className="inline-flex items-center gap-1 text-[12px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
             >
               Ver todas
@@ -151,6 +153,7 @@ export default function DashboardView({
                 <li key={orden.id}>
                   <Link
                     href={`/ordenes/${orden.id}`}
+                    transitionTypes={['nav-forward']}
                     className="group flex items-center gap-4 px-5 py-3.5 transition-colors duration-[120ms] hover:bg-gonper-hover"
                   >
                     <div className="min-w-0 flex-1">
@@ -158,9 +161,15 @@ export default function DashboardView({
                         {nombreCliente(orden.clientes)}
                       </p>
                       <p className="mt-0.5 text-[11px] text-gonper-muted">
-                        <span className="text-[12px] font-semibold text-gonper-text">
-                          {orden.folio}
-                        </span>{' '}
+                        <ViewTransition
+                          name={`req-${orden.id}`}
+                          share="morph"
+                          default="none"
+                        >
+                          <span className="text-[12px] font-semibold text-gonper-text">
+                            {orden.folio}
+                          </span>
+                        </ViewTransition>{' '}
                         · {fechaCorta.format(new Date(orden.created_at))}
                       </p>
                     </div>
@@ -182,7 +191,11 @@ export default function DashboardView({
               <p className="mt-1 max-w-[34ch] text-[12.5px] text-gonper-muted">
                 Sube la primera requisición para empezar a surtir.
               </p>
-              <Link href="/ordenes/nueva" className="btn btn-quiet mt-4">
+              <Link
+                href="/ordenes/nueva"
+                transitionTypes={['nav-zoom']}
+                className="btn btn-quiet mt-4"
+              >
                 Subir requisición
               </Link>
             </div>
@@ -232,6 +245,7 @@ export default function DashboardView({
           <div className="border-t border-gonper-border px-5 py-3">
             <Link
               href="/compras"
+              transitionTypes={['nav-section']}
               className="inline-flex items-center gap-1 text-[12px] font-medium text-gonper-primary transition-opacity duration-[120ms] hover:opacity-70"
             >
               Preparar compra

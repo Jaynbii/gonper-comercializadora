@@ -877,7 +877,9 @@ export default function ProcesarPdfButton({
       // ?guardado=1 muestra arriba del detalle un aviso de que los
       // artículos quedaron guardados, para que no parezca que "no
       // pasó nada" al confirmar.
-      router.push(`/ordenes/${ordenId}?guardado=1`)
+      router.push(`/ordenes/${ordenId}?guardado=1`, {
+        transitionTypes: ['nav-forward'],
+      })
     } catch (error) {
       setErrorRevision(mensajeDeError(error))
     } finally {

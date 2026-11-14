@@ -263,26 +263,6 @@
 
 /* ---- Movimiento ---- */
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes menu-in {
   from {
     opacity: 0;
@@ -292,14 +272,6 @@
     opacity: 1;
     transform: none;
   }
-}
-
-.animate-page {
-  animation: fade 260ms var(--ease-out-quint) both;
-}
-
-.animate-fade {
-  animation: fade 280ms var(--ease-out-quint) both;
 }
 
 .animate-fab {
@@ -315,23 +287,6 @@
     opacity: 1;
     transform: none;
   }
-}
-
-.stagger > * {
-  animation: rise 360ms var(--ease-out-quint) both;
-}
-
-.stagger > *:nth-child(2) { animation-delay: 50ms; }
-.stagger > *:nth-child(3) { animation-delay: 100ms; }
-.stagger > *:nth-child(4) { animation-delay: 150ms; }
-.stagger > *:nth-child(5) { animation-delay: 200ms; }
-.stagger > *:nth-child(6) { animation-delay: 250ms; }
-.stagger > *:nth-child(7) { animation-delay: 300ms; }
-.stagger > *:nth-child(8) { animation-delay: 350ms; }
-
-
-.animate-rise {
-  animation: rise 400ms var(--ease-out-quint) both;
 }
 
 .animate-menu {
@@ -375,6 +330,124 @@
 
 .toast-in {
   animation: toast-in 260ms var(--ease-out-quint) both;
+}
+
+/* ---- Transiciones de página (View Transitions API, React 19) ---- */
+/* El wrapper TransicionPagina (template.tsx) envuelve cada pantalla
+   y cada navegación lleva un tipo: deslizar al entrar a detalle,
+   deslizar de regreso, fundido entre secciones, zoom al abrir un
+   formulario nuevo, fundido por defecto sin tipo. Sobrio: desplazamientos
+   cortos (60px) y duraciones de 150–400ms, sin blur. El overlay no
+   captura toques, para que nada se pierda durante la animación.
+   Las animaciones de entrada viejas (animate-page, stagger,
+   animate-rise, animate-fade) se quitaron del contenido de las
+   pantallas: el snapshot nuevo las capturaba en opacidad 0 y la
+   pantalla se veía vacía durante la transición. La transición ahora
+   es la que da la entrada; los microefectos (botones, checkbox,
+   diálogos, toast, esqueleto) siguen como estaban. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(.nav-forward) {
+  --vt-offset: -60px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    400ms ease-in-out both vt-slide reverse;
+}
+::view-transition-new(.nav-forward) {
+  --vt-offset: 60px;
+  animation:
+    210ms ease-out 150ms both vt-fade,
+    400ms ease-in-out both vt-slide;
+}
+
+::view-transition-old(.nav-back) {
+  --vt-offset: 60px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    400ms ease-in-out both vt-slide reverse;
+}
+::view-transition-new(.nav-back) {
+  --vt-offset: -60px;
+  animation:
+    210ms ease-out 150ms both vt-fade,
+    400ms ease-in-out both vt-slide;
+}
+
+::view-transition-old(.nav-section) {
+  animation: 150ms ease-in both vt-fade reverse;
+}
+::view-transition-new(.nav-section) {
+  animation: 210ms ease-out 120ms both vt-fade;
+}
+
+::view-transition-old(.nav-zoom) {
+  animation:
+    150ms ease-in both vt-fade reverse,
+    200ms ease-in both vt-zoom-out;
+}
+::view-transition-new(.nav-zoom) {
+  animation:
+    240ms ease-out 120ms both vt-fade,
+    320ms ease-out both vt-zoom-in;
+}
+
+::view-transition-old(.nav-fade) {
+  animation: 150ms ease-in both vt-fade reverse;
+}
+::view-transition-new(.nav-fade) {
+  animation: 210ms ease-out 100ms both vt-fade;
+}
+
+/* Elemento compartido: el folio hace morph de la lista al detalle. */
+::view-transition-group(.morph) {
+  animation-duration: 400ms;
+}
+
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vt-slide {
+  from {
+    translate: var(--vt-offset, 0);
+  }
+  to {
+    translate: 0;
+  }
+}
+
+@keyframes vt-zoom-in {
+  from {
+    transform: scale(0.96);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes vt-zoom-out {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }
 
 /* ---- Diálogo nativo: foco atrapado, Escape y backdrop gratis ---- */

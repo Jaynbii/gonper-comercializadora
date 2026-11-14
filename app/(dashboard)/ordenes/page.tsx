@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
+import { ViewTransition } from 'react'
 import { CheckCircle2, ChevronRight, FilePlus2, FileText, Plus, Upload } from 'lucide-react'
 import VerPdfButton from './VerPdfButton'
 import ProcesarPdfButton from './ProcesarPdfButton'
@@ -72,7 +73,11 @@ export default async function OrdenesPage({
         } registradas`}
         title="Requisiciones"
         action={
-          <Link href="/ordenes/nueva" className="btn btn-primary hidden sm:inline-flex">
+          <Link
+            href="/ordenes/nueva"
+            transitionTypes={['nav-zoom']}
+            className="btn btn-primary hidden sm:inline-flex"
+          >
             <Upload className="h-4 w-4" strokeWidth={1.75} />
             Subir requisición
           </Link>
@@ -121,7 +126,11 @@ export default async function OrdenesPage({
             title="Sin requisiciones todavía"
             description="Sube la primera requisición en PDF o foto para capturar sus artículos."
             action={
-              <Link href="/ordenes/nueva" className="btn btn-primary">
+              <Link
+                href="/ordenes/nueva"
+                transitionTypes={['nav-zoom']}
+                className="btn btn-primary"
+              >
                 <FilePlus2 className="h-4 w-4" strokeWidth={1.75} />
                 Subir mi primera requisición
               </Link>
@@ -129,7 +138,7 @@ export default async function OrdenesPage({
           />
         </div>
       ) : (
-        <div className="stagger mt-4 grid grid-cols-1 gap-3 md:mt-5 md:gap-0 md:overflow-hidden md:rounded-[8px] md:border md:border-gonper-border md:bg-gonper-surface">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:mt-5 md:gap-0 md:overflow-hidden md:rounded-[8px] md:border md:border-gonper-border md:bg-gonper-surface">
           {lista.map((orden) => (
             <article
               key={orden.id}
@@ -145,6 +154,7 @@ export default async function OrdenesPage({
                       con chevron para que se vea tocable. */}
                   <Link
                     href={`/ordenes/${orden.id}`}
+                    transitionTypes={['nav-forward']}
                     className="group min-w-0 flex-1"
                   >
                     <span className="flex items-center gap-1 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] transition-colors duration-[120ms] group-hover:text-gonper-primary md:text-[13.5px]">
@@ -157,9 +167,17 @@ export default async function OrdenesPage({
                       />
                     </span>
                     <span className="mt-1 block text-[11.5px] text-gonper-muted">
-                      <span className="text-[12.5px] font-semibold text-gonper-text">
-                        {orden.folio}
-                      </span>
+                      {/* El folio hace morph al detalle: mismo nombre
+                          en la lista y en el encabezado del detalle. */}
+                      <ViewTransition
+                        name={`req-${orden.id}`}
+                        share="morph"
+                        default="none"
+                      >
+                        <span className="text-[12.5px] font-semibold text-gonper-text">
+                          {orden.folio}
+                        </span>
+                      </ViewTransition>
                       <span className="mx-1.5 text-gonper-border">/</span>
                       {fecha.format(new Date(orden.created_at))}
                     </span>
@@ -178,6 +196,7 @@ export default async function OrdenesPage({
                     nombre/folio, que también es enlace. */}
                 <Link
                   href={`/ordenes/${orden.id}`}
+                  transitionTypes={['nav-forward']}
                   className="inline-flex min-h-11 items-center gap-0.5 px-1 text-[12.5px] font-medium text-gonper-primary hover:underline md:min-h-0"
                 >
                   Ver requisición
@@ -221,6 +240,7 @@ export default async function OrdenesPage({
 
       <Fab
         href="/ordenes/nueva"
+        transitionTypes={['nav-zoom']}
         label="Subir requisición"
         icon={<Plus className="h-6 w-6" strokeWidth={2} />}
       />

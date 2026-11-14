@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
+import { ViewTransition } from 'react'
 import { notFound } from 'next/navigation'
 import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
@@ -137,6 +138,7 @@ export default async function OrdenDetallePage({
     <div className="mx-auto max-w-245 pb-6">
       <Link
         href="/ordenes"
+        transitionTypes={['nav-back']}
         className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-120 hover:text-gonper-primary"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
@@ -173,9 +175,17 @@ export default async function OrdenDetallePage({
             </h1>
             <p className="mt-1.5 text-[12px] text-gonper-muted">
               Folio{' '}
-              <span className="text-[14px] font-semibold text-gonper-text">
-                {orden.folio}
-              </span>
+              {/* El folio hace morph desde la lista: mismo nombre en
+                  la lista y aquí. */}
+              <ViewTransition
+                name={`req-${orden.id}`}
+                share="morph"
+                default="none"
+              >
+                <span className="text-[14px] font-semibold text-gonper-text">
+                  {orden.folio}
+                </span>
+              </ViewTransition>
             </p>
             <p className="mt-0.5 text-[12px] text-gonper-muted">
               {fecha.format(new Date(orden.created_at))}
@@ -230,6 +240,7 @@ export default async function OrdenDetallePage({
             {puedeIrACompras && hayFaltantes && (
               <Link
                 href={`/compras?orden=${orden.id}&comprar=1`}
+                transitionTypes={['nav-section']}
                 className="btn btn-primary w-full sm:w-auto"
               >
                 <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
@@ -278,6 +289,7 @@ export default async function OrdenDetallePage({
             </p>
             <Link
               href="/ordenes"
+              transitionTypes={['nav-back']}
               className="btn btn-primary mt-4 inline-flex min-h-12"
             >
               Leer el archivo
@@ -285,7 +297,7 @@ export default async function OrdenDetallePage({
           </div>
         ) : (
           <>
-            <div className="stagger divide-y divide-gonper-border md:hidden">
+            <div className="divide-y divide-gonper-border md:hidden">
               {items.map((item) => {
                 const producto = productoDe(item)
                 const solicitado = Number(item.cantidad_solicitada)

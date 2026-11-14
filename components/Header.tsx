@@ -50,7 +50,7 @@ export default function Header({ userEmail }: { userEmail: string }) {
     setAbierto(false)
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push('/login', { transitionTypes: ['nav-section'] })
   }
 
   return (

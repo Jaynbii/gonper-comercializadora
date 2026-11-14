@@ -127,7 +127,7 @@ function PorOrdenCards({
   }
 
   return (
-    <div className="stagger mt-4 grid grid-cols-1 gap-3">
+    <div className="mt-4 grid grid-cols-1 gap-3">
       {ordenes.map((orden) => {
         const seleccionada = seleccionadas.includes(orden.ordenId)
         return (
@@ -181,6 +181,7 @@ function PorOrdenCards({
                 </label>
                 <Link
                   href={`/ordenes/${orden.ordenId}`}
+                  transitionTypes={['nav-forward']}
                   className="btn btn-primary w-full justify-center sm:w-auto sm:shrink-0"
                 >
                   Ir a surtir esta requisición
@@ -275,7 +276,7 @@ function RequisicionesPendientesCards({
   )
 
   return (
-    <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {requisiciones.map((requisicion) => {
         const detalle = detallePorId.get(requisicion.id)
         return (
@@ -334,6 +335,7 @@ function RequisicionesPendientesCards({
             <div className="mt-auto flex flex-col gap-2 pt-4">
               <Link
                 href={`/ordenes/${requisicion.id}`}
+                transitionTypes={['nav-forward']}
                 className="btn btn-primary w-full justify-center"
               >
                 Abrir requisición
@@ -484,6 +486,7 @@ function TarjetaOrdenCompra({
           Para{' '}
           <Link
             href={`/ordenes/${orden.requisicion.id}`}
+            transitionTypes={['nav-forward']}
             className="font-semibold text-gonper-primary hover:underline"
           >
             {orden.requisicion.folio}
@@ -651,7 +654,9 @@ export default function ComprasClient({
     setVista('por-orden')
     setOrdenesSeleccionadas([ordenId])
     setItemsSeleccionados({})
-    router.push(`/compras?orden=${ordenId}`)
+    router.push(`/compras?orden=${ordenId}`, {
+      transitionTypes: ['nav-section'],
+    })
     window.setTimeout(() => {
       porRequisicionRef.current?.scrollIntoView({
         behavior: 'smooth',
@@ -1140,7 +1145,7 @@ export default function ComprasClient({
       )}
 
       {tab === 'requisiciones' && (
-        <div key="requisiciones" className="animate-fade mt-4">
+        <div key="requisiciones" className="mt-4">
           <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
@@ -1174,7 +1179,7 @@ export default function ComprasClient({
       )}
 
       {tab === 'sugerencias' && (
-        <div key="sugerencias" ref={porRequisicionRef} className="animate-fade mt-4 scroll-mt-4">
+        <div key="sugerencias" ref={porRequisicionRef} className="mt-4 scroll-mt-4">
           {/* Fase 1 — General: faltante consolidado de todas las requisiciones.
               Por requisición: una card por requisición activa para elegir cuáles
               surtir hoy (máx. 2 seleccionadas). */}
@@ -1254,7 +1259,7 @@ export default function ComprasClient({
             </div>
           ) : (
             <>
-              <div className="stagger grid grid-cols-1 gap-3 md:hidden">
+              <div className="grid grid-cols-1 gap-3 md:hidden">
                 {faltantesAMostrar.map((producto) => {
                   const seleccion = itemsSeleccionados[producto.id]
                   const opciones = proveedores.filter((proveedor) =>
@@ -1504,7 +1509,7 @@ export default function ComprasClient({
       )}
 
       {tab === 'ordenes' && (
-        <div key="ordenes" className="animate-fade mt-4">
+        <div key="ordenes" className="mt-4">
           {ordenesCompra.length === 0 ? (
             <div className="card">
               <EmptyState
@@ -1521,7 +1526,7 @@ export default function ComprasClient({
             // vista General van en la carpeta "Sin requisición"
             // porque la base de datos no guarda a qué requisición
             // pertenecían (requisition_id NULL).
-            <div className="stagger grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               {gruposCompras.map((grupo) => {
                 const clave = grupo.requisicion?.id ?? 'sin-requisicion'
                 const resumen = resumenCarpetaCompras(grupo.ordenes)
@@ -1626,6 +1631,7 @@ export default function ComprasClient({
             {carpetaAbierta?.requisicion && (
               <Link
                 href={`/ordenes/${carpetaAbierta.requisicion.id}`}
+                transitionTypes={['nav-forward']}
                 className="btn btn-quiet flex-1 justify-center sm:flex-none"
               >
                 Ver requisición
@@ -1846,6 +1852,7 @@ export default function ComprasClient({
                 <div className="mt-2.5 flex justify-end">
                   <Link
                     href="/proveedores"
+                    transitionTypes={['nav-section']}
                     className="btn btn-quiet text-[12.5px]"
                   >
                     Asignar precios en Proveedores

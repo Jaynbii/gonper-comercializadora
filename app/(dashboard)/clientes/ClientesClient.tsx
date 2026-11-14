@@ -175,7 +175,7 @@ export default function ClientesClient({
         />
       </div>
 
-      <div className="stagger mt-4 grid grid-cols-1 gap-3 md:hidden">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:hidden">
         {clientesFiltrados.map((cliente) => (
           <article key={cliente.id} className="card min-w-0 p-4">
             <div className="flex items-start justify-between gap-3">

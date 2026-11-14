@@ -47,6 +47,7 @@ export default function Sidebar() {
               <Link
                 key={item.path}
                 href={item.path}
+                transitionTypes={['nav-section']}
                 aria-current={activo ? 'page' : undefined}
                 className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors duration-120 ${
                   activo
@@ -91,6 +92,7 @@ export default function Sidebar() {
               <Link
                 key={item.path}
                 href={item.path}
+                transitionTypes={['nav-section']}
                 aria-current={activo ? 'page' : undefined}
                 aria-label={item.name}
                 className={`flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-120 ${

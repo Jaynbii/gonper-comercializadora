@@ -636,7 +636,7 @@ export default function ProveedoresClient({
         />
       </div>
 
-      <div className="stagger mt-4 grid grid-cols-1 gap-3 md:hidden">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:hidden">
         {proveedoresFiltrados.map((proveedor) => (
           <article key={proveedor.id} className="card min-w-0 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -1138,7 +1138,7 @@ export default function ProveedoresClient({
                   </table>
                 </div>
 
-                <div className="stagger mt-3 grid gap-2 sm:hidden">
+                <div className="mt-3 grid gap-2 sm:hidden">
                   {proveedorActivo.producto_proveedores?.map((relacion) => (
                     <div
                       key={relacion.id}

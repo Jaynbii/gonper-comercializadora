@@ -77,9 +77,11 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
     } else if (result && 'ordenId' in result && result.ordenId) {
       // Guiar el siguiente paso: la lista muestra un banner y resalta
       // la requisición recién creada para pulsar "Leer archivo".
-      router.push(`/ordenes?nueva=${result.ordenId}`)
+      router.push(`/ordenes?nueva=${result.ordenId}`, {
+        transitionTypes: ['nav-back'],
+      })
     } else {
-      router.push('/ordenes')
+      router.push('/ordenes', { transitionTypes: ['nav-back'] })
     }
   }
 
@@ -113,6 +115,7 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
     <div className="mx-auto max-w-[760px] pb-6">
       <Link
         href="/ordenes"
+        transitionTypes={['nav-back']}
         className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-gonper-muted transition-colors duration-[120ms] hover:text-gonper-primary"
       >
         <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />

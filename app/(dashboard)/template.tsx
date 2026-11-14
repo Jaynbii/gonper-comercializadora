@@ -1,7 +1,9 @@
+import TransicionPagina from '@/components/ui/TransicionPagina'
+
 export default function DashboardTemplate({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <div className="animate-page">{children}</div>
+  return <TransicionPagina>{children}</TransicionPagina>
 }
