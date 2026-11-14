@@ -1,5 +1,4 @@
 import { ArrowRight } from 'lucide-react'
-import LogoRequisa from '../../components/LogoRequisa'
 import { login } from './actions'
 
 export default async function LoginPage({
@@ -23,11 +22,11 @@ export default async function LoginPage({
 
       <div className="relative w-full max-w-100">
         <div className="flex flex-col items-center text-center">
-          <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary text-gonper-on-primary">
-            <LogoRequisa className="h-9 w-9" />
+          <span className="grid h-12 w-12 place-items-center rounded-[10px] bg-gonper-primary font-serif text-[26px] leading-none text-gonper-on-primary">
+            G
           </span>
-          <h1 className="mt-4 font-serif text-[36px] leading-none tracking-[-0.02em]">
-            Requisa Software
+          <h1 className="mt-4 font-serif text-[42px] leading-none tracking-[-0.02em]">
+            Gonper
           </h1>
           <p className="eyebrow mt-2">Comercializadora</p>
         </div>
@@ -88,7 +87,7 @@ export default async function LoginPage({
         </div>
 
         <p className="mt-6 text-center text-[11px] tracking-[0.02em] text-gonper-muted">
-          Sistema interno · Uso exclusivo de Requisa Software
+          Sistema interno · Uso exclusivo de Gonper
         </p>
       </div>
     </div>
