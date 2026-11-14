@@ -9,6 +9,14 @@
 // - sin tipo (atrás del navegador, refresh): fundido por defecto.
 // El elemento compartido (folio lista → detalle) se marca aparte
 // con <ViewTransition name={`req-${id}`}> y hace morph solo.
+// Además, anidado dentro, va el reveal del Cargando (paso 2 de la
+// guía): cuando los datos resuelven y la página monta, el contenido
+// entra con cargando-in (sube 10 px + fundido) mientras el esqueleto
+// de loading.tsx sale con cargando-out. Los dos enters se componen:
+// el de navegación da la dirección (slide 60 px) y el reveal da la
+// llegada suave. Sin el reveal, el contenido aparecía de golpe tras
+// el esqueleto. El morph del folio sigue sin poder verse: el folio
+// no existe en el esqueleto, así que no hay con qué emparejarlo.
 import { ViewTransition, type ReactNode } from 'react'
 
 const TIPOS = {
@@ -26,7 +34,9 @@ export default function TransicionPagina({
 }) {
   return (
     <ViewTransition enter={TIPOS} exit={TIPOS} default="none">
-      {children}
+      <ViewTransition enter="cargando-in" default="none">
+        {children}
+      </ViewTransition>
     </ViewTransition>
   )
 }

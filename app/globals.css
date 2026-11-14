@@ -402,6 +402,24 @@
   animation: 210ms ease-out 100ms both vt-fade;
 }
 
+/* Reveal del Cargando (paso 2 de la guía de Next): el esqueleto
+   sale rápido hacia abajo y el contenido real entra suave desde
+   abajo. Tiempos asimétricos como en la guía: salida 150 ms,
+   entrada 210 ms con 150 ms de espera, movimiento 400 ms. Sin
+   blur, solo opacidad y 10 px de subida — sobrio, como el resto.
+   El esqueleto se envuelve en loading.tsx (exit) y el contenido
+   en TransicionPagina (enter, anidado al de navegación). */
+::view-transition-old(.cargando-out) {
+  animation:
+    150ms ease-out both vt-fade reverse,
+    150ms ease-out both vt-reveal-out;
+}
+::view-transition-new(.cargando-in) {
+  animation:
+    210ms ease-out 150ms both vt-fade,
+    400ms ease-in-out both vt-reveal-in;
+}
+
 /* Elemento compartido: el folio hace morph de la lista al detalle. */
 ::view-transition-group(.morph) {
   animation-duration: 400ms;
@@ -440,6 +458,24 @@
   }
   to {
     transform: scale(0.98);
+  }
+}
+
+@keyframes vt-reveal-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(10px);
+  }
+}
+
+@keyframes vt-reveal-in {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 

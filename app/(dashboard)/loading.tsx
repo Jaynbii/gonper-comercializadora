@@ -1,13 +1,19 @@
 // Pantalla de carga del panel: esqueleto sobrio mientras llega la
 // ruta (Next la muestra al instante al navegar). Solo bloques con
-// el brillo .skeleton; sin datos ni logica.
+// el brillo .skeleton; sin datos ni logica. El esqueleto lleva su
+// propia transición de salida (cargando-out): al resolverse los
+// datos baja 10 px y se desvanece mientras entra el contenido real
+// (paso 2 de la guía de Next, Suspense reveals).
+import { ViewTransition } from 'react'
+
 export default function LoadingPanel() {
   return (
-    <div
-      aria-busy="true"
-      aria-label="Cargando"
-      className="mx-auto w-full max-w-5xl"
-    >
+    <ViewTransition exit="cargando-out" default="none">
+      <div
+        aria-busy="true"
+        aria-label="Cargando"
+        className="mx-auto w-full max-w-5xl"
+      >
       <div className="skeleton h-8 w-44 rounded-lg" />
       <div className="skeleton mt-2 h-4 w-64 rounded" />
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -19,6 +25,7 @@ export default function LoadingPanel() {
           </div>
         ))}
       </div>
-    </div>
+      </div>
+    </ViewTransition>
   )
 }
