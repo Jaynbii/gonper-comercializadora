@@ -5,6 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { normalizarUnidad } from '@/utils/unidades'
 import { buscarProductoSimilarPorNombre, type ProductoCatalogo } from '@/utils/vincularProductos'
 import { surtirConCliente, type ResultadoSurtido } from '@/utils/surtir'
+import {
+  construirRutaFacturaFirmada,
+  validarFotoFirmada,
+} from '@/utils/facturaFirmada'
 
 type ItemDetectado = {
   codigo_pdf: string
@@ -33,6 +37,112 @@ export async function obtenerUrlParaOCR(pdfPath: string) {
   const { data, error } = await supabase.storage.from('pdf-facturas').createSignedUrl(pdfPath, 300)
   if (error || !data) throw new Error('No se pudo obtener la URL del PDF para el OCR')
   return data.signedUrl
+}
+
+/**
+ * Guarda la foto de la factura firmada y sellada como comprobante de
+ * entrega. La requisición SIGUE en ENTREGADA ("surtida"): solo se
+ * agregan la ruta de la foto y la fecha, para reportes después.
+ * Devuelve el resultado, nunca lanza (regla anti-#441).
+ */
+export async function guardarFacturaFirmada(
+  formData: FormData,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autorizado. Inicia sesión nuevamente.' }
+
+  const ordenId = String(formData.get('orden_id') ?? '')
+  const foto = formData.get('foto')
+  if (!ordenId) return { success: false, error: 'Falta la requisición.' }
+
+  const errorFoto = validarFotoFirmada(foto instanceof File ? foto : null)
+  if (errorFoto) return { success: false, error: errorFoto }
+  const archivo = foto as File
+
+  // Solo una requisición surtida (ENTREGADA) puede marcarse como firmada.
+  const { data: orden, error: errorOrden } = await supabase
+    .from('ordenes')
+    .select('estado')
+    .eq('id', ordenId)
+    .single()
+  if (errorOrden || !orden) {
+    return { success: false, error: 'No se encontró la requisición.' }
+  }
+  if (orden.estado !== 'ENTREGADA') {
+    return {
+      success: false,
+      error: 'La requisición aún no está surtida. Súrtela primero y luego sube la foto.',
+    }
+  }
+
+  // Mismo bucket privado que el PDF de la requisición, con prefijo
+  // propio para no mezclar las fotos con los PDF.
+  const ruta = construirRutaFacturaFirmada(ordenId, archivo.name)
+  const { error: errorSubida } = await supabase.storage
+    .from('pdf-facturas')
+    .upload(ruta, archivo, { contentType: archivo.type, upsert: false })
+  if (errorSubida) {
+    return { success: false, error: 'No se pudo subir la foto. Vuelve a intentarlo.' }
+  }
+
+  const { error: errorGuardado } = await supabase
+    .from('ordenes')
+    .update({
+      factura_firmada_path: ruta,
+      factura_firmada_en: new Date().toISOString(),
+    })
+    .eq('id', ordenId)
+  if (errorGuardado) {
+    // Limpieza: si no se pudo guardar la ruta, la foto huérfana no sirve.
+    await supabase.storage.from('pdf-facturas').remove([ruta])
+    if (
+      errorGuardado.code === 'PGRST204' ||
+      String(errorGuardado.message ?? '').includes('factura_firmada_path')
+    ) {
+      return {
+        success: false,
+        error: 'Falta aplicar la migración de la factura firmada en Supabase (supabase/migrations/20261113000000_add_factura_firmada_a_ordenes.sql).',
+      }
+    }
+    return { success: false, error: 'No se pudo guardar la foto. Vuelve a intentarlo.' }
+  }
+
+  revalidatePath('/ordenes')
+  revalidatePath(`/ordenes/${ordenId}`)
+  return { success: true }
+}
+
+/** URL firmada (120 s) para ver la foto de la factura firmada. */
+export async function obtenerUrlFacturaFirmada(
+  ordenId: string,
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autorizado. Inicia sesión nuevamente.' }
+
+  const { data: orden, error } = await supabase
+    .from('ordenes')
+    .select('factura_firmada_path')
+    .eq('id', ordenId)
+    .single()
+  if (error || !orden?.factura_firmada_path) {
+    return { success: false, error: 'Esta requisición aún no tiene foto de factura firmada.' }
+  }
+
+  const { data, error: errorUrl } = await supabase.storage
+    .from('pdf-facturas')
+    .createSignedUrl(orden.factura_firmada_path, 120)
+  if (errorUrl || !data) {
+    return { success: false, error: 'No se pudo abrir la foto.' }
+  }
+  return { success: true, url: data.signedUrl }
 }
 
 export async function registrarProductoEnInventario(item: ItemDetectado) {

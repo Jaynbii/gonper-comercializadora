@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
+import BotonFacturaFirmada from './BotonFacturaFirmada'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 
 type Producto = {
@@ -78,6 +79,21 @@ export default async function OrdenDetallePage({
 
   const orden = data as unknown as Orden
   const items = orden.orden_items ?? []
+
+  // Foto de la factura firmada: consulta aparte y tolerante — si la
+  // migración aún no se corrió en Supabase, la columna no existe y
+  // esta consulta falla; el detalle sigue funcionando sin la foto.
+  const { data: firmada } = await supabase
+    .from('ordenes')
+    .select('factura_firmada_path, factura_firmada_en')
+    .eq('id', id)
+    .single()
+  const facturaFirmadaPath =
+    (firmada as { factura_firmada_path?: string | null } | null)
+      ?.factura_firmada_path ?? null
+  const facturaFirmadaEn =
+    (firmada as { factura_firmada_en?: string | null } | null)
+      ?.factura_firmada_en ?? null
 
   // Hay stock total solo si TODOS los artículos están cubiertos.
   const hayStockTotal =
@@ -165,8 +181,14 @@ export default async function OrdenDetallePage({
               {fecha.format(new Date(orden.created_at))}
             </p>
           </div>
-          <div className="shrink-0">
+          <div className="flex shrink-0 flex-col items-end gap-2">
             <EstadoBadge estado={orden.estado} />
+            {facturaFirmadaPath && (
+              <Badge tono="success">
+                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                Firmada
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -183,11 +205,21 @@ export default async function OrdenDetallePage({
                   Sin stock para surtir
                 </Badge>
               )
+            ) : orden.estado === 'ENTREGADA' ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-[12.5px] text-gonper-muted">
+                  Esta requisición ya fue surtida.
+                </p>
+                <BotonFacturaFirmada
+                  ordenId={orden.id}
+                  folio={orden.folio}
+                  firmadaEn={facturaFirmadaEn}
+                  tieneFoto={!!facturaFirmadaPath}
+                />
+              </div>
             ) : (
               <p className="text-[12.5px] text-gonper-muted">
-                {orden.estado === 'CANCELADA'
-                  ? 'Esta requisición está cancelada.'
-                  : 'Esta requisición ya fue surtida.'}
+                Esta requisición está cancelada.
               </p>
             )}
 

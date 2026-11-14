@@ -6,6 +6,7 @@ import { PackageCheck, TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { mostrarToast } from '@/components/ui/Toast'
 import { surtirOrden } from '../actions'
+import FacturaFirmadaModal from '../FacturaFirmadaModal'
 import { mensajeErrorSurtir } from '@/utils/surtir'
 
 export default function BotonSurtir({
@@ -17,6 +18,7 @@ export default function BotonSurtir({
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [modalFirmadaOpen, setModalFirmadaOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const router = useRouter()
 
@@ -40,6 +42,12 @@ export default function BotonSurtir({
         esParcial ? 'Surtido parcial registrado.' : 'Requisición surtida.',
       )
       router.refresh()
+      // Surtido completo: la requisición quedó ENTREGADA y toca subir
+      // la foto de la factura firmada y sellada. En parcial no: aún
+      // faltan artículos y la firma llega con la entrega final.
+      if (resultado.estado === 'ENTREGADA') {
+        setModalFirmadaOpen(true)
+      }
     } catch (error) {
       // Red de seguridad: si algo fuera de surtirOrden() lanzara
       // (p. ej. fallo de red), nunca se muestra el "#441" tal cual.
@@ -78,7 +86,7 @@ export default function BotonSurtir({
         title={esParcial ? 'Surtir parcialmente' : 'Surtir requisición'}
         description="El inventario se descontará automáticamente."
         confirmLabel={esParcial ? 'Surtir parcial' : 'Surtir requisición'}
-        pendingLabel="Surtiendo…"
+        pendingLabel="Procesando entrega…"
         tono="primary"
         pending={isLoading}
         error={errorMsg}
@@ -102,6 +110,13 @@ export default function BotonSurtir({
           </>
         )}
       </ConfirmDialog>
+
+      <FacturaFirmadaModal
+        open={modalFirmadaOpen}
+        onClose={() => setModalFirmadaOpen(false)}
+        ordenId={ordenId}
+        onGuardado={() => router.refresh()}
+      />
     </>
   )
 }
