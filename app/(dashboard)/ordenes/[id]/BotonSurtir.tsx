@@ -41,12 +41,19 @@ export default function BotonSurtir({
       mostrarToast(
         esParcial ? 'Surtido parcial registrado.' : 'Requisición surtida.',
       )
-      router.refresh()
       // Surtido completo: la requisición quedó ENTREGADA y toca subir
       // la foto de la factura firmada y sellada. En parcial no: aún
       // faltan artículos y la firma llega con la entrega final.
+      //
+      // OJO: aquí NO se hace router.refresh(). El refresh recarga el
+      // detalle y la página deja de dibujar este botón (ya no hay nada
+      // que surtir), así que el botón se desmonta y con él se cerraba
+      // el modal al instante (bug visto por Alex 2026-11-13). El
+      // refresh se hace al cerrar el modal.
       if (resultado.estado === 'ENTREGADA') {
         setModalFirmadaOpen(true)
+      } else {
+        router.refresh()
       }
     } catch (error) {
       // Red de seguridad: si algo fuera de surtirOrden() lanzara
@@ -113,9 +120,11 @@ export default function BotonSurtir({
 
       <FacturaFirmadaModal
         open={modalFirmadaOpen}
-        onClose={() => setModalFirmadaOpen(false)}
+        onClose={() => {
+          setModalFirmadaOpen(false)
+          router.refresh()
+        }}
         ordenId={ordenId}
-        onGuardado={() => router.refresh()}
       />
     </>
   )
