@@ -8,6 +8,8 @@ import BotonFacturaFirmada from './BotonFacturaFirmada'
 import ProcesarPdfButton from '../ProcesarPdfButton'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import TransicionPagina from '@/components/ui/TransicionPagina'
+import LineaTiempo from '@/components/ui/LineaTiempo'
+import { lineaTiempoOrden } from '@/utils/progresoRequisicion'
 
 type Producto = {
   nombre: string
@@ -22,6 +24,7 @@ type ItemOrden = {
   cantidad_surtida: number | string | null
   estado_item: string | null
   unidad: string | null
+  created_at: string | null
   productos: Producto | Producto[] | null
 }
 
@@ -72,6 +75,7 @@ export default async function OrdenDetallePage({
       clientes (nombre),
       orden_items (
         id, cantidad_solicitada, cantidad_surtida, estado_item, unidad,
+        created_at,
         productos (nombre, sku, stock_actual, unidad_medida)
       )
     `,
@@ -98,6 +102,40 @@ export default async function OrdenDetallePage({
   const facturaFirmadaEn =
     (firmada as { factura_firmada_en?: string | null } | null)
       ?.factura_firmada_en ?? null
+
+  // Fecha del primer surtido: el RPC inserta un movimiento de
+  // inventario con motivo "Surtido de requisición" cada vez que
+  // surte. Consulta tolerante como la de la foto: si no hay
+  // movimientos, el paso Surtida se muestra sin fecha (el estado
+  // prueba que ocurrió).
+  const { data: primerSurtido } = await supabase
+    .from('movimientos_inventario')
+    .select('created_at')
+    .eq('orden_id', id)
+    .eq('motivo', 'Surtido de requisición')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  const surtidoEn =
+    (primerSurtido as { created_at?: string | null } | null)?.created_at ??
+    null
+
+  // Fecha de captura de los artículos: la creación del primer ítem.
+  const capturadoEn =
+    items.length > 0
+      ? items
+          .map((item) => item.created_at)
+          .filter((f): f is string => !!f)
+          .sort()[0] ?? null
+      : null
+
+  const pasosLineaTiempo = lineaTiempoOrden({
+    estado: orden.estado,
+    creadoEn: orden.created_at,
+    capturadoEn,
+    surtidoEn,
+    firmadaEn: facturaFirmadaEn,
+  })
 
   // Hay stock total solo si TODOS los artículos están cubiertos.
   const hayStockTotal =
@@ -268,6 +306,21 @@ export default async function OrdenDetallePage({
           )}
         </div>
       </header>
+
+      {/* Línea de tiempo (reel @ale.uiux "Progress steps UI", patrón
+          02): la vida de la requisición — creada, capturada, surtida,
+          firmada. Antes solo se veía el badge del estado actual. */}
+      <section
+        aria-label="Progreso de la requisición"
+        className="card mt-4 p-5 sm:p-6"
+      >
+        <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+          Progreso de la requisición
+        </h2>
+        <div className="mt-4">
+          <LineaTiempo pasos={pasosLineaTiempo} />
+        </div>
+      </section>
 
       <section className="card mt-4 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-gonper-border px-5 py-3.5">

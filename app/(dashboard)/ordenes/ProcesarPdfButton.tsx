@@ -10,7 +10,9 @@ import {
   Trash2,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import Stepper from '@/components/ui/Stepper'
 import { Badge } from '@/components/EstadoBadge'
+import { pasosCaptura } from '@/utils/progresoRequisicion'
 import {
   obtenerUrlParaOCR,
   guardarItemsEnOrden,
@@ -901,6 +903,15 @@ export default function ProcesarPdfButton({
 
   return (
     <>
+      {/* Stepper de captura: en el detalle (variante grande) se ven
+          los pasos 2-4 — Leer, Revisar, Guardar — y el 1, Subir, ya
+          quedó atrás. En la variante compacta no hay espacio, así
+          que no se muestra. */}
+      {grande && (
+        <div className="mb-4">
+          <Stepper pasos={pasosCaptura(2, isLoading)} />
+        </div>
+      )}
       <div
         className={
           grande ? 'flex flex-col gap-1.5' : 'flex flex-col items-end gap-1'
@@ -1005,6 +1016,12 @@ export default function ProcesarPdfButton({
         }
       >
         <div className="px-4 py-4 sm:px-5">
+          {/* En el modal se revisa: paso 3 activo; al confirmar, el
+              paso 4 (Guardar) muestra el spinner. */}
+          <div className="mb-4">
+            <Stepper pasos={pasosCaptura(isSaving ? 4 : 3, isSaving)} />
+          </div>
+
           <datalist id="unidades-comunes">
             {UNIDADES_COMUNES.map((unidad) => (
               <option key={unidad} value={unidad} />

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import PageHeader from '@/components/ui/PageHeader'
+import Stepper from '@/components/ui/Stepper'
+import { pasosCaptura } from '@/utils/progresoRequisicion'
 import { subirYProcesarPDF } from './actions'
 import { crearCliente } from '@/app/(dashboard)/clientes/actions'
 
@@ -127,7 +129,14 @@ export default function UploadClient({ clientes }: { clientes: Cliente[] }) {
         title="Nueva requisición"
       />
 
-      <form onSubmit={handleSubmit} className="card mt-5 overflow-hidden">
+      {/* Stepper de captura (reel @ale.uiux "Progress steps UI"):
+          aquí va el paso 1, Subir; Leer, Revisar y Guardar se ven en
+          el detalle, donde sigue el flujo. */}
+      <div className="mt-5">
+        <Stepper pasos={pasosCaptura(1, isUploading)} />
+      </div>
+
+      <form onSubmit={handleSubmit} className="card mt-4 overflow-hidden">
         <div className="border-b border-gonper-border p-5 sm:p-6">
           <label className="field-label" htmlFor="cliente_id">
             ¿De qué mercado es esta requisición?
