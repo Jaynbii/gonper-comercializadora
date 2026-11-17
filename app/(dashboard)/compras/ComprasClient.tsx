@@ -6,7 +6,9 @@ import Link from 'next/link'
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   Folder,
+  Loader2,
   MoreHorizontal,
   Package,
   ReceiptText,
@@ -32,6 +34,10 @@ import {
   type FaltantePorOrden,
   type GrupoComprasPorRequisicion,
 } from '@/utils/faltantesPorOrden'
+import {
+  armarFilasFaltantesPdf,
+  generarPdfFaltantes,
+} from '@/utils/faltantesPdf'
 
 type Proveedor = {
   id: string
@@ -665,6 +671,46 @@ export default function ComprasClient({
     }, 60)
   }
 
+  const [exportandoPdf, setExportandoPdf] = useState(false)
+
+  // Exportar los faltantes a PDF: el mismo faltante consolidado que
+  // se ve en la vista General (respetando la selección de 1-2
+  // requisiciones), con proveedor, precio y total estimado. La
+  // librería se importa dentro del clic para no cargarla al abrir
+  // Compras.
+  const exportarFaltantesPdf = async () => {
+    if (exportandoPdf || faltantesAMostrar.length === 0) return
+    setErrorMsg('')
+    setExportandoPdf(true)
+    try {
+      const alcance =
+        ordenesSeleccionadas.length === 0
+          ? 'Todas las requisiciones activas'
+          : `Solo: ${ordenesSeleccionadas
+              .map((id) => {
+                const orden = faltantesPorOrden.find((o) => o.ordenId === id)
+                return orden ? `${orden.folio} (${orden.clienteNombre})` : id
+              })
+              .join(', ')}`
+      const { filas, totalEstimado, sinPrecio } = armarFilasFaltantesPdf({
+        faltantes: faltantesAMostrar,
+        seleccionados: itemsSeleccionados,
+        proveedores,
+      })
+      await generarPdfFaltantes({
+        filas,
+        totalEstimado,
+        sinPrecio,
+        alcance,
+        fecha: new Date(),
+      })
+    } catch {
+      setErrorMsg('No se pudo generar el PDF. Vuelve a intentarlo.')
+    } finally {
+      setExportandoPdf(false)
+    }
+  }
+
   const [ordenActiva, setOrdenActiva] = useState<OrdenCompra | null>(null)
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState<
     Record<string, number>
@@ -1183,7 +1229,10 @@ export default function ComprasClient({
           {/* Fase 1 — General: faltante consolidado de todas las requisiciones.
               Por requisición: una card por requisición activa para elegir cuáles
               surtir hoy (máx. 2 seleccionadas). */}
-          <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
+          {/* Vista General / Por requisición + exportar el faltante
+              consolidado a PDF (el mismo que se ve en General). */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
             <button
               type="button"
               onClick={() => setVista('general')}
@@ -1215,6 +1264,26 @@ export default function ComprasClient({
                 {faltantesPorOrden.length}
               </span>
             </button>
+            </div>
+            {faltantesAMostrar.length > 0 && (
+              <button
+                type="button"
+                onClick={exportarFaltantesPdf}
+                disabled={exportandoPdf}
+                className="btn btn-primary w-full shrink-0 justify-center sm:w-auto"
+              >
+                {exportandoPdf ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    strokeWidth={2}
+                    aria-label="Generando PDF"
+                  />
+                ) : (
+                  <Download className="h-4 w-4" strokeWidth={2} />
+                )}
+                {exportandoPdf ? 'Generando…' : 'Exportar PDF'}
+              </button>
+            )}
           </div>
 
           {ordenesSeleccionadas.length > 0 && (
