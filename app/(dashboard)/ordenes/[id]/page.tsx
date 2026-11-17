@@ -5,11 +5,13 @@ import { notFound } from 'next/navigation'
 import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
 import BotonFacturaFirmada from './BotonFacturaFirmada'
+import CotejoSurtido from './CotejoSurtido'
 import ProcesarPdfButton from '../ProcesarPdfButton'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import TransicionPagina from '@/components/ui/TransicionPagina'
 import LineaTiempo from '@/components/ui/LineaTiempo'
 import { lineaTiempoOrden } from '@/utils/progresoRequisicion'
+import { esRequisicionCompleta } from '@/utils/requisicionesCompletas'
 
 type Producto = {
   nombre: string
@@ -135,6 +137,14 @@ export default async function OrdenDetallePage({
     capturadoEn,
     surtidoEn,
     firmadaEn: facturaFirmadaEn,
+  })
+
+  // Sello "SURTIDA" de la tabla de cotejo (Alex, 2026-11-17): solo
+  // cuando está entregada Y firmada. Entregada sin firmar queda
+  // normal, porque todavía falta la prueba.
+  const completa = esRequisicionCompleta({
+    estado: orden.estado,
+    facturaFirmadaPath,
   })
 
   // Hay stock total solo si TODOS los artículos están cubiertos.
@@ -327,8 +337,11 @@ export default async function OrdenDetallePage({
           <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
             Cotejo de inventario
           </h2>
-          <span className="text-[11.5px] text-gonper-muted">
-            {items.length} {items.length === 1 ? 'artículo' : 'artículos'}
+          <span className="flex items-center gap-2">
+            {completa && <Badge tono="success">Surtida</Badge>}
+            <span className="text-[11.5px] text-gonper-muted">
+              {items.length} {items.length === 1 ? 'artículo' : 'artículos'}
+            </span>
           </span>
         </div>
 
@@ -365,7 +378,7 @@ export default async function OrdenDetallePage({
             )}
           </div>
         ) : (
-          <>
+          <CotejoSurtido surtida={completa}>
             <div className="divide-y divide-gonper-border md:hidden">
               {items.map((item) => {
                 const producto = productoDe(item)
@@ -573,7 +586,7 @@ export default async function OrdenDetallePage({
                 </tbody>
               </table>
             </div>
-          </>
+          </CotejoSurtido>
         )}
       </section>
     </div>
