@@ -17,6 +17,7 @@ type Orden = {
   estado: string
   created_at: string
   pdf_path: string | null
+  factura_firmada_path: string | null
   cliente_id: string
   clientes: { nombre: string } | { nombre: string }[] | null
 }
@@ -47,7 +48,7 @@ export default async function OrdenesPage({
   const { data: ordenes, error } = await supabase
     .from('ordenes')
     .select(
-      `id, folio, estado, created_at, pdf_path, cliente_id, clientes (nombre)`,
+      `id, folio, estado, created_at, pdf_path, factura_firmada_path, cliente_id, clientes (nombre)`,
     )
     .order('created_at', { ascending: false })
 

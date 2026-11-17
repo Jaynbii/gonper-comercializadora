@@ -9,6 +9,7 @@ import {
   construirRutaFacturaFirmada,
   validarFotoFirmada,
 } from '@/utils/facturaFirmada'
+import { esRequisicionProtegida } from '@/utils/requisicionesCompletas'
 
 type ItemDetectado = {
   codigo_pdf: string
@@ -304,6 +305,27 @@ export async function surtirOrden(ordenId: string): Promise<ResultadoSurtido> {
 
 export async function eliminarOrden(ordenId: string, pdfPath: string | null) {
   const supabase = await createClient()
+
+  // Candado: una requisición con foto firmada y sellada es evidencia de
+  // entrega y no se puede borrar desde la app. Si alguna vez hay que
+  // borrar una, se hace directo en Supabase, no desde Gonper.
+  const { data: orden } = await supabase
+    .from('ordenes')
+    .select('factura_firmada_path')
+    .eq('id', ordenId)
+    .single()
+  if (
+    orden &&
+    esRequisicionProtegida({
+      facturaFirmadaPath:
+        (orden as { factura_firmada_path?: string | null })
+          .factura_firmada_path ?? null,
+    })
+  ) {
+    throw new Error(
+      'Esta requisición está firmada y sellada. No se puede eliminar.',
+    )
+  }
 
   // 1. Borrar el PDF del Storage si existe
   if (pdfPath) {

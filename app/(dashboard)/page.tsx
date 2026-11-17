@@ -1,5 +1,9 @@
 import { createClient } from '@/utils/supabase/server'
-import DashboardView, { type FilaProyeccion, type UltimaOrden } from './DashboardView'
+import DashboardView, {
+  type FilaProyeccion,
+  type OrdenCompleta,
+  type UltimaOrden,
+} from './DashboardView'
 import TransicionPagina from '@/components/ui/TransicionPagina'
 
 type OrdenActiva = {
@@ -21,6 +25,7 @@ export default async function DashboardPage() {
     { data: productos },
     { data: ultimasOrdenes },
     { data: ordenesActivas },
+    { data: ordenesCompletas },
   ] = await Promise.all([
     supabase
       .from('ordenes')
@@ -47,6 +52,16 @@ export default async function DashboardPage() {
       `,
       )
       .in('estado', ['PENDIENTE', 'PARCIAL']),
+    // Completas = entregadas Y con foto firmada y sellada (definición de
+    // Alex, 2026-11-17). La más recientemente firmada primero.
+    supabase
+      .from('ordenes')
+      .select(
+        'id, folio, estado, created_at, factura_firmada_en, clientes (nombre)',
+      )
+      .eq('estado', 'ENTREGADA')
+      .not('factura_firmada_path', 'is', null)
+      .order('factura_firmada_en', { ascending: false }),
   ])
 
   const demandaPorProducto: Record<string, number> = {}
@@ -103,6 +118,7 @@ export default async function DashboardPage() {
       totalProductos={productos?.length ?? 0}
       ultimasOrdenes={(ultimasOrdenes ?? []) as UltimaOrden[]}
       proyeccion={proyeccion}
+      completas={(ordenesCompletas ?? []) as OrdenCompleta[]}
     />
     </TransicionPagina>
   )

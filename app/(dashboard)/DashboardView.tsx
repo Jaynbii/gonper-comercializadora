@@ -3,12 +3,22 @@ import { ViewTransition } from 'react'
 import { ArrowRight, ArrowUpRight, CheckCircle2, Inbox, Plus } from 'lucide-react'
 import EstadoBadge from '@/components/EstadoBadge'
 import FaltantesStat from './FaltantesStat'
+import CompletasStat from './CompletasStat'
 
 export type UltimaOrden = {
   id: string
   folio: string
   estado: string
   created_at: string
+  clientes: unknown
+}
+
+export type OrdenCompleta = {
+  id: string
+  folio: string
+  estado: string
+  created_at: string
+  factura_firmada_en: string | null
   clientes: unknown
 }
 
@@ -29,6 +39,7 @@ type Props = {
   totalProductos: number
   ultimasOrdenes: UltimaOrden[]
   proyeccion: FilaProyeccion[]
+  completas: OrdenCompleta[]
 }
 
 const fechaCorta = new Intl.DateTimeFormat('es-MX', {
@@ -55,6 +66,7 @@ export default function DashboardView({
   totalProductos,
   ultimasOrdenes,
   proyeccion,
+  completas,
 }: Props) {
   const activas = pendientes + parciales
   const conFaltante = proyeccion.filter((producto) => producto.faltante > 0)
@@ -79,11 +91,15 @@ export default function DashboardView({
         </Link>
       </header>
 
-      <div className="card mt-6 grid grid-cols-3 divide-x divide-gonper-border sm:mt-7">
+      {/* Cuatro tarjetas: 2x2 en teléfono (con 4 en una fila no caben
+          las etiquetas) y 4 en fila en escritorio. Las líneas entre
+          tarjetas son huecos de 1 px con el fondo del borde. */}
+      <div className="card mt-6 overflow-hidden sm:mt-7">
+        <div className="grid grid-cols-2 gap-px bg-gonper-border sm:grid-cols-4">
         <Link
           href="/ordenes"
           transitionTypes={['nav-section']}
-          className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
+          className="group bg-gonper-surface px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
             <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
@@ -108,7 +124,7 @@ export default function DashboardView({
         <Link
           href="/inventario"
           transitionTypes={['nav-section']}
-          className="group px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
+          className="group bg-gonper-surface px-4 py-4 transition-colors duration-[120ms] hover:bg-gonper-hover sm:px-5 lg:px-6 lg:py-5"
         >
           <div className="flex items-start justify-between gap-2">
             <p className="min-h-[2.7em] break-words text-[10px] font-medium uppercase leading-[1.35] tracking-[0.1em] text-gonper-muted sm:text-[10.5px] lg:text-[11px] lg:tracking-[0.13em]">
@@ -131,6 +147,9 @@ export default function DashboardView({
         </Link>
 
         <FaltantesStat data={proyeccion} ordenesActivas={activas} />
+
+        <CompletasStat ordenes={completas} />
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">

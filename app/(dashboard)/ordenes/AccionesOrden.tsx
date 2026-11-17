@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MoreHorizontal, Trash2 } from 'lucide-react'
+import { Lock, MoreHorizontal, Trash2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { mostrarToast } from '@/components/ui/Toast'
 import { editarOrden, eliminarOrden } from './actions'
+import { esRequisicionProtegida } from '@/utils/requisicionesCompletas'
 
 const ESTADOS = [
   { valor: 'BORRADOR', etiqueta: 'Borrador' },
@@ -26,6 +27,7 @@ export default function AccionesOrden({
     cliente_id: string
     estado: string
     pdf_path: string | null
+    factura_firmada_path: string | null
   }
   clientes: { id: string; nombre: string }[]
 }) {
@@ -36,6 +38,13 @@ export default function AccionesOrden({
   const [eliminarOpen, setEliminarOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [errorEliminar, setErrorEliminar] = useState('')
+
+  // Candado: con foto firmada y sellada la requisición es evidencia de
+  // entrega y no se puede borrar desde la app (el servidor lo vuelve a
+  // verificar antes de borrar).
+  const protegida = esRequisicionProtegida({
+    facturaFirmadaPath: orden.factura_firmada_path,
+  })
 
   const router = useRouter()
   // Cada orden monta su propio modal en la misma página: el id del formulario
@@ -109,18 +118,30 @@ export default function AccionesOrden({
         description={`${orden.folio} · ${orden.estado.toLowerCase()}`}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => {
-                setErrorEliminar('')
-                setEliminarOpen(true)
-              }}
-              disabled={isEditing}
-              className="btn mr-auto border border-gonper-danger-border bg-gonper-danger-bg text-gonper-danger hover:bg-gonper-danger-bg/70"
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-              Eliminar
-            </button>
+            {protegida ? (
+              <button
+                type="button"
+                disabled
+                title="Entregada y firmada: no se puede eliminar"
+                className="btn mr-auto border border-gonper-border bg-gonper-surface-muted text-gonper-muted"
+              >
+                <Lock className="h-4 w-4" strokeWidth={1.75} />
+                Protegida
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorEliminar('')
+                  setEliminarOpen(true)
+                }}
+                disabled={isEditing}
+                className="btn mr-auto border border-gonper-danger-border bg-gonper-danger-bg text-gonper-danger hover:bg-gonper-danger-bg/70"
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                Eliminar
+              </button>
+            )}
             <button
               type="button"
               onClick={cerrar}
@@ -184,6 +205,14 @@ export default function AccionesOrden({
               Cambiar a cancelada no devuelve el stock automáticamente.
             </p>
           </div>
+
+          {protegida && (
+            <p className="mt-4 flex items-start gap-2 rounded-[6px] border border-gonper-success-border bg-gonper-success-bg px-3 py-2 text-[12.5px] leading-relaxed text-gonper-success">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              Esta requisición está entregada y firmada. No se puede eliminar
+              desde la app: es la evidencia de entrega.
+            </p>
+          )}
 
           {errorMsg && (
             <p className="mt-4 rounded-[6px] border border-gonper-danger-border bg-gonper-danger-bg px-3 py-2 text-[12.5px] text-gonper-danger">
