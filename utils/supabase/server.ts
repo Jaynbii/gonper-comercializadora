@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { SupabaseClient } from '@supabase/supabase-js'
+import { siguienteSku } from '@/utils/sku'
 
 // Cliente de Supabase para Server Components y acciones de servidor; lee y escribe la sesión en las cookies de la petición.
 export async function createClient() {
@@ -65,25 +66,17 @@ export async function esUsuarioAdmin(
 /**
  * Genera el siguiente SKU secuencial para un producto nuevo.
  * Ejemplo: Si el último es ART0015, devolverá ART0016.
+ * El máximo se calcula numérico sobre TODOS los ART (utils/sku.ts):
+ * ordenar los SKU como texto en la base de datos devuelve el
+ * "último" equivocado si algún código tiene distinto relleno de
+ * ceros ("ART9" > "ART0010" en texto), y el siguiente generado
+ * puede chocar con uno que ya existe.
  */
 export async function generarNuevoSku(supabase: SupabaseClient) {
   const { data } = await supabase
     .from('productos')
     .select('sku')
     .like('sku', 'ART%')
-    .order('sku', { ascending: false })
-    .limit(1)
 
-  if (!data || data.length === 0) {
-    return 'ART0001' // Si el inventario está vacío o no hay códigos ART, empezamos en 1
-  }
-
-  const ultimoSku = data[0].sku
-  const numero = parseInt(ultimoSku.replace('ART', ''), 10)
-  
-  // Validación por si alguien metió un SKU raro como "ART-ABC"
-  if (isNaN(numero)) return 'ART0001'
-
-  const siguienteNumero = numero + 1
-  return `ART${siguienteNumero.toString().padStart(4, '0')}`
+  return siguienteSku((data ?? []).map((fila) => fila.sku))
 }

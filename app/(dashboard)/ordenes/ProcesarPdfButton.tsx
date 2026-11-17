@@ -793,18 +793,43 @@ export default function ProcesarPdfButton({
     try {
       const producto = await registrarProductoEnInventario(item)
 
+      // El producto nuevo ya trae su código Gonper (ARTXXXX) en la
+      // base de datos, pero el modal no lo mostraba: la fila se
+      // quedaba con el código SAT del PDF en el campo Código (al
+      // elegir una sugerencia sí se pone el SKU, ver
+      // aplicarCandidato). Aquí se pone el código nuevo en la fila
+      // para que se vea de inmediato.
+      // Y el catálogo en memoria (catalogoRef) se cargaba una sola
+      // vez al abrir el modal: sin agregarlo aquí, la función de
+      // sugerencia (combobox y re-cotejo al escribir) nunca ofrecía
+      // el producto recién registrado hasta recargar la página.
+      if (catalogoRef.current) {
+        catalogoRef.current = [
+          ...catalogoRef.current,
+          {
+            id: producto.id,
+            sku: producto.sku,
+            nombre: producto.nombre,
+            unidad_medida: producto.unidad_medida ?? null,
+            codigo_sat: producto.codigo_sat ?? null,
+          },
+        ]
+      }
+
       setItemsDetectados((prev) =>
         prev
           ? prev.map((fila) =>
               fila.key === key
                 ? {
                     ...fila,
+                    codigo_pdf: producto.sku,
                     existe_en_bd: true,
                     id_bd: producto.id,
                     unidad:
                       normalizarUnidad(producto.unidad_medida) ||
                       normalizarUnidad(fila.unidad) ||
                       '',
+                    sugerencia: null,
                   }
                 : fila,
             )
