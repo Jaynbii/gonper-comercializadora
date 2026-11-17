@@ -1,8 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Download, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import {
+  armarFilasProyeccionDemanda,
+  generarPdfProyeccionDemanda,
+} from '@/utils/faltantesPdf'
 
 type Fila = {
   id: string
@@ -21,8 +25,31 @@ export default function FaltantesStat({
   ordenesActivas: number
 }) {
   const [abierto, setAbierto] = useState(false)
+  const [exportandoPdf, setExportandoPdf] = useState(false)
+  const [errorPdf, setErrorPdf] = useState('')
 
   const conFaltante = data.filter((producto) => producto.faltante > 0)
+
+  // Exportar la proyección a PDF: la misma lista del modal (solo
+  // productos con faltante), sin proveedor ni precio porque el
+  // dashboard no tiene esos datos. La librería se importa dentro del
+  // clic para no cargarla al abrir el dashboard.
+  const exportarProyeccionPdf = async () => {
+    if (exportandoPdf || conFaltante.length === 0) return
+    setErrorPdf('')
+    setExportandoPdf(true)
+    try {
+      await generarPdfProyeccionDemanda({
+        filas: armarFilasProyeccionDemanda(conFaltante),
+        ordenesActivas,
+        fecha: new Date(),
+      })
+    } catch {
+      setErrorPdf('No se pudo generar el PDF. Vuelve a intentarlo.')
+    } finally {
+      setExportandoPdf(false)
+    }
+  }
 
   return (
     <>
@@ -61,13 +88,39 @@ export default function FaltantesStat({
           ordenesActivas === 1 ? 'requisición activa' : 'requisiciones activas'
         }`}
         footer={
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => setAbierto(false)}
-          >
-            Cerrar
-          </button>
+          <>
+            {errorPdf && (
+              <p className="mr-auto text-[12px] font-medium text-gonper-danger">
+                {errorPdf}
+              </p>
+            )}
+            {conFaltante.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={exportarProyeccionPdf}
+                disabled={exportandoPdf}
+              >
+                {exportandoPdf ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    strokeWidth={2}
+                    aria-label="Generando PDF"
+                  />
+                ) : (
+                  <Download className="h-4 w-4" strokeWidth={2} />
+                )}
+                {exportandoPdf ? 'Generando…' : 'Exportar PDF'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => setAbierto(false)}
+            >
+              Cerrar
+            </button>
+          </>
         }
       >
         {data.length === 0 ? (

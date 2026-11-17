@@ -1230,8 +1230,13 @@ export default function ComprasClient({
               Por requisición: una card por requisición activa para elegir cuáles
               surtir hoy (máx. 2 seleccionadas). */}
           {/* Vista General / Por requisición + exportar el faltante
-              consolidado a PDF (el mismo que se ve en General). */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
+              consolidado a PDF (el mismo que se ve en General).
+              En teléfono van apilados (selector arriba, botón abajo):
+              en una sola fila se veían encimados, y el botón verde
+              pegado al segmento verde del selector se leía como un
+              solo bloque. Por eso el botón es discreto (btn-quiet)
+              y cada uno ocupa su propio renglón. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
             <button
               type="button"
@@ -1270,7 +1275,7 @@ export default function ComprasClient({
                 type="button"
                 onClick={exportarFaltantesPdf}
                 disabled={exportandoPdf}
-                className="btn btn-primary w-full shrink-0 justify-center sm:w-auto"
+                className="btn btn-quiet w-full justify-center sm:w-auto"
               >
                 {exportandoPdf ? (
                   <Loader2

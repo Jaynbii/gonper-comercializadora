@@ -14,6 +14,7 @@
 // abrir la página ni romper el render del servidor.
 
 import { proveedorSugerido, type PrecioProveedor } from './faltantesPorOrden.ts'
+import type { jsPDF } from 'jspdf'
 import type { RowInput } from 'jspdf-autotable'
 
 export type FaltanteParaPdf = {
@@ -132,6 +133,25 @@ const numeroPdf = new Intl.NumberFormat('es-MX', {
 })
 const fechaLargaPdf = new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' })
 
+// Pie de página común de los PDFs de Gonper.
+function dibujarPiePagina(doc: jsPDF, numeroPagina: number) {
+  doc.setFontSize(8)
+  doc.setTextColor(102, 102, 102)
+  doc.text(
+    `Gonper Comercializadora · Página ${numeroPagina} de ${doc.getNumberOfPages()}`,
+    12,
+    doc.internal.pageSize.height - 8,
+  )
+  doc.setTextColor(31, 31, 31)
+}
+
+function nombreArchivoPdf(base: string, fecha: Date): string {
+  const y = fecha.getFullYear()
+  const m = String(fecha.getMonth() + 1).padStart(2, '0')
+  const d = String(fecha.getDate()).padStart(2, '0')
+  return `${base}-${y}-${m}-${d}.pdf`
+}
+
 // Genera y descarga el PDF. Se importa jsPDF solo aquí (dentro del
 // clic) para no cargarlo al abrir Compras.
 export async function generarPdfFaltantes(args: {
@@ -209,21 +229,77 @@ export async function generarPdfFaltantes(args: {
       4: { halign: 'right' },
       5: { halign: 'right' },
     },
-    didDrawPage: (datos) => {
-      const totalPaginas = doc.getNumberOfPages()
-      doc.setFontSize(8)
-      doc.setTextColor(102, 102, 102)
-      doc.text(
-        `Gonper Comercializadora · Página ${datos.pageNumber} de ${totalPaginas}`,
-        12,
-        doc.internal.pageSize.height - 8,
-      )
-      doc.setTextColor(31, 31, 31)
-    },
+    didDrawPage: (datos) => dibujarPiePagina(doc, datos.pageNumber),
   })
 
-  const y = fecha.getFullYear()
-  const m = String(fecha.getMonth() + 1).padStart(2, '0')
-  const d = String(fecha.getDate()).padStart(2, '0')
-  doc.save(`faltantes-gonper-${y}-${m}-${d}.pdf`)
+  doc.save(nombreArchivoPdf('faltantes-gonper', fecha))
+}
+
+export type FilaProyeccionPdf = {
+  nombre: string
+  sku: string
+  requerido: number
+  stock: number
+  faltante: number
+}
+
+// Filas del PDF de la proyección de demanda (modal de Faltantes del
+// dashboard): solo los productos con faltante. La proyección incluye
+// renglones ya cubiertos (faltante 0), que en el PDF no aportan nada.
+// Este PDF no lleva proveedor ni precio: el dashboard no tiene esos
+// datos; es la misma lista que se ve en el modal.
+export function armarFilasProyeccionDemanda(
+  filas: FilaProyeccionPdf[],
+): FilaProyeccionPdf[] {
+  return filas.filter((fila) => fila.faltante > 0)
+}
+
+// Genera y descarga el PDF de la proyección de demanda. Igual que el
+// de faltantes, jsPDF se importa dentro del clic.
+export async function generarPdfProyeccionDemanda(args: {
+  filas: FilaProyeccionPdf[]
+  ordenesActivas: number
+  fecha: Date
+}): Promise<void> {
+  const { filas, ordenesActivas, fecha } = args
+  const { jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+
+  const doc = new jsPDF()
+  doc.setFontSize(16)
+  doc.text('Proyección de demanda', 12, 14)
+  doc.setFontSize(10)
+  doc.setTextColor(102, 102, 102)
+  doc.text(`Gonper Comercializadora · ${fechaLargaPdf.format(fecha)}`, 12, 21)
+  doc.text(
+    `${ordenesActivas} ${ordenesActivas === 1 ? 'requisición activa' : 'requisiciones activas'} · ${filas.length} ${filas.length === 1 ? 'producto con faltante' : 'productos con faltante'}`,
+    12,
+    27,
+  )
+  doc.setTextColor(31, 31, 31)
+
+  autoTable(doc, {
+    startY: 33,
+    head: [['Producto', 'Requerido', 'En stock', 'Faltante']],
+    body: filas.map((fila) => [
+      `${fila.nombre}\n${fila.sku}`,
+      numeroPdf.format(fila.requerido),
+      numeroPdf.format(fila.stock),
+      numeroPdf.format(fila.faltante),
+    ]),
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: {
+      fillColor: [123, 182, 1],
+      textColor: [31, 31, 31],
+      fontStyle: 'bold',
+    },
+    columnStyles: {
+      1: { halign: 'right' },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+    },
+    didDrawPage: (datos) => dibujarPiePagina(doc, datos.pageNumber),
+  })
+
+  doc.save(nombreArchivoPdf('proyeccion-demanda-gonper', fecha))
 }

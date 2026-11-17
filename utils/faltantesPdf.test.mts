@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { armarFilasFaltantesPdf } from './faltantesPdf.ts'
+import { armarFilasFaltantesPdf, armarFilasProyeccionDemanda } from './faltantesPdf.ts'
 
 const proveedores = [
   {
@@ -82,4 +82,25 @@ test('armarFilasFaltantesPdf: precio 0 en la selección es sin precio', () => {
   assert.equal(filas[0].subtotal, null)
   assert.equal(totalEstimado, 0)
   assert.equal(sinPrecio, 3)
+})
+
+test('armarFilasProyeccionDemanda: solo los productos con faltante', () => {
+  const filas = armarFilasProyeccionDemanda([
+    { nombre: 'Papel', sku: 'ART0001', requerido: 10, stock: 6, faltante: 4 },
+    { nombre: 'Cloro', sku: 'ART0002', requerido: 2, stock: 2, faltante: 0 },
+    { nombre: 'Escoba', sku: 'ART0003', requerido: 1, stock: 0, faltante: 1 },
+  ])
+  assert.deepEqual(
+    filas.map((f) => f.sku),
+    ['ART0001', 'ART0003'],
+  )
+})
+
+test('armarFilasProyeccionDemanda: sin faltantes devuelve lista vacía', () => {
+  assert.deepEqual(
+    armarFilasProyeccionDemanda([
+      { nombre: 'Cloro', sku: 'ART0002', requerido: 2, stock: 2, faltante: 0 },
+    ]),
+    [],
+  )
 })
