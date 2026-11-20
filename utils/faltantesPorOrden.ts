@@ -229,6 +229,29 @@ export function agruparCompraPorProveedor(faltantes: FaltantePorOrdenItem[]): {
   return { grupos, sinPrecio }
 }
 
+// Compra parcial por checkboxes (Alex, 2026-11-20): del diálogo
+// "Comprar faltante de esta requisición" solo se compran los
+// artículos marcados. Recibe los grupos ya armados y el conjunto de
+// productoIds marcados; devuelve los grupos con solo esos artículos
+// (subtotales recalculados) y sin los grupos que quedan vacíos. Lo
+// no marcado queda como faltante para la próxima vez.
+export function filtrarCompraSeleccionada(
+  grupos: GrupoCompraProveedor[],
+  marcados: ReadonlySet<string>,
+): GrupoCompraProveedor[] {
+  const visibles: GrupoCompraProveedor[] = []
+  for (const grupo of grupos) {
+    const items = grupo.items.filter((item) => marcados.has(item.productoId))
+    if (items.length === 0) continue
+    visibles.push({
+      ...grupo,
+      items,
+      subtotal: items.reduce((acc, item) => acc + item.subtotal, 0),
+    })
+  }
+  return visibles
+}
+
 // Anti-duplicado (Fase 1c ampliada): dos compras son "la misma" cuando
 // tienen los mismos productos con las mismas cantidades, sin importar
 // el orden. Se usa en el servidor antes de generar una orden de compra

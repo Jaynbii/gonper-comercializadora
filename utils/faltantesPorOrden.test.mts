@@ -6,6 +6,7 @@ import {
   consolidarFaltantesSeleccionados,
   proveedorSugerido,
   agruparCompraPorProveedor,
+  filtrarCompraSeleccionada,
   esMismaCompra,
   agruparComprasPorRequisicion,
   resumenCarpetaCompras,
@@ -332,4 +333,61 @@ test('puedeEliminarOrdenCompra: solo admin y solo si está Pendiente', () => {
   assert.equal(puedeEliminarOrdenCompra('RECIBIDA', false), false)
   // Otros estados tampoco se pueden eliminar.
   assert.equal(puedeEliminarOrdenCompra('CANCELADA', true), false)
+})
+
+// Compra parcial por checkboxes (Alex, 2026-11-20): del diálogo de
+// compra de una requisición solo salen los artículos marcados.
+const gruposCompra = [
+  {
+    proveedorId: 'prov-a',
+    proveedorNombre: 'Grupo Mach',
+    items: [
+      { productoId: 'prod-1', nombre: 'Papel', cantidad: 10, precioUnitario: 300, subtotal: 3000 },
+      { productoId: 'prod-2', nombre: 'Jabón', cantidad: 2, precioUnitario: 204, subtotal: 408 },
+    ],
+    subtotal: 3408,
+  },
+  {
+    proveedorId: 'prov-b',
+    proveedorNombre: "Sam's",
+    items: [
+      { productoId: 'prod-3', nombre: 'Cloro', cantidad: 4, precioUnitario: 180, subtotal: 720 },
+    ],
+    subtotal: 720,
+  },
+]
+
+test('compra parcial: solo los artículos marcados, con subtotales recalculados', () => {
+  const visibles = filtrarCompraSeleccionada(
+    gruposCompra,
+    new Set(['prod-1', 'prod-3']),
+  )
+  assert.equal(visibles.length, 2)
+  assert.equal(visibles[0].items.length, 1)
+  assert.equal(visibles[0].items[0].productoId, 'prod-1')
+  assert.equal(visibles[0].subtotal, 3000)
+  assert.equal(visibles[1].subtotal, 720)
+})
+
+test('compra parcial: el grupo sin nada marcado desaparece', () => {
+  const visibles = filtrarCompraSeleccionada(
+    gruposCompra,
+    new Set(['prod-3']),
+  )
+  assert.equal(visibles.length, 1)
+  assert.equal(visibles[0].proveedorId, 'prov-b')
+})
+
+test('compra parcial: sin nada marcado no queda ningún grupo', () => {
+  assert.deepEqual(filtrarCompraSeleccionada(gruposCompra, new Set()), [])
+})
+
+test('compra parcial: con todo marcado los grupos quedan iguales', () => {
+  const visibles = filtrarCompraSeleccionada(
+    gruposCompra,
+    new Set(['prod-1', 'prod-2', 'prod-3']),
+  )
+  assert.equal(visibles.length, 2)
+  assert.equal(visibles[0].subtotal, 3408)
+  assert.equal(visibles[1].subtotal, 720)
 })
