@@ -29,9 +29,11 @@ import {
   agruparComprasPorRequisicion,
   consolidarFaltantesSeleccionados,
   construirItemsRecepcion,
+  filtrarCompraSeleccionada,
   puedeEliminarOrdenCompra,
   resumenCarpetaCompras,
   type FaltantePorOrden,
+  type GrupoCompraProveedor,
   type GrupoComprasPorRequisicion,
 } from '@/utils/faltantesPorOrden'
 import {
@@ -890,6 +892,65 @@ export default function ComprasClient({
     ? agruparCompraPorProveedor(requisicionAComprar.faltantes)
     : null
 
+  // Compra parcial por checkboxes (Alex, 2026-11-20): los artículos
+  // que Alex DESMARCA en el diálogo no se compran esta vez y quedan
+  // como faltante para la próxima. Al abrir, todos vienen marcados
+  // (el comportamiento de antes). Se guarda lo desmarcado — y no lo
+  // marcado — para no tener que inicializar nada al abrir el diálogo
+  // (también abre directo con ?orden=<id>&comprar=1).
+  const [compraDesmarcados, setCompraDesmarcados] = useState<
+    ReadonlySet<string>
+  >(new Set())
+
+  // Artículos con precio de esta compra, cuáles van marcados y los
+  // grupos ya filtrados (solo lo marcado, subtotales recalculados).
+  const compraTodosConPrecio = compraRequisicion
+    ? compraRequisicion.grupos.flatMap((grupo) =>
+        grupo.items.map((item) => item.productoId),
+      )
+    : []
+  const compraMarcados = new Set(
+    compraTodosConPrecio.filter((id) => !compraDesmarcados.has(id)),
+  )
+  const compraGruposVisibles = compraRequisicion
+    ? filtrarCompraSeleccionada(compraRequisicion.grupos, compraMarcados)
+    : []
+  const compraTotalVisible = compraGruposVisibles.reduce(
+    (acc, grupo) => acc + grupo.subtotal,
+    0,
+  )
+  const compraTodosMarcados =
+    compraTodosConPrecio.length > 0 &&
+    compraTodosConPrecio.every((id) => compraMarcados.has(id))
+
+  const alternarItemCompra = (productoId: string) => {
+    setCompraDesmarcados((prev) => {
+      const nuevos = new Set(prev)
+      if (nuevos.has(productoId)) nuevos.delete(productoId)
+      else nuevos.add(productoId)
+      return nuevos
+    })
+  }
+
+  const alternarGrupoCompra = (grupo: GrupoCompraProveedor) => {
+    const ids = grupo.items.map((item) => item.productoId)
+    const todosMarcados = ids.every((id) => !compraDesmarcados.has(id))
+    setCompraDesmarcados((prev) => {
+      const nuevos = new Set(prev)
+      if (todosMarcados) ids.forEach((id) => nuevos.add(id))
+      else ids.forEach((id) => nuevos.delete(id))
+      return nuevos
+    })
+  }
+
+  const alternarTodaCompra = () => {
+    if (compraTodosMarcados) {
+      setCompraDesmarcados(new Set(compraTodosConPrecio))
+    } else {
+      setCompraDesmarcados(new Set())
+    }
+  }
+
   // Fase 1c ampliada — aviso previo: compras Pendientes que ya existen
   // para esta requisición, para que Alex las vea antes de confirmar.
   // El bloqueo del duplicado exacto lo hace el servidor.
@@ -904,15 +965,21 @@ export default function ComprasClient({
   const abrirCompraRequisicion = (orden: FaltantePorOrden) => {
     if (orden.faltantes.length === 0) return
     setErrorCompra('')
+    // Al abrir, todos los artículos vienen marcados.
+    setCompraDesmarcados(new Set())
     setRequisicionAComprar(orden)
   }
 
   const confirmarCompraRequisicion = async () => {
     if (!requisicionAComprar || !compraRequisicion) return
-    const { grupos, sinPrecio } = compraRequisicion
+    // Compra parcial: solo se generan órdenes de lo marcado.
+    const { sinPrecio } = compraRequisicion
+    const grupos = compraGruposVisibles
     if (grupos.length === 0) {
       setErrorCompra(
-        'Ningún artículo tiene precio registrado: pídelos por WhatsApp. No se generó ninguna compra.',
+        compraRequisicion.grupos.length === 0
+          ? 'Ningún artículo tiene precio registrado: pídelos por WhatsApp. No se generó ninguna compra.'
+          : 'Elige al menos un artículo para comprar.',
       )
       return
     }
@@ -1010,6 +1077,7 @@ export default function ComprasClient({
       )
     } else if (generadas.length > 0) {
       setRequisicionAComprar(null)
+      setCompraDesmarcados(new Set())
     }
   }
 
@@ -1752,6 +1820,7 @@ export default function ComprasClient({
         onClose={() => {
           if (comprandoRequisicionId) return
           setRequisicionAComprar(null)
+          setCompraDesmarcados(new Set())
           setErrorCompra('')
         }}
         title="Comprar faltante de esta requisición"
@@ -1767,6 +1836,7 @@ export default function ComprasClient({
               onClick={() => {
                 if (comprandoRequisicionId) return
                 setRequisicionAComprar(null)
+                setCompraDesmarcados(new Set())
                 setErrorCompra('')
               }}
               disabled={comprandoRequisicionId !== null}
@@ -1780,7 +1850,7 @@ export default function ComprasClient({
               disabled={
                 comprandoRequisicionId !== null ||
                 !compraRequisicion ||
-                compraRequisicion.grupos.length === 0
+                compraGruposVisibles.length === 0
               }
               className="btn btn-primary flex-1 sm:flex-none"
             >
@@ -1860,52 +1930,121 @@ export default function ComprasClient({
               </p>
             ) : (
               <>
-                <div className="mt-4 space-y-3">
-                  {compraRequisicion.grupos.map((grupo) => (
-                    <div
-                      key={grupo.proveedorId}
-                      className="rounded-[6px] border border-gonper-border bg-gonper-bg/50 p-3"
-                    >
-                      <p className="text-[13px] font-semibold">
-                        {grupo.proveedorNombre}
-                      </p>
-                      <ul className="mt-2 space-y-1.5">
-                        {grupo.items.map((item) => (
-                          <li
-                            key={item.productoId}
-                            className="flex items-center justify-between gap-3 text-[12.5px]"
-                          >
-                            <span className="min-w-0 break-words">
-                              <span className="font-medium">{item.nombre}</span>{' '}
-                              <span className="text-gonper-muted">
-                                · {numero.format(item.cantidad)} ×{' '}
-                                {moneda.format(item.precioUnitario)}
-                              </span>
-                            </span>
-                            <span className="shrink-0 font-semibold tabular-nums">
-                              {moneda.format(item.subtotal)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="mt-2 border-t border-gonper-border pt-2 text-right text-[12px] text-gonper-muted">
-                        Subtotal{' '}
-                        <span className="text-[13px] font-semibold tabular-nums text-gonper-text">
-                          {moneda.format(grupo.subtotal)}
-                        </span>
-                      </p>
-                    </div>
-                  ))}
+                {/* Compra parcial: cuántos artículos van marcados y
+                    marcar/quitar todo de un jalón. */}
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <p className="text-[12.5px] text-gonper-muted">
+                    {compraMarcados.size} de {compraTodosConPrecio.length}{' '}
+                    {compraTodosConPrecio.length === 1
+                      ? 'artículo'
+                      : 'artículos'}{' '}
+                    seleccionados
+                  </p>
+                  <button
+                    type="button"
+                    onClick={alternarTodaCompra}
+                    disabled={comprandoRequisicionId !== null}
+                    className="shrink-0 text-[12.5px] font-medium text-gonper-primary underline-offset-2 hover:underline disabled:opacity-50"
+                  >
+                    {compraTodosMarcados
+                      ? 'Quitar todo'
+                      : 'Seleccionar todo'}
+                  </button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {compraRequisicion.grupos.map((grupo) => {
+                    // Subtotal solo de lo marcado de este proveedor.
+                    const subtotalVisible = grupo.items
+                      .filter((item) => compraMarcados.has(item.productoId))
+                      .reduce((acc, item) => acc + item.subtotal, 0)
+                    const grupoTodoMarcado = grupo.items.every((item) =>
+                      compraMarcados.has(item.productoId),
+                    )
+                    return (
+                      <div
+                        key={grupo.proveedorId}
+                        className="rounded-[6px] border border-gonper-border bg-gonper-bg/50 p-3"
+                      >
+                        <label className="flex min-h-11 cursor-pointer items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            className="peer sr-only"
+                            checked={grupoTodoMarcado}
+                            disabled={comprandoRequisicionId !== null}
+                            onChange={() => alternarGrupoCompra(grupo)}
+                            aria-label={`Comprar todo de ${grupo.proveedorNombre}`}
+                          />
+                          <span aria-hidden="true" className="check-box">
+                            <svg viewBox="0 0 20 20">
+                              <path d="M4 10.5 8.5 15 16 6.5" />
+                            </svg>
+                          </span>
+                          <span className="text-[13px] font-semibold">
+                            {grupo.proveedorNombre}
+                          </span>
+                        </label>
+                        <ul className="mt-2 space-y-1.5">
+                          {grupo.items.map((item) => {
+                            const marcado = compraMarcados.has(item.productoId)
+                            return (
+                              <li
+                                key={item.productoId}
+                                className={`flex items-center gap-3 text-[12.5px] ${
+                                  marcado ? '' : 'opacity-50'
+                                }`}
+                              >
+                                <label className="flex shrink-0 cursor-pointer items-center">
+                                  <input
+                                    type="checkbox"
+                                    className="peer sr-only"
+                                    checked={marcado}
+                                    disabled={
+                                      comprandoRequisicionId !== null
+                                    }
+                                    onChange={() =>
+                                      alternarItemCompra(item.productoId)
+                                    }
+                                    aria-label={`Comprar ${item.nombre}`}
+                                  />
+                                  <span
+                                    aria-hidden="true"
+                                    className="check-box"
+                                  >
+                                    <svg viewBox="0 0 20 20">
+                                      <path d="M4 10.5 8.5 15 16 6.5" />
+                                    </svg>
+                                  </span>
+                                </label>
+                                <span className="min-w-0 flex-1 break-words">
+                                  <span className="font-medium">
+                                    {item.nombre}
+                                  </span>{' '}
+                                  <span className="text-gonper-muted">
+                                    · {numero.format(item.cantidad)} ×{' '}
+                                    {moneda.format(item.precioUnitario)}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 font-semibold tabular-nums">
+                                  {moneda.format(item.subtotal)}
+                                </span>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                        <p className="mt-2 border-t border-gonper-border pt-2 text-right text-[12px] text-gonper-muted">
+                          Subtotal{' '}
+                          <span className="text-[13px] font-semibold tabular-nums text-gonper-text">
+                            {moneda.format(subtotalVisible)}
+                          </span>
+                        </p>
+                      </div>
+                    )
+                  })}
                 </div>
                 <p className="mt-4 text-right text-[13px] text-gonper-muted">
                   Total estimado{' '}
                   <span className="text-[15px] font-semibold tabular-nums text-gonper-text">
-                    {moneda.format(
-                      compraRequisicion.grupos.reduce(
-                        (acc, grupo) => acc + grupo.subtotal,
-                        0,
-                      ),
-                    )}
+                    {moneda.format(compraTotalVisible)}
                   </span>
                 </p>
               </>
