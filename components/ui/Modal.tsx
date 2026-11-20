@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 type ModalProps = {
@@ -32,6 +33,20 @@ export default function Modal({
   const cerrandoPorCodigo = useRef(false)
   const titleId = useId()
 
+  // El diálogo vive fuera del árbol de la página (portal a body):
+  // si queda dentro de un <ViewTransition>, cada cambio de estado
+  // dentro del diálogo dispara una instantánea que en Chrome deja el
+  // diálogo desplazado cuando su contenido está desplazado (bug
+  // 2026-11-20: al picar un checkbox con el diálogo abajo, el pie
+  // quedaba a mitad y el encabezado se perdía). Fuera del subárbol,
+  // la instantánea ya no lo incluye. El portal necesita document,
+  // así que el primer render espera al montaje (un frame después).
+  const [montado, setMontado] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMontado(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   useEffect(() => {
     const dialog = ref.current
     if (!dialog) return
@@ -49,9 +64,11 @@ export default function Modal({
       cerrandoPorCodigo.current = true
       dialog.close()
     }
-  }, [open])
+  }, [open, montado])
 
-  return (
+  if (!montado) return null
+
+  return createPortal(
     <dialog
       ref={ref}
       className={`${variant === 'sheet' ? 'sheet-panel' : 'modal-panel'} ${
@@ -100,6 +117,7 @@ export default function Modal({
           </div>
         )}
       </div>
-    </dialog>
+    </dialog>,
+    document.body,
   )
 }
