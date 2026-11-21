@@ -1,6 +1,5 @@
 import { createClient, esUsuarioAdmin } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
-import TransicionPagina from '@/components/ui/TransicionPagina'
 import {
   calcularFaltantePorOrden,
   type FaltantePorOrden,
@@ -239,8 +238,12 @@ export default async function ComprasPage({
     }
   }
 
+  // Experimento 2026-11-20 (bug hueco blanco al picar checkboxes con
+  // el diálogo desplazado): TransicionPagina quitada TEMPORALMENTE
+  // para aislar si la causa es el <ViewTransition>. Si el bug
+  // desaparece, la causa es la transición y se busca sacar el diálogo
+  // del límite sin perder las animaciones; si sigue, se descarta.
   return (
-    <TransicionPagina>
     <ComprasClient
       faltantes={faltantes}
       proveedores={proveedores || []}
@@ -251,7 +254,6 @@ export default async function ComprasPage({
       comprarInicial={comprarInicial}
       esAdmin={esAdmin}
     />
-    </TransicionPagina>
   )
 }
 
