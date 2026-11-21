@@ -108,7 +108,7 @@ export default function Modal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
 
         {footer && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gonper-border bg-gonper-bg/60 px-5 py-3">

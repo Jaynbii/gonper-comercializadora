@@ -62,9 +62,6 @@ export async function extraerItemsConGemini(pdfPath: string) {
   }
   const base64 = Buffer.from(bytes).toString('base64')
 
-  const controlador = new AbortController()
-  const temporizador = setTimeout(() => controlador.abort(), 30_000)
-
   let respuestaGemini: Response
   try {
     respuestaGemini = await fetch(
@@ -76,13 +73,14 @@ export async function extraerItemsConGemini(pdfPath: string) {
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify(construirCuerpoGemini(mimeType, base64)),
-        signal: controlador.signal,
+        // Timeout declarativo (Modern Web Guidance, js/abort-signal-timeout):
+        // sin controlador ni temporizador manual; si vence, el fetch
+        // rechaza con TimeoutError y el catch genérico devuelve null igual.
+        signal: AbortSignal.timeout(30_000),
       },
     )
   } catch {
     return null
-  } finally {
-    clearTimeout(temporizador)
   }
 
   if (!respuestaGemini.ok) {
