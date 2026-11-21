@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 type ModalProps = {
@@ -32,6 +33,19 @@ export default function Modal({
   const cerrandoPorCodigo = useRef(false)
   const titleId = useId()
 
+  // El diálogo se renderiza con portal a body: vive fuera del árbol
+  // de la página, que es lo estándar para diálogos. OJO: el portal
+  // NO es la corrección del hueco blanco del 2026-11-20 (esa fue el
+  // overflow: clip de globals.css; el <ViewTransition> quedó
+  // descartado con experimento). Se quedó porque ya estaba verificado
+  // junto con el arreglo. El portal necesita document, así que el
+  // primer render espera al montaje (un frame después).
+  const [montado, setMontado] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMontado(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   useEffect(() => {
     const dialog = ref.current
     if (!dialog) return
@@ -49,9 +63,11 @@ export default function Modal({
       cerrandoPorCodigo.current = true
       dialog.close()
     }
-  }, [open])
+  }, [open, montado])
 
-  return (
+  if (!montado) return null
+
+  return createPortal(
     <dialog
       ref={ref}
       className={`${variant === 'sheet' ? 'sheet-panel' : 'modal-panel'} ${
@@ -100,6 +116,7 @@ export default function Modal({
           </div>
         )}
       </div>
-    </dialog>
+    </dialog>,
+    document.body,
   )
 }

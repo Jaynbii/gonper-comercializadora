@@ -500,7 +500,13 @@ dialog.modal-panel {
   border-radius: 12px;
   background-color: var(--color-gonper-surface);
   color: inherit;
-  overflow: hidden;
+  /* clip (no hidden): el diálogo NUNCA debe desplazarse; el único
+     desplazamiento es el del cuerpo interno. Con hidden, el diálogo
+     es un contenedor con scroll y al picar un checkbox con el cuerpo
+     desplazado el navegador desplazaba el diálogo entero (~350 px):
+     el encabezado se perdía y el pie quedaba a mitad con un hueco
+     blanco debajo (bug 2026-11-20). clip lo hace imposible. */
+  overflow: clip;
   box-shadow: var(--shadow-pop);
   opacity: 0;
   transform: translateY(16px) scale(0.97);
@@ -564,7 +570,9 @@ dialog.sheet-panel {
   border-radius: 14px 14px 0 0;
   background-color: var(--color-gonper-surface);
   color: inherit;
-  overflow: hidden;
+  /* clip (no hidden): mismo motivo que .modal-panel (bug 2026-11-20):
+     la hoja nunca debe desplazarse; solo su cuerpo interno. */
+  overflow: clip;
   padding-bottom: env(safe-area-inset-bottom);
   box-shadow: var(--shadow-raise);
   transform: translateY(100%);
