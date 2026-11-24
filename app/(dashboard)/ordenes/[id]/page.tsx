@@ -5,13 +5,14 @@ import { notFound } from 'next/navigation'
 import { CheckCircle2, ChevronLeft, Package, TriangleAlert, ShoppingCart } from 'lucide-react'
 import BotonSurtir from './BotonSurtir'
 import BotonFacturaFirmada from './BotonFacturaFirmada'
-import CotejoSurtido from './CotejoSurtido'
+import CotejoArticulos from './CotejoArticulos'
 import ProcesarPdfButton from '../ProcesarPdfButton'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import TransicionPagina from '@/components/ui/TransicionPagina'
 import LineaTiempo from '@/components/ui/LineaTiempo'
 import { lineaTiempoOrden } from '@/utils/progresoRequisicion'
 import { estadoCotejoItem } from '@/utils/cotejoRequisicion'
+import type { FilaCotejo } from '@/utils/filtroCotejo'
 import { esRequisicionCompleta } from '@/utils/requisicionesCompletas'
 
 type Producto = {
@@ -40,8 +41,6 @@ type Orden = {
   clientes: { nombre: string } | { nombre: string }[] | null
   orden_items: ItemOrden[]
 }
-
-const numero = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
 
 const fecha = new Intl.DateTimeFormat('es-MX', {
   dateStyle: 'long',
@@ -150,6 +149,33 @@ export default async function OrdenDetallePage({
     surtidoEn,
     firmadaEn: facturaFirmadaEn,
     surtidoDetalle,
+  })
+
+  // Filas del cotejo con el estado ya calculado (Alex, 2026-11-24):
+  // el componente cliente las filtra por artículo sin volver a pedir
+  // datos al servidor.
+  const filas: FilaCotejo[] = items.map((item) => {
+    const producto = productoDe(item)
+    const solicitado = Number(item.cantidad_solicitada)
+    const stock = Number(producto?.stock_actual) || 0
+    const surtido = Number(item.cantidad_surtida) || 0
+    const { aSurtir, faltante, estado } = estadoCotejoItem({
+      solicitado,
+      surtido,
+      stock,
+    })
+    return {
+      id: item.id,
+      nombre: producto?.nombre || 'Producto eliminado',
+      sku: producto?.sku || '',
+      unidad: item.unidad || producto?.unidad_medida || '',
+      solicitado,
+      stock,
+      surtido,
+      aSurtir,
+      faltante,
+      estado,
+    }
   })
 
   // Sello "SURTIDA" de la tabla de cotejo (Alex, 2026-11-17): solo
@@ -359,18 +385,6 @@ export default async function OrdenDetallePage({
       </section>
 
       <section className="card mt-4 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-gonper-border px-5 py-3.5">
-          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
-            Cotejo de inventario
-          </h2>
-          <span className="flex items-center gap-2">
-            {completa && <Badge tono="success">Surtida</Badge>}
-            <span className="text-[11.5px] text-gonper-muted">
-              {items.length} {items.length === 1 ? 'artículo' : 'artículos'}
-            </span>
-          </span>
-        </div>
-
         {items.length === 0 ? (
           <div className="px-5 py-12 text-center">
             <Package
@@ -404,227 +418,13 @@ export default async function OrdenDetallePage({
             )}
           </div>
         ) : (
-          <CotejoSurtido surtida={completa}>
-            <div className="divide-y divide-gonper-border md:hidden">
-              {items.map((item) => {
-                const producto = productoDe(item)
-                const solicitado = Number(item.cantidad_solicitada)
-                const stock = Number(producto?.stock_actual) || 0
-                const unidad = item.unidad || producto?.unidad_medida || ''
-                const surtido = Number(item.cantidad_surtida) || 0
-                // El faltante se calcula sobre lo que queda por surtir
-                // (Alex, 2026-11-24): antes se comparaba el stock
-                // contra lo solicitado total y un artículo ya
-                // entregado seguía con faltante y en rojo.
-                const { aSurtir, faltante } = estadoCotejoItem({
-                  solicitado,
-                  surtido,
-                  stock,
-                })
-
-                return (
-                  <article key={item.id} className="min-w-0 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-[14px] font-semibold leading-snug">
-                          {producto?.nombre || 'Producto eliminado'}
-                        </h3>
-                        <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
-                          {producto?.sku || '—'}
-                        </p>
-                      </div>
-                      <Badge
-                        tono={
-                          faltante === 0
-                            ? 'success'
-                            : aSurtir > 0
-                              ? 'warning'
-                              : 'danger'
-                        }
-                      >
-                        {faltante === 0
-                          ? 'Completo'
-                          : aSurtir > 0
-                            ? 'Parcial'
-                            : 'Sin stock'}
-                      </Badge>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gonper-border pt-3">
-                      <div>
-                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
-                          Solicitado
-                        </p>
-                        <p className="mt-1 text-[16px] font-semibold tabular-nums">
-                          {numero.format(solicitado)}
-                          {unidad && (
-                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                              {unidad}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
-                          En stock
-                        </p>
-                        <p
-                          className={`mt-1 text-[16px] font-semibold tabular-nums ${
-                            stock === 0 ? 'text-gonper-danger' : 'text-gonper-text'
-                          }`}
-                        >
-                          {numero.format(stock)}
-                          {unidad && (
-                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                              {unidad}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gonper-muted">
-                          Faltante
-                        </p>
-                        <p
-                          className={`mt-1 text-[16px] font-semibold tabular-nums ${
-                            faltante > 0
-                              ? 'text-gonper-danger'
-                              : 'text-gonper-success'
-                          }`}
-                        >
-                          {numero.format(faltante)}
-                          {unidad && (
-                            <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                              {unidad}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {(orden.estado === 'ENTREGADA' ||
-                      orden.estado === 'PARCIAL') && (
-                      <p className="mt-2 flex items-center justify-between border-t border-gonper-border pt-2 text-[12px]">
-                        <span className="text-gonper-muted">Surtido</span>
-                        <span className="font-semibold tabular-nums">
-                          {numero.format(surtido)} {unidad}
-                        </span>
-                      </p>
-                    )}
-                  </article>
-                )
-              })}
-            </div>
-
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-gonper-border bg-gonper-bg/60 text-[10.5px] font-medium uppercase tracking-[0.1em] text-gonper-muted">
-                    <th className="px-5 py-3 font-medium">Artículo</th>
-                    <th className="px-4 py-3 text-center font-medium">
-                      Solicitado
-                    </th>
-                    <th className="px-4 py-3 text-center font-medium">
-                      En stock
-                    </th>
-                    <th className="px-4 py-3 text-center font-medium">
-                      Faltante
-                    </th>
-                    {(orden.estado === 'ENTREGADA' ||
-                      orden.estado === 'PARCIAL') && (
-                      <th className="px-4 py-3 text-center font-medium">
-                        Surtido
-                      </th>
-                    )}
-                    <th className="px-5 py-3 text-center font-medium">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gonper-border">
-                  {items.map((item) => {
-                    const producto = productoDe(item)
-                    const solicitado = Number(item.cantidad_solicitada)
-                    const stock = Number(producto?.stock_actual) || 0
-                    const unidad = item.unidad || producto?.unidad_medida || ''
-                    const surtido = Number(item.cantidad_surtida) || 0
-                    // El faltante se calcula sobre lo que queda por
-                    // surtir (Alex, 2026-11-24): ver el cotejo móvil.
-                    const { aSurtir, faltante } = estadoCotejoItem({
-                      solicitado,
-                      surtido,
-                      stock,
-                    })
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className="transition-colors duration-[120ms] hover:bg-gonper-hover"
-                      >
-                        <td className="px-5 py-3.5">
-                          <p className="text-[13.5px] font-medium">
-                            {producto?.nombre || 'Producto eliminado'}
-                          </p>
-                          <p className="mt-0.5 font-mono text-[11px] text-gonper-muted">
-                            {producto?.sku || '—'}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums">
-                          {numero.format(solicitado)}
-                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                            {unidad}
-                          </span>
-                        </td>
-                        <td
-                          className={`px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums ${
-                            stock === 0 ? 'text-gonper-danger' : ''
-                          }`}
-                        >
-                          {numero.format(stock)}
-                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                            {unidad}
-                          </span>
-                        </td>
-                        <td
-                          className={`px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums ${
-                            faltante > 0
-                              ? 'text-gonper-danger'
-                              : 'text-gonper-success'
-                          }`}
-                        >
-                          {numero.format(faltante)}
-                          <span className="ml-1 text-[10.5px] font-normal text-gonper-muted">
-                            {unidad}
-                          </span>
-                        </td>
-                        {(orden.estado === 'ENTREGADA' ||
-                          orden.estado === 'PARCIAL') && (
-                          <td className="px-4 py-3.5 text-center text-[13px] font-semibold tabular-nums">
-                            {numero.format(surtido)}
-                          </td>
-                        )}
-                        <td className="px-5 py-3.5 text-center">
-                          <Badge
-                            tono={
-                              faltante === 0
-                                ? 'success'
-                                : aSurtir > 0
-                                  ? 'warning'
-                                  : 'danger'
-                            }
-                          >
-                            {faltante === 0
-                              ? 'Completo'
-                              : aSurtir > 0
-                                ? 'Parcial'
-                                : 'Sin stock'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CotejoSurtido>
+          <CotejoArticulos
+            filas={filas}
+            muestraSurtido={
+              orden.estado === 'ENTREGADA' || orden.estado === 'PARCIAL'
+            }
+            surtida={completa}
+          />
         )}
       </section>
     </div>
