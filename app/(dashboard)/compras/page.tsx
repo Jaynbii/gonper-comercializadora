@@ -2,7 +2,7 @@ import { createClient, esUsuarioAdmin } from '@/utils/supabase/server'
 import ComprasClient from './ComprasClient'
 import TransicionPagina from '@/components/ui/TransicionPagina'
 import {
-  calcularFaltantePorOrden,
+  calcularFaltantesConStockRepartido,
   type FaltantePorOrden,
   type PrecioProveedor,
   type ProductoStock,
@@ -179,11 +179,20 @@ export default async function ComprasPage({
       ? clientes[0]?.nombre || 'Cliente desconocido'
       : clientes?.nombre || 'Cliente desconocido'
 
-  const faltantesPorOrden: FaltantePorOrden[] = (
-    (ordenesActivas as unknown as OrdenActiva[] | null) || []
-  )
-    .map((orden) =>
-      calcularFaltantePorOrden({
+  // Reparto de stock por antigüedad (Alex, 2026-11-23): las
+  // requisiciones se calculan de la más antigua a la más reciente y
+  // cada una consume del stock lo que le toca; lo que sobra pasa a la
+  // siguiente. Antes, cada requisición restaba el stock completo por
+  // su cuenta y un producto pedido en varias quedaba con faltante 0
+  // en todas las tarjetas aunque juntas sí les faltara. Las más
+  // antiguas primero: son las que Alex y su jefe priorizan cada mañana.
+  const ordenesPorAntiguedad = [
+    ...((ordenesActivas as unknown as OrdenActiva[] | null) || []),
+  ].sort((a, b) => a.created_at.localeCompare(b.created_at))
+
+  const faltantesPorOrden: FaltantePorOrden[] =
+    calcularFaltantesConStockRepartido({
+      ordenes: ordenesPorAntiguedad.map((orden) => ({
         ordenId: orden.id,
         folio: orden.folio,
         clienteNombre: nombreCliente(orden.clientes),
@@ -194,12 +203,10 @@ export default async function ComprasPage({
           cantidadSolicitada: Number(item.cantidad_solicitada) || 0,
           cantidadSurtida: Number(item.cantidad_surtida) || 0,
         })),
-        productos: productosMap,
-        preciosPorProducto,
-      }),
-    )
-    // Las más antiguas primero: son las que Alex y su jefe priorizan cada mañana.
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      })),
+      productos: productosMap,
+      preciosPorProducto,
+    })
 
   // 5. Vínculo compra -> requisición (Fase 1c ampliada). La columna
   // requisition_id solo existe después de correr la migración

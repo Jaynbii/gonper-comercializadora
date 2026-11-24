@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   calcularFaltantePorOrden,
+  calcularFaltantesConStockRepartido,
   consolidarFaltantesSeleccionados,
   proveedorSugerido,
   agruparCompraPorProveedor,
@@ -390,4 +391,226 @@ test('compra parcial: con todo marcado los grupos quedan iguales', () => {
   assert.equal(visibles.length, 2)
   assert.equal(visibles[0].subtotal, 3408)
   assert.equal(visibles[1].subtotal, 720)
+})
+
+// Reparto de stock por antigüedad (Alex, 2026-11-23): caso real de
+// producción — Escoba de espigas reforzadas, pedían 86 entre 4
+// requisiciones y había 70 en stock. Antes, las 4 tarjetas decían
+// faltante 0; con el reparto faltan 16 en total, igual que en General.
+const productosEscoba = new Map([
+  [
+    'prod-escoba',
+    {
+      id: 'prod-escoba',
+      nombre: 'Escoba de espigas reforzadas',
+      sku: 'ART0002',
+      unidadMedida: 'PIEZA',
+      stockActual: 70,
+    },
+  ],
+])
+
+const preciosEscoba = new Map([
+  [
+    'prod-escoba',
+    [{ proveedorId: 'prov-maz', proveedorNombre: 'MazLimpio', precioUnitario: 63 }],
+  ],
+])
+
+const ordenesEscoba = (cantidades: number[]) =>
+  cantidades.map((cantidad, i) => ({
+    ordenId: `ord-${i + 1}`,
+    folio: `REQ-000${i + 1}`,
+    clienteNombre: 'Cliente',
+    estado: 'PENDIENTE',
+    createdAt: `2026-11-1${i}`,
+    items: [
+      { productoId: 'prod-escoba', cantidadSolicitada: cantidad, cantidadSurtida: 0 },
+    ],
+  }))
+
+test('reparto: la más antigua se surte con el stock y las siguientes compran lo que falta (caso escoba 86/70)', () => {
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: ordenesEscoba([5, 5, 70, 6]),
+    productos: productosEscoba,
+    preciosPorProducto: preciosEscoba,
+  })
+
+  assert.equal(resultados.length, 4)
+  // Las dos primeras se cubren con stock; la tercera solo alcanza a
+  // surtir 60 de 70 y la cuarta ya no tiene stock.
+  assert.equal(resultados[0].faltantes.length, 0)
+  assert.equal(resultados[1].faltantes.length, 0)
+  assert.equal(resultados[2].faltantes.length, 1)
+  assert.equal(resultados[2].faltantes[0].faltante, 10)
+  assert.equal(resultados[2].faltantes[0].enStock, 60)
+  assert.equal(resultados[2].costoEstimadoTotal, 630)
+  assert.equal(resultados[2].porcentajeSurtible, 86)
+  assert.equal(resultados[3].faltantes.length, 1)
+  assert.equal(resultados[3].faltantes[0].faltante, 6)
+  assert.equal(resultados[3].faltantes[0].enStock, 0)
+  assert.equal(resultados[3].costoEstimadoTotal, 378)
+  assert.equal(resultados[3].porcentajeSurtible, 0)
+  // Lo que toma cada una del stock: 5 + 5 + 60 + 0 = 70, todo el stock.
+  assert.deepEqual(resultados[0].consumoStock, [
+    { productoId: 'prod-escoba', cantidad: 5 },
+  ])
+  assert.deepEqual(resultados[1].consumoStock, [
+    { productoId: 'prod-escoba', cantidad: 5 },
+  ])
+  assert.deepEqual(resultados[2].consumoStock, [
+    { productoId: 'prod-escoba', cantidad: 60 },
+  ])
+  assert.deepEqual(resultados[3].consumoStock, [])
+})
+
+test('reparto: la suma de los faltantes por tarjeta cuadra con el consolidado', () => {
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: ordenesEscoba([5, 5, 70, 6]),
+    productos: productosEscoba,
+    preciosPorProducto: preciosEscoba,
+  })
+  const suma = resultados.reduce(
+    (acc, r) => acc + r.faltantes.reduce((a, f) => a + f.faltante, 0),
+    0,
+  )
+  // Total pedido 86 − stock 70 = 16, igual que en la vista General.
+  assert.equal(suma, 16)
+})
+
+test('reparto: el stock cubre a todas, nadie compra', () => {
+  const conStock = new Map([
+    [
+      'prod-escoba',
+      {
+        id: 'prod-escoba',
+        nombre: 'Escoba de espigas reforzadas',
+        sku: 'ART0002',
+        unidadMedida: 'PIEZA',
+        stockActual: 100,
+      },
+    ],
+  ])
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: ordenesEscoba([5, 5, 70, 6]),
+    productos: conStock,
+    preciosPorProducto: preciosEscoba,
+  })
+  assert.deepEqual(
+    resultados.map((r) => r.faltantes.length),
+    [0, 0, 0, 0],
+  )
+})
+
+test('reparto: sin stock, cada una compra todo lo pendiente', () => {
+  const sinStock = new Map([
+    [
+      'prod-escoba',
+      {
+        id: 'prod-escoba',
+        nombre: 'Escoba de espigas reforzadas',
+        sku: 'ART0002',
+        unidadMedida: 'PIEZA',
+        stockActual: 0,
+      },
+    ],
+  ])
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: ordenesEscoba([5, 5, 70, 6]),
+    productos: sinStock,
+    preciosPorProducto: preciosEscoba,
+  })
+  assert.deepEqual(
+    resultados.map((r) => r.faltantes[0]?.faltante),
+    [5, 5, 70, 6],
+  )
+})
+
+test('reparto: lo ya surtido no se vuelve a comprar ni consume stock', () => {
+  const conPocoStock = new Map([
+    [
+      'prod-escoba',
+      {
+        id: 'prod-escoba',
+        nombre: 'Escoba de espigas reforzadas',
+        sku: 'ART0002',
+        unidadMedida: 'PIEZA',
+        stockActual: 2,
+      },
+    ],
+  ])
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: [
+      {
+        ordenId: 'ord-1',
+        folio: 'REQ-0001',
+        clienteNombre: 'Cliente',
+        estado: 'PARCIAL',
+        createdAt: '2026-11-10',
+        items: [
+          { productoId: 'prod-escoba', cantidadSolicitada: 10, cantidadSurtida: 6 },
+        ],
+      },
+      {
+        ordenId: 'ord-2',
+        folio: 'REQ-0002',
+        clienteNombre: 'Cliente',
+        estado: 'PENDIENTE',
+        createdAt: '2026-11-11',
+        items: [
+          { productoId: 'prod-escoba', cantidadSolicitada: 10, cantidadSurtida: 0 },
+        ],
+      },
+    ],
+    productos: conPocoStock,
+    preciosPorProducto: preciosEscoba,
+  })
+  // Primera: pendiente 4, surte 2 con stock, faltan 2.
+  assert.equal(resultados[0].faltantes[0].pendiente, 4)
+  assert.equal(resultados[0].faltantes[0].faltante, 2)
+  assert.deepEqual(resultados[0].consumoStock, [
+    { productoId: 'prod-escoba', cantidad: 2 },
+  ])
+  // Segunda: ya no queda stock, faltan las 10.
+  assert.equal(resultados[1].faltantes[0].faltante, 10)
+  assert.deepEqual(resultados[1].consumoStock, [])
+})
+
+test('reparto: demanda conserva el stock completo para el consolidado de la selección', () => {
+  const resultados = calcularFaltantesConStockRepartido({
+    ordenes: ordenesEscoba([5, 5, 70, 6]),
+    productos: productosEscoba,
+    preciosPorProducto: preciosEscoba,
+  })
+  // Aunque la cuarta ya no vio stock en su turno, su demanda sigue
+  // diciendo 70: el consolidado de la selección lo descuenta una
+  // sola vez de la suma de pendientes, no del restante.
+  for (const r of resultados) {
+    assert.equal(r.demanda.length, 1)
+    assert.equal(r.demanda[0].enStock, 70)
+  }
+  assert.equal(resultados[2].demanda[0].pendiente, 70)
+})
+
+test('stockDisponible limita lo que se puede surtir sin tocar demanda.enStock', () => {
+  const orden = calcularFaltantePorOrden({
+    ordenId: 'ord-1',
+    folio: 'REQ-0001',
+    clienteNombre: 'Cliente',
+    estado: 'PENDIENTE',
+    createdAt: '2026-11-10',
+    items: [
+      { productoId: 'prod-escoba', cantidadSolicitada: 70, cantidadSurtida: 0 },
+    ],
+    productos: productosEscoba,
+    preciosPorProducto: preciosEscoba,
+    stockDisponible: new Map([['prod-escoba', 60]]),
+  })
+  assert.equal(orden.faltantes[0].faltante, 10)
+  assert.equal(orden.faltantes[0].enStock, 60)
+  assert.equal(orden.demanda[0].enStock, 70)
+  assert.deepEqual(orden.consumoStock, [
+    { productoId: 'prod-escoba', cantidad: 60 },
+  ])
+  assert.equal(orden.porcentajeSurtible, 86)
 })
