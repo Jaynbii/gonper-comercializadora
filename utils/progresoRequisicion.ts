@@ -41,6 +41,15 @@ export type PasoLinea = {
   etiqueta: string
   fechaIso: string | null
   estado: EstadoLinea
+  // Qué se entregó en este paso (solo el paso Surtida): una línea
+  // por artículo surtido, p. ej. «Aromatizante fabuloso — 6 PORRON».
+  detalle?: string[]
+}
+
+export type ArticuloSurtido = {
+  nombre: string
+  cantidad: number
+  unidad: string
 }
 
 export type DatosLineaTiempo = {
@@ -49,6 +58,21 @@ export type DatosLineaTiempo = {
   capturadoEn: string | null
   surtidoEn: string | null
   firmadaEn: string | null
+  // Artículos ya entregados (cantidad_surtida > 0): se listan en el
+  // paso Surtida para que quede el registro de la entrega.
+  surtidoDetalle?: ArticuloSurtido[]
+}
+
+const numeroLinea = new Intl.NumberFormat('es-MX')
+
+// Una línea por artículo entregado: nombre, cantidad y unidad.
+function lineasSurtido(detalle: ArticuloSurtido[]): string[] {
+  return detalle
+    .filter((d) => (Number(d.cantidad) || 0) > 0)
+    .map(
+      (d) =>
+        `${d.nombre} — ${numeroLinea.format(Number(d.cantidad) || 0)}${d.unidad ? ` ${d.unidad}` : ''}`,
+    )
 }
 
 // Línea de tiempo de la requisición: Creada → Artículos capturados
@@ -57,29 +81,39 @@ export type DatosLineaTiempo = {
 // cancelada corta la línea: se muestran solo los pasos que sí
 // ocurrieron y un paso final "Cancelada".
 export function lineaTiempoOrden(datos: DatosLineaTiempo): PasoLinea[] {
-  const { estado, creadoEn, capturadoEn, surtidoEn, firmadaEn } = datos
+  const { estado, creadoEn, capturadoEn, surtidoEn, firmadaEn, surtidoDetalle } =
+    datos
   const cancelada = estado === 'CANCELADA'
   const surtida = estado === 'ENTREGADA' || estado === 'PARCIAL'
-  const crudos: { etiqueta: string; fechaIso: string | null; hecho: boolean }[] =
-    [
-      { etiqueta: 'Creada', fechaIso: creadoEn, hecho: creadoEn !== null },
-      {
-        etiqueta: 'Artículos capturados',
-        fechaIso: capturadoEn,
-        hecho: capturadoEn !== null,
-      },
-      {
-        etiqueta:
-          estado === 'PARCIAL' ? 'Surtida parcialmente' : 'Surtida',
-        fechaIso: surtidoEn,
-        hecho: surtida,
-      },
-      {
-        etiqueta: 'Factura firmada',
-        fechaIso: firmadaEn,
-        hecho: firmadaEn !== null,
-      },
-    ]
+  // Qué se entregó hasta ahora: solo se muestra cuando hay al menos
+  // un artículo con cantidad surtida.
+  const detalleSurtido =
+    surtida && surtidoDetalle ? lineasSurtido(surtidoDetalle) : []
+  const crudos: {
+    etiqueta: string
+    fechaIso: string | null
+    hecho: boolean
+    detalle?: string[]
+  }[] = [
+    { etiqueta: 'Creada', fechaIso: creadoEn, hecho: creadoEn !== null },
+    {
+      etiqueta: 'Artículos capturados',
+      fechaIso: capturadoEn,
+      hecho: capturadoEn !== null,
+    },
+    {
+      etiqueta:
+        estado === 'PARCIAL' ? 'Surtida parcialmente' : 'Surtida',
+      fechaIso: surtidoEn,
+      hecho: surtida,
+      detalle: detalleSurtido.length > 0 ? detalleSurtido : undefined,
+    },
+    {
+      etiqueta: 'Factura firmada',
+      fechaIso: firmadaEn,
+      hecho: firmadaEn !== null,
+    },
+  ]
   const lista = cancelada ? crudos.filter((p) => p.hecho) : crudos
   let actualAsignado = false
   const pasos: PasoLinea[] = lista.map((p) => {
@@ -88,6 +122,7 @@ export function lineaTiempoOrden(datos: DatosLineaTiempo): PasoLinea[] {
         etiqueta: p.etiqueta,
         fechaIso: p.fechaIso,
         estado: 'completado' as const,
+        detalle: p.detalle,
       }
     }
     if (!actualAsignado) {
