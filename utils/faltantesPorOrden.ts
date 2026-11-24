@@ -69,6 +69,10 @@ export type FaltantePorOrden = {
   // para recalcular el consolidado de las órdenes seleccionadas
   // descontando el stock una sola vez.
   demanda: { productoId: string; pendiente: number; enStock: number }[]
+  // Lo que esta requisición toma del stock (suma de lo que se surte
+  // con stock por producto). Sirve para repartir el stock entre
+  // requisiciones: lo que toma una ya no está para la siguiente.
+  consumoStock: { productoId: string; cantidad: number }[]
 }
 
 // Devuelve el vínculo con el precio unitario positivo más bajo (proveedor sugerido para comprar), o null si ninguno tiene precio válido.
@@ -85,6 +89,14 @@ export function proveedorSugerido(
 }
 
 // Calcula por requisición cuánto se puede surtir con el stock actual y cuánto falta comprar, con proveedor sugerido (el más barato) y costo estimado; el stock se descuenta una sola vez entre artículos del mismo producto.
+//
+// `stockDisponible` (opcional) es el stock que le queda a ESTA
+// requisición en su turno del reparto por antigüedad: si viene, lo
+// que se surte con stock se calcula contra él y no contra el stock
+// completo. `demanda[].enStock` SIEMPRE lleva el stock completo del
+// producto, no el restante: el consolidado de la selección en
+// Compras lo descuenta una sola vez de la suma de pendientes, y si
+// llevara el restante lo restaría de menos y compraría de más.
 export function calcularFaltantePorOrden(args: {
   ordenId: string
   folio: string
@@ -94,14 +106,16 @@ export function calcularFaltantePorOrden(args: {
   items: ItemDemanda[]
   productos: Map<string, ProductoStock>
   preciosPorProducto: Map<string, PrecioProveedor[]>
+  stockDisponible?: Map<string, number>
 }): FaltantePorOrden {
-  const { ordenId, folio, clienteNombre, estado, createdAt, items, productos, preciosPorProducto } =
+  const { ordenId, folio, clienteNombre, estado, createdAt, items, productos, preciosPorProducto, stockDisponible } =
     args
 
   let solicitadoTotal = 0
   let surtibleTotal = 0
   const faltantes: FaltantePorOrdenItem[] = []
   const demanda: { productoId: string; pendiente: number; enStock: number }[] = []
+  const consumo = new Map<string, number>()
 
   for (const item of items) {
     const producto = productos.get(item.productoId)
@@ -110,12 +124,23 @@ export function calcularFaltantePorOrden(args: {
     const surtida = Number(item.cantidadSurtida) || 0
     const pendiente = Math.max(0, solicitada - surtida)
     const enStock = Number(producto.stockActual) || 0
-    const aSurtir = Math.min(enStock, pendiente)
+    // En el reparto, lo que se puede surtir se limita a lo que queda
+    // en el turno de esta requisición; sin reparto es el stock completo.
+    const disponible = stockDisponible
+      ? Math.max(0, stockDisponible.get(item.productoId) ?? 0)
+      : enStock
+    const aSurtir = Math.min(disponible, pendiente)
     const faltante = pendiente - aSurtir
 
     solicitadoTotal += solicitada
     surtibleTotal += surtida + aSurtir
     if (pendiente > 0) demanda.push({ productoId: item.productoId, pendiente, enStock })
+    if (aSurtir > 0) {
+      consumo.set(
+        item.productoId,
+        (consumo.get(item.productoId) || 0) + aSurtir,
+      )
+    }
 
     if (faltante <= 0) continue
 
@@ -130,7 +155,7 @@ export function calcularFaltantePorOrden(args: {
       cantidadSolicitada: solicitada,
       cantidadSurtida: surtida,
       pendiente,
-      enStock,
+      enStock: disponible,
       faltante,
       proveedorSugerido: sugerido,
       costoEstimado: sugerido ? faltante * sugerido.precioUnitario : null,
@@ -156,7 +181,68 @@ export function calcularFaltantePorOrden(args: {
     ),
     tieneSinPrecio: faltantes.some((f) => f.costoEstimado === null),
     demanda,
+    consumoStock: [...consumo.entries()].map(([productoId, cantidad]) => ({
+      productoId,
+      cantidad,
+    })),
   }
+}
+
+// Reparto de stock por antigüedad (Alex, 2026-11-23): calcula el
+// faltante de varias requisiciones en el orden dado — el llamador las
+// pasa ya ordenadas de la más antigua a la más reciente — y cada una
+// consume del stock lo que le toca; lo que sobra pasa a la siguiente.
+//
+// Antes, cada requisición restaba el stock completo por su cuenta y
+// un producto pedido en varias quedaba con faltante 0 en todas las
+// tarjetas aunque juntas sí les faltara (Escoba de espigas: pedían 86,
+// había 70, faltaban 16 consolidadas y ninguna tarjeta lo mostraba).
+// Con el reparto, la suma de los faltantes por tarjeta cuadra con el
+// faltante consolidado de la vista General.
+//
+// El reparto solo decide cuánto hay que COMPRAR por requisición; no
+// aparta ni reserva stock: al surtir, cada requisición toma del stock
+// real que haya en ese momento, así que si se surte en otro orden los
+// números se mueven, pero el total a comprar sigue siendo el mismo.
+export function calcularFaltantesConStockRepartido(args: {
+  ordenes: {
+    ordenId: string
+    folio: string
+    clienteNombre: string
+    estado: string
+    createdAt: string
+    items: ItemDemanda[]
+  }[]
+  productos: Map<string, ProductoStock>
+  preciosPorProducto: Map<string, PrecioProveedor[]>
+}): FaltantePorOrden[] {
+  const stockRestante = new Map<string, number>(
+    [...args.productos.entries()].map(([id, p]) => [
+      id,
+      Number(p.stockActual) || 0,
+    ]),
+  )
+  return args.ordenes.map((orden) => {
+    const resultado = calcularFaltantePorOrden({
+      ordenId: orden.ordenId,
+      folio: orden.folio,
+      clienteNombre: orden.clienteNombre,
+      estado: orden.estado,
+      createdAt: orden.createdAt,
+      items: orden.items,
+      productos: args.productos,
+      preciosPorProducto: args.preciosPorProducto,
+      stockDisponible: stockRestante,
+    })
+    for (const toma of resultado.consumoStock) {
+      const restante = stockRestante.get(toma.productoId) ?? 0
+      stockRestante.set(
+        toma.productoId,
+        Math.max(0, restante - toma.cantidad),
+      )
+    }
+    return resultado
+  })
 }
 
 // Compra por requisición (Fase 1b): agrupa el faltante de UNA
