@@ -69,6 +69,18 @@ export default function LineaTiempo({ pasos }: { pasos: PasoLinea[] }) {
                       ? 'La requisición no sigue avanzando'
                       : ''}
               </p>
+              {paso.detalle && paso.detalle.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {paso.detalle.map((linea) => (
+                    <li
+                      key={linea}
+                      className="text-[12px] leading-snug text-gonper-muted"
+                    >
+                      {linea}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </li>
         )

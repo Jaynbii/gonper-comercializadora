@@ -11,6 +11,7 @@ import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import TransicionPagina from '@/components/ui/TransicionPagina'
 import LineaTiempo from '@/components/ui/LineaTiempo'
 import { lineaTiempoOrden } from '@/utils/progresoRequisicion'
+import { estadoCotejoItem } from '@/utils/cotejoRequisicion'
 import { esRequisicionCompleta } from '@/utils/requisicionesCompletas'
 
 type Producto = {
@@ -131,12 +132,24 @@ export default async function OrdenDetallePage({
           .sort()[0] ?? null
       : null
 
+  // Qué se entregó hasta ahora (Alex, 2026-11-24): los artículos
+  // con cantidad surtida se listan en el paso Surtida de la línea
+  // de tiempo, para que quede el registro de la entrega.
+  const surtidoDetalle = items
+    .filter((item) => (Number(item.cantidad_surtida) || 0) > 0)
+    .map((item) => ({
+      nombre: productoDe(item)?.nombre || 'Producto eliminado',
+      cantidad: Number(item.cantidad_surtida) || 0,
+      unidad: item.unidad || productoDe(item)?.unidad_medida || '',
+    }))
+
   const pasosLineaTiempo = lineaTiempoOrden({
     estado: orden.estado,
     creadoEn: orden.created_at,
     capturadoEn,
     surtidoEn,
     firmadaEn: facturaFirmadaEn,
+    surtidoDetalle,
   })
 
   // Sello "SURTIDA" de la tabla de cotejo (Alex, 2026-11-17): solo
@@ -147,20 +160,33 @@ export default async function OrdenDetallePage({
     facturaFirmadaPath,
   })
 
-  // Hay stock total solo si TODOS los artículos están cubiertos.
+  // Hay stock total solo si TODOS los artículos están cubiertos
+  // con lo que QUEDA por surtir (solicitado menos surtido). Antes se
+  // comparaba contra lo solicitado total y el botón decía "Surtir
+  // parcialmente" aunque el stock alcanzara para lo que quedaba.
   const hayStockTotal =
     items.length > 0 &&
     items.every((item) => {
       const producto = productoDe(item)
+      const pendiente =
+        Number(item.cantidad_solicitada) -
+        (Number(item.cantidad_surtida) || 0)
       return (
-        !!producto &&
-        Number(producto.stock_actual) >= Number(item.cantidad_solicitada)
+        !!producto && Number(producto.stock_actual) >= Math.max(0, pendiente)
       )
     })
 
-  const hayStockParcial = items.some(
-    (item) => Number(productoDe(item)?.stock_actual) > 0,
-  )
+  // Hay stock parcial solo si algún artículo con pendiente tiene stock.
+  // El stock de un artículo ya entregado completo no cuenta: surtir
+  // no movería nada.
+  const hayStockParcial = items.some((item) => {
+    const pendiente =
+      Number(item.cantidad_solicitada) -
+      (Number(item.cantidad_surtida) || 0)
+    return (
+      pendiente > 0 && Number(productoDe(item)?.stock_actual) > 0
+    )
+  })
 
   // Faltante real: lo que queda por surtir después de lo ya
   // surtido y del stock disponible. Así una requisición PARCIAL también
@@ -385,9 +411,16 @@ export default async function OrdenDetallePage({
                 const solicitado = Number(item.cantidad_solicitada)
                 const stock = Number(producto?.stock_actual) || 0
                 const unidad = item.unidad || producto?.unidad_medida || ''
-                const aSurtir = Math.min(stock, solicitado)
-                const faltante = Math.max(0, solicitado - aSurtir)
                 const surtido = Number(item.cantidad_surtida) || 0
+                // El faltante se calcula sobre lo que queda por surtir
+                // (Alex, 2026-11-24): antes se comparaba el stock
+                // contra lo solicitado total y un artículo ya
+                // entregado seguía con faltante y en rojo.
+                const { aSurtir, faltante } = estadoCotejoItem({
+                  solicitado,
+                  surtido,
+                  stock,
+                })
 
                 return (
                   <article key={item.id} className="min-w-0 p-4">
@@ -512,9 +545,14 @@ export default async function OrdenDetallePage({
                     const solicitado = Number(item.cantidad_solicitada)
                     const stock = Number(producto?.stock_actual) || 0
                     const unidad = item.unidad || producto?.unidad_medida || ''
-                    const aSurtir = Math.min(stock, solicitado)
-                    const faltante = Math.max(0, solicitado - aSurtir)
                     const surtido = Number(item.cantidad_surtida) || 0
+                    // El faltante se calcula sobre lo que queda por
+                    // surtir (Alex, 2026-11-24): ver el cotejo móvil.
+                    const { aSurtir, faltante } = estadoCotejoItem({
+                      solicitado,
+                      surtido,
+                      stock,
+                    })
 
                     return (
                       <tr
