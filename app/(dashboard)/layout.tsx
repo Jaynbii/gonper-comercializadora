@@ -1,6 +1,7 @@
 import Sidebar from '@/components/Sidebar'
 import Header from '@/components/Header'
 import ToastHost from '@/components/ui/Toast'
+import FabNuevaRequisicion from '@/components/ui/FabNuevaRequisicion'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -26,6 +27,7 @@ export default async function DashboardLayout({
         </main>
       </div>
       <ToastHost />
+      <FabNuevaRequisicion />
     </div>
   )
 }
