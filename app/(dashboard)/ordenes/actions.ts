@@ -419,6 +419,20 @@ export async function editarItemsOrden(
     return { success: false, error: 'No se pudieron leer los artículos.' }
   }
 
+  // Marca "Sin surtir": consulta aparte y tolerante — si la migración
+  // aún no se corrió en Supabase, la columna no existe y la consulta
+  // falla; se asume todo surtible y la página sigue funcionando.
+  const { data: flagsSinSurtir } = await supabase
+    .from('orden_items')
+    .select('id, sin_surtir')
+    .eq('orden_id', ordenId)
+  const sinSurtirPorId = new Map<string, boolean>(
+    (flagsSinSurtir || []).map((f) => [
+      f.id as string,
+      !!(f as { sin_surtir?: boolean }).sin_surtir,
+    ]),
+  )
+
   // 3. Candado de compra: productos que ya están en una orden de
   // compra de esta requisición. Si la consulta falla, no se edita
   // nada: mejor no guardar que guardar rompiendo una compra.
@@ -469,6 +483,7 @@ export async function editarItemsOrden(
       solicitado: Number(it.cantidad_solicitada) || 0,
       surtido: Number(it.cantidad_surtida) || 0,
       bloqueadoPorCompra: comprados.has(it.producto_id as string),
+      sinSurtir: sinSurtirPorId.get(it.id as string) ?? false,
     }
   })
   const validacion = validarEdicionItems(existentes, items)
@@ -502,10 +517,13 @@ export async function editarItemsOrden(
     const actual = actuales.find((a) => a.id === item.itemId)
     if (!actual) continue
     const unidad = normalizarUnidad(item.unidad) || null
+    const sinSurtir = item.sinSurtir ?? false
+    const sinSurtirActual = sinSurtirPorId.get(item.itemId) ?? false
     if (
       actual.producto_id === item.productoId &&
       Number(actual.cantidad_solicitada) === Number(item.cantidad) &&
-      (actual.unidad ?? null) === unidad
+      (actual.unidad ?? null) === unidad &&
+      sinSurtirActual === sinSurtir
     ) {
       continue
     }
@@ -515,12 +533,15 @@ export async function editarItemsOrden(
         producto_id: item.productoId,
         cantidad_solicitada: item.cantidad,
         unidad,
+        sin_surtir: sinSurtir,
       })
       .eq('id', item.itemId)
     if (error) {
       return {
         success: false,
-        error: `No se pudo guardar un artículo: ${error.message}`,
+        error: error.message.includes('sin_surtir')
+          ? 'Falta correr la migración "Sin surtir" en Supabase para guardar este cambio.'
+          : `No se pudo guardar un artículo: ${error.message}`,
       }
     }
   }
@@ -533,12 +554,15 @@ export async function editarItemsOrden(
         cantidad_solicitada: n.cantidad,
         cantidad_surtida: 0,
         unidad: normalizarUnidad(n.unidad) || null,
+        sin_surtir: n.sinSurtir ?? false,
       })),
     )
     if (error) {
       return {
         success: false,
-        error: `No se pudieron agregar los artículos: ${error.message}`,
+        error: error.message.includes('sin_surtir')
+          ? 'Falta correr la migración "Sin surtir" en Supabase para guardar este cambio.'
+          : `No se pudieron agregar los artículos: ${error.message}`,
       }
     }
   }

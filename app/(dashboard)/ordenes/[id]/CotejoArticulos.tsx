@@ -28,12 +28,14 @@ const TONO_ESTADO = {
   completo: 'success',
   parcial: 'warning',
   'sin-stock': 'danger',
+  'sin-surtir': 'neutral',
 } as const
 
 const ETIQUETA_ESTADO = {
   completo: 'Completo',
   parcial: 'Parcial',
   'sin-stock': 'Sin stock',
+  'sin-surtir': 'Sin surtir',
 } as const
 
 export default function CotejoArticulos({

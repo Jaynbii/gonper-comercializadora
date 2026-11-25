@@ -11,6 +11,7 @@ import {
 type Relacion<T> = T | T[] | null
 
 type ItemActivo = {
+  id: string
   cantidad_solicitada: number | string
   cantidad_surtida: number | string | null
   producto_id: string
@@ -85,13 +86,34 @@ export default async function ComprasPage({
   const { data: ordenesActivas } = await supabase
     .from('ordenes')
     .select(
-      `id, folio, estado, created_at, clientes (nombre), orden_items (cantidad_solicitada, cantidad_surtida, producto_id)`,
+      `id, folio, estado, created_at, clientes (nombre), orden_items (id, cantidad_solicitada, cantidad_surtida, producto_id)`,
     )
     .in('estado', ['PENDIENTE', 'PARCIAL'])
+
+  // Marca "Sin surtir" (Alex, 2026-11-25): consulta aparte y
+  // tolerante — si la migración aún no se corrió, la columna no existe
+  // y la consulta falla; Compras sigue funcionando con todo surtible.
+  const idsActivas = (
+    (ordenesActivas as unknown as OrdenActiva[] | null) || []
+  ).map((o) => o.id)
+  const { data: flagsSinSurtir } =
+    idsActivas.length > 0
+      ? await supabase
+          .from('orden_items')
+          .select('id, sin_surtir')
+          .in('orden_id', idsActivas)
+      : { data: null }
+  const sinSurtirIds = new Set(
+    (flagsSinSurtir || [])
+      .filter((f) => !!(f as { sin_surtir?: boolean }).sin_surtir)
+      .map((f) => f.id as string),
+  )
 
   const demandaPorProducto: Record<string, number> = {}
   ;(ordenesActivas as unknown as OrdenActiva[] | null)?.forEach((orden) => {
     orden.orden_items?.forEach((item: ItemActivo) => {
+      // Solo registro: no genera demanda ni se compra.
+      if (sinSurtirIds.has(item.id)) return
       const pendiente = Number(item.cantidad_solicitada) - Number(item.cantidad_surtida)
       if (pendiente > 0) {
         demandaPorProducto[item.producto_id] = (demandaPorProducto[item.producto_id] || 0) + pendiente
@@ -198,11 +220,15 @@ export default async function ComprasPage({
         clienteNombre: nombreCliente(orden.clientes),
         estado: orden.estado,
         createdAt: orden.created_at,
-        items: (orden.orden_items || []).map((item) => ({
-          productoId: item.producto_id,
-          cantidadSolicitada: Number(item.cantidad_solicitada) || 0,
-          cantidadSurtida: Number(item.cantidad_surtida) || 0,
-        })),
+        // Solo registro: los marcados "Sin surtir" no entran al
+        // cálculo de faltante de esta requisición.
+        items: (orden.orden_items || [])
+          .filter((item) => !sinSurtirIds.has(item.id))
+          .map((item) => ({
+            productoId: item.producto_id,
+            cantidadSolicitada: Number(item.cantidad_solicitada) || 0,
+            cantidadSurtida: Number(item.cantidad_surtida) || 0,
+          })),
       })),
       productos: productosMap,
       preciosPorProducto,

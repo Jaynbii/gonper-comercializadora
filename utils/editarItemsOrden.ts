@@ -9,6 +9,11 @@
 // - Un artículo con orden de compra no se puede modificar en nada ni
 //   quitar (la compra ya lo referencia; cambiar la requisición
 //   dejaría la compra huérfana o inconsistente).
+// - "Sin surtir" (Alex, 2026-11-25): un artículo marcado queda solo
+//   en el registro — no se surte, no se compra, no mueve inventario.
+//   No se puede marcar uno ya surtido ni uno con orden de compra, y
+//   uno marcado no se puede desmarcar si ya entró a compra (el
+//   candado de compra lo cubre igual que cualquier cambio).
 // - La requisición debe quedar con al menos un artículo y sin el
 //   mismo producto dos veces.
 
@@ -19,6 +24,7 @@ export type ItemExistenteEdicion = {
   solicitado: number
   surtido: number
   bloqueadoPorCompra: boolean
+  sinSurtir?: boolean
 }
 
 export type ItemEditado = {
@@ -27,6 +33,7 @@ export type ItemEditado = {
   nombre: string
   cantidad: number
   unidad: string
+  sinSurtir?: boolean
 }
 
 // Una fila del modal de edición: el artículo tal cual está en la
@@ -40,6 +47,7 @@ export type FilaEdicion = {
   solicitado: number
   surtido: number
   bloqueo: 'surtido' | 'compra' | null
+  sinSurtir?: boolean
 }
 
 export type ValidacionEdicion =
@@ -109,7 +117,8 @@ export function validarEdicionItems(
     if (existente.bloqueadoPorCompra) {
       if (
         editado.productoId !== existente.productoId ||
-        editado.cantidad !== existente.solicitado
+        editado.cantidad !== existente.solicitado ||
+        (editado.sinSurtir ?? false) !== (existente.sinSurtir ?? false)
       ) {
         return {
           ok: false,
@@ -129,6 +138,12 @@ export function validarEdicionItems(
         return {
           ok: false,
           error: `La cantidad de ${existente.nombre} no puede ser menor que lo surtido (${existente.surtido}).`,
+        }
+      }
+      if ((editado.sinSurtir ?? false) !== (existente.sinSurtir ?? false)) {
+        return {
+          ok: false,
+          error: `No se puede marcar ${existente.nombre} como Sin surtir: ya se surtieron ${existente.surtido}.`,
         }
       }
     }

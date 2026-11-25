@@ -56,6 +56,18 @@ const filas: FilaCotejo[] = [
     faltante: 2,
     estado: 'parcial',
   },
+  {
+    id: '5',
+    nombre: 'Bolsa Camiseta Grande 25 Kg',
+    sku: 'ART0031',
+    unidad: 'PIEZA',
+    solicitado: 4,
+    stock: 10,
+    surtido: 0,
+    aSurtir: 0,
+    faltante: 0,
+    estado: 'sin-surtir',
+  },
 ]
 
 test('normalizarTexto: ignora mayúsculas y acentos', () => {
@@ -64,7 +76,7 @@ test('normalizarTexto: ignora mayúsculas y acentos', () => {
 })
 
 test('filtrarCotejo: sin búsqueda ni filtro devuelve todo', () => {
-  assert.equal(filtrarCotejo(filas, '', 'todos').length, 4)
+  assert.equal(filtrarCotejo(filas, '', 'todos').length, 5)
 })
 
 test('filtrarCotejo: busca por nombre sin importar acentos', () => {
@@ -118,4 +130,14 @@ test('filtrarCotejo: búsqueda y filtro se combinan', () => {
     ['3'],
   )
   assert.deepEqual(filtrarCotejo(filas, 'porron', 'sin-stock'), [])
+})
+
+test('filtrarCotejo: filtro Sin surtir muestra solo lo marcado', () => {
+  assert.deepEqual(
+    filtrarCotejo(filas, '', 'sin-surtir').map((f) => f.id),
+    ['5'],
+  )
+  // Un artículo Sin surtir no es Sin stock ni Completo aunque tenga stock.
+  assert.deepEqual(filtrarCotejo(filas, '', 'sin-stock').map((f) => f.id), ['2'])
+  assert.deepEqual(filtrarCotejo(filas, '', 'completo').map((f) => f.id), ['1', '3'])
 })

@@ -28,6 +28,7 @@ type FilaEstado = {
   mostrandoCandidatos: boolean
   bloqueo: 'surtido' | 'compra' | null
   surtido: number
+  sinSurtir: boolean
 }
 
 function aEstado(fila: FilaEdicion): FilaEstado {
@@ -43,6 +44,7 @@ function aEstado(fila: FilaEdicion): FilaEstado {
     mostrandoCandidatos: false,
     bloqueo: fila.bloqueo,
     surtido: fila.surtido,
+    sinSurtir: fila.sinSurtir ?? false,
   }
 }
 
@@ -69,6 +71,7 @@ function nuevaFila(key: string): FilaEstado {
     mostrandoCandidatos: false,
     bloqueo: null,
     surtido: 0,
+    sinSurtir: false,
   }
 }
 
@@ -109,14 +112,20 @@ export default function EditarArticulosModal({
   const firma = useMemo(
     () =>
       filasEstado
-        .map((f) => `${f.itemId ?? 'nuevo'}:${f.productoId}:${f.cantidad}`)
+        .map(
+          (f) =>
+            `${f.itemId ?? 'nuevo'}:${f.productoId}:${f.cantidad}:${f.sinSurtir ? '1' : '0'}`,
+        )
         .join('|'),
     [filasEstado],
   )
   const firmaOriginal = useMemo(
     () =>
       filas
-        .map((f) => `${f.itemId}:${f.productoId}:${f.solicitado}`)
+        .map(
+          (f) =>
+            `${f.itemId}:${f.productoId}:${f.solicitado}:${f.sinSurtir ? '1' : '0'}`,
+        )
         .join('|'),
     [filas],
   )
@@ -190,6 +199,7 @@ export default function EditarArticulosModal({
         nombre: fila.nombre,
         cantidad,
         unidad: fila.unidad,
+        sinSurtir: fila.sinSurtir,
       })
     }
     setGuardando(true)
@@ -335,6 +345,29 @@ export default function EditarArticulosModal({
                 <p className="mt-2 text-[12px] text-gonper-muted">
                   Surtido: {fila.surtido} {fila.unidad}
                 </p>
+              )}
+              {/* Sin surtir (Alex, 2026-11-25): solo en filas sin
+                  candado — lo surtido y lo comprado no se puede
+                  marcar, y el servidor lo vuelve a verificar. */}
+              {fila.bloqueo === null && (
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px] leading-snug">
+                  <input
+                    type="checkbox"
+                    checked={fila.sinSurtir}
+                    onChange={(e) =>
+                      actualizar(fila.key, { sinSurtir: e.target.checked })
+                    }
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-gonper-primary"
+                  />
+                  <span>
+                    Sin surtir
+                    <span className="text-gonper-muted">
+                      {' '}
+                      — solo queda en el registro, no se surte ni se
+                      compra.
+                    </span>
+                  </span>
+                </label>
               )}
               {fila.bloqueo === 'surtido' && (
                 <p className="mt-2 flex items-start gap-1.5 text-[12px] text-gonper-muted">

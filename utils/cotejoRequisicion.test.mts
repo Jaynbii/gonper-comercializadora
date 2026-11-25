@@ -50,3 +50,11 @@ test('cotejo: artículo entregado completo aunque haya stock, completo', () => {
   assert.equal(r.faltante, 0)
   assert.equal(r.estado, 'completo')
 })
+
+test('cotejo: artículo marcado Sin surtir no tiene pendiente, a surtir ni faltante aunque haya stock', () => {
+  const r = estadoCotejoItem({ solicitado: 10, surtido: 0, stock: 15, sinSurtir: true })
+  assert.equal(r.pendiente, 0)
+  assert.equal(r.aSurtir, 0)
+  assert.equal(r.faltante, 0)
+  assert.equal(r.estado, 'sin-surtir')
+})

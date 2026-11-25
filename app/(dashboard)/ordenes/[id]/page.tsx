@@ -93,6 +93,23 @@ export default async function OrdenDetallePage({
   const orden = data as unknown as Orden
   const items = orden.orden_items ?? []
 
+  // Marca "Sin surtir" (Alex, 2026-11-25): consulta aparte y
+  // tolerante — si la migración aún no se corrió en Supabase, la
+  // columna no existe y esta consulta falla; el detalle sigue
+  // funcionando con todo surtible.
+  const { data: flagsSinSurtir } = await supabase
+    .from('orden_items')
+    .select('id, sin_surtir')
+    .eq('orden_id', id)
+  const sinSurtirPorId = new Map<string, boolean>(
+    (flagsSinSurtir || []).map((f) => [
+      f.id as string,
+      !!(f as { sin_surtir?: boolean }).sin_surtir,
+    ]),
+  )
+  const esSinSurtir = (itemId: string) =>
+    sinSurtirPorId.get(itemId) ?? false
+
   // Foto de la factura firmada: consulta aparte y tolerante — si la
   // migración aún no se corrió en Supabase, la columna no existe y
   // esta consulta falla; el detalle sigue funcionando sin la foto.
@@ -166,6 +183,7 @@ export default async function OrdenDetallePage({
       solicitado,
       surtido,
       stock,
+      sinSurtir: esSinSurtir(item.id),
     })
     return {
       id: item.id,
@@ -253,16 +271,30 @@ export default async function OrdenDetallePage({
           : surtido > 0
             ? 'surtido'
             : null,
+      sinSurtir: esSinSurtir(item.id),
     }
   })
 
-  // Hay stock total solo si TODOS los artículos están cubiertos
-  // con lo que QUEDA por surtir (solicitado menos surtido). Antes se
-  // comparaba contra lo solicitado total y el botón decía "Surtir
-  // parcialmente" aunque el stock alcanzara para lo que quedaba.
+  // Artículos que sí se pueden surtir: con pendiente y sin la marca
+  // "Sin surtir". Si no hay ninguno, no hay botón de surtir ni
+  // faltante que comprar — los marcados quedan solo en el registro.
+  const hayPendientesSurtibles = items.some((item) => {
+    const pendiente =
+      Number(item.cantidad_solicitada) -
+      (Number(item.cantidad_surtida) || 0)
+    return !esSinSurtir(item.id) && pendiente > 0
+  })
+
+  // Hay stock total solo si TODOS los artículos surtibles están
+  // cubiertos con lo que QUEDA por surtir (solicitado menos surtido).
+  // Antes se comparaba contra lo solicitado total y el botón decía
+  // "Surtir parcialmente" aunque el stock alcanzara para lo que
+  // quedaba. Los marcados "Sin surtir" no cuentan: no se surten.
   const hayStockTotal =
     items.length > 0 &&
+    hayPendientesSurtibles &&
     items.every((item) => {
+      if (esSinSurtir(item.id)) return true
       const producto = productoDe(item)
       const pendiente =
         Number(item.cantidad_solicitada) -
@@ -272,27 +304,30 @@ export default async function OrdenDetallePage({
       )
     })
 
-  // Hay stock parcial solo si algún artículo con pendiente tiene stock.
-  // El stock de un artículo ya entregado completo no cuenta: surtir
-  // no movería nada.
+  // Hay stock parcial solo si algún artículo surtible con pendiente
+  // tiene stock. El stock de un artículo ya entregado completo no
+  // cuenta: surtir no movería nada.
   const hayStockParcial = items.some((item) => {
     const pendiente =
       Number(item.cantidad_solicitada) -
       (Number(item.cantidad_surtida) || 0)
     return (
-      pendiente > 0 && Number(productoDe(item)?.stock_actual) > 0
+      !esSinSurtir(item.id) &&
+      pendiente > 0 &&
+      Number(productoDe(item)?.stock_actual) > 0
     )
   })
 
   // Faltante real: lo que queda por surtir después de lo ya
   // surtido y del stock disponible. Así una requisición PARCIAL también
-  // puede ir a Compras por lo que le falta (Fase 1).
+  // puede ir a Compras por lo que le falta (Fase 1). Los marcados
+  // "Sin surtir" no son faltante: no se compran.
   const hayFaltantes = items.some((item) => {
     const producto = productoDe(item)
     const pendiente =
       Number(item.cantidad_solicitada) - (Number(item.cantidad_surtida) || 0)
     const aSurtir = Math.min(Number(producto?.stock_actual) || 0, pendiente)
-    return pendiente - aSurtir > 0
+    return !esSinSurtir(item.id) && pendiente - aSurtir > 0
   })
 
   const puedeIrACompras =
@@ -383,11 +418,16 @@ export default async function OrdenDetallePage({
             {puedeSurtir ? (
               hayStockParcial ? (
                 <BotonSurtir ordenId={orden.id} esParcial={!hayStockTotal} />
-              ) : (
+              ) : hayPendientesSurtibles ? (
                 <Badge tono="danger">
                   <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} />
                   Sin stock para surtir
                 </Badge>
+              ) : (
+                <p className="text-[12.5px] text-gonper-muted">
+                  Todos los artículos están marcados Sin surtir: no hay nada
+                  que surtir ni comprar.
+                </p>
               )
             ) : orden.estado === 'ENTREGADA' ? (
               <div className="flex flex-col gap-2">
@@ -433,7 +473,9 @@ export default async function OrdenDetallePage({
                 ? 'Tenemos todo en stock: puedes surtir ahora.'
                 : hayStockParcial
                   ? 'Hay stock para una parte: surte lo que hay y compra lo que falta.'
-                  : 'No hay stock para ningún artículo: compra lo que falta para poder surtir.'}
+                  : hayPendientesSurtibles
+                    ? 'No hay stock para ningún artículo: compra lo que falta para poder surtir.'
+                    : 'Todos los artículos están marcados Sin surtir: quedan solo en el registro.'}
             </p>
           )}
         </div>

@@ -28,6 +28,7 @@ export type FiltroCotejo =
   | 'parcial'
   | 'completo'
   | 'surtidos'
+  | 'sin-surtir'
 
 export const FILTROS_COTEJO: { id: FiltroCotejo; etiqueta: string }[] = [
   { id: 'todos', etiqueta: 'Todos' },
@@ -35,6 +36,7 @@ export const FILTROS_COTEJO: { id: FiltroCotejo; etiqueta: string }[] = [
   { id: 'parcial', etiqueta: 'Parcial' },
   { id: 'completo', etiqueta: 'Completo' },
   { id: 'surtidos', etiqueta: 'Surtidos' },
+  { id: 'sin-surtir', etiqueta: 'Sin surtir' },
 ]
 
 // Normaliza para buscar sin importar mayúsculas ni acentos: "jabon"
@@ -72,6 +74,8 @@ export function filtrarCotejo(
         return fila.estado === 'completo'
       case 'surtidos':
         return fila.surtido > 0
+      case 'sin-surtir':
+        return fila.estado === 'sin-surtir'
     }
   })
 }

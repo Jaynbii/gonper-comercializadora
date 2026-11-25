@@ -131,3 +131,54 @@ test('validarEdicionItems: quitar un artículo libre y agregar uno nuevo es vál
   ])
   assert.deepEqual(r, { ok: true })
 })
+
+test('validarEdicionItems: marcar Sin surtir un artículo libre es válido', () => {
+  const r = validarEdicionItems(existentes, [
+    editado({ itemId: 'a1', productoId: 'p1', nombre: 'Papel P/WC jumbo 400', cantidad: 10, unidad: 'CAJA', sinSurtir: true }),
+    editado({ itemId: 'a2', productoId: 'p2', nombre: 'Porron de aromatizante fabuloso 20 litros', cantidad: 6, unidad: 'PORRON' }),
+    editado({ itemId: 'a3', productoId: 'p3', nombre: 'Jabon C/9 KG', cantidad: 2, unidad: 'BOLSA' }),
+  ])
+  assert.deepEqual(r, { ok: true })
+})
+
+test('validarEdicionItems: agregar un artículo nuevo ya marcado Sin surtir es válido', () => {
+  const r = validarEdicionItems(existentes, [
+    editado({ itemId: 'a1', productoId: 'p1', nombre: 'Papel P/WC jumbo 400', cantidad: 10, unidad: 'CAJA' }),
+    editado({ itemId: 'a2', productoId: 'p2', nombre: 'Porron de aromatizante fabuloso 20 litros', cantidad: 6, unidad: 'PORRON' }),
+    editado({ itemId: 'a3', productoId: 'p3', nombre: 'Jabon C/9 KG', cantidad: 2, unidad: 'BOLSA' }),
+    editado({ itemId: null, productoId: 'p4', nombre: 'Escoba de espigas', cantidad: 4, unidad: 'PIEZA', sinSurtir: true }),
+  ])
+  assert.deepEqual(r, { ok: true })
+})
+
+test('validarEdicionItems: desmarcar Sin surtir un artículo libre marcado es válido', () => {
+  const marcados: ItemExistenteEdicion[] = existentes.map((e) =>
+    e.itemId === 'a1' ? { ...e, sinSurtir: true } : e,
+  )
+  const r = validarEdicionItems(marcados, [
+    editado({ itemId: 'a1', productoId: 'p1', nombre: 'Papel P/WC jumbo 400', cantidad: 10, unidad: 'CAJA', sinSurtir: false }),
+    editado({ itemId: 'a2', productoId: 'p2', nombre: 'Porron de aromatizante fabuloso 20 litros', cantidad: 6, unidad: 'PORRON' }),
+    editado({ itemId: 'a3', productoId: 'p3', nombre: 'Jabon C/9 KG', cantidad: 2, unidad: 'BOLSA' }),
+  ])
+  assert.deepEqual(r, { ok: true })
+})
+
+test('validarEdicionItems: marcar Sin surtir un artículo ya surtido es inválido', () => {
+  const r = validarEdicionItems(existentes, [
+    editado({ itemId: 'a1', productoId: 'p1', nombre: 'Papel P/WC jumbo 400', cantidad: 10, unidad: 'CAJA' }),
+    editado({ itemId: 'a2', productoId: 'p2', nombre: 'Porron de aromatizante fabuloso 20 litros', cantidad: 6, unidad: 'PORRON', sinSurtir: true }),
+    editado({ itemId: 'a3', productoId: 'p3', nombre: 'Jabon C/9 KG', cantidad: 2, unidad: 'BOLSA' }),
+  ])
+  assert.equal(r.ok, false)
+  assert.match((r as { error: string }).error, /Sin surtir/)
+})
+
+test('validarEdicionItems: cambiar la marca Sin surtir de un artículo con orden de compra es inválido', () => {
+  const r = validarEdicionItems(existentes, [
+    editado({ itemId: 'a1', productoId: 'p1', nombre: 'Papel P/WC jumbo 400', cantidad: 10, unidad: 'CAJA' }),
+    editado({ itemId: 'a2', productoId: 'p2', nombre: 'Porron de aromatizante fabuloso 20 litros', cantidad: 6, unidad: 'PORRON' }),
+    editado({ itemId: 'a3', productoId: 'p3', nombre: 'Jabon C/9 KG', cantidad: 2, unidad: 'BOLSA', sinSurtir: true }),
+  ])
+  assert.equal(r.ok, false)
+  assert.match((r as { error: string }).error, /orden de compra/)
+})
