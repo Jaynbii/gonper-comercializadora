@@ -13,9 +13,12 @@ import LineaTiempo from '@/components/ui/LineaTiempo'
 import { lineaTiempoOrden } from '@/utils/progresoRequisicion'
 import { estadoCotejoItem } from '@/utils/cotejoRequisicion'
 import type { FilaCotejo } from '@/utils/filtroCotejo'
+import type { FilaEdicion } from '@/utils/editarItemsOrden'
+import type { ProductoCatalogo } from '@/utils/vincularProductos'
 import { esRequisicionCompleta } from '@/utils/requisicionesCompletas'
 
 type Producto = {
+  id: string
   nombre: string
   sku: string
   stock_actual: number | string
@@ -78,7 +81,7 @@ export default async function OrdenDetallePage({
       orden_items (
         id, cantidad_solicitada, cantidad_surtida, estado_item, unidad,
         created_at,
-        productos (nombre, sku, stock_actual, unidad_medida)
+        productos (id, nombre, sku, stock_actual, unidad_medida)
       )
     `,
     )
@@ -184,6 +187,73 @@ export default async function OrdenDetallePage({
   const completa = esRequisicionCompleta({
     estado: orden.estado,
     facturaFirmadaPath,
+  })
+
+  // Catálogo para el modal de edición de artículos (Alex, 2026-11-25)
+  // y candado de compra: productos que ya están en una orden de
+  // compra de esta requisición. Si la consulta de compras falla, se
+  // asume sin candados en la vista; el servidor vuelve a verificar
+  // al guardar y es el que manda.
+  const { data: catalogoData } = await supabase
+    .from('productos')
+    .select('id, sku, nombre, unidad_medida, codigo_sat')
+    .order('nombre')
+  const catalogo: ProductoCatalogo[] = (catalogoData || []).map((p) => ({
+    id: p.id as string,
+    sku: p.sku as string,
+    nombre: p.nombre as string,
+    unidad_medida: (p.unidad_medida as string | null) ?? null,
+    codigo_sat: (p.codigo_sat as string | null) ?? null,
+  }))
+  const { data: compras } = await supabase
+    .from('ordenes_compra')
+    .select('id')
+    .eq('requisition_id', id)
+  let comprados = new Set<string>()
+  if (compras && compras.length > 0) {
+    const { data: compradosItems } = await supabase
+      .from('orden_compra_items')
+      .select('producto_id')
+      .in(
+        'orden_compra_id',
+        compras.map((c) => c.id),
+      )
+    comprados = new Set(
+      (compradosItems || []).map((i) => i.producto_id as string),
+    )
+  }
+
+  // Edición de artículos: solo en BORRADOR, PENDIENTE o PARCIAL y
+  // sin foto firmada (la firmada es evidencia de entrega). Cada fila
+  // lleva su candado: surtido (no baja de lo entregado) o compra.
+  const editable =
+    ['BORRADOR', 'PENDIENTE', 'PARCIAL'].includes(orden.estado) &&
+    !facturaFirmadaPath
+  const motivoNoEditable = facturaFirmadaPath
+    ? 'No se pueden editar los artículos: está entregada y firmada.'
+    : orden.estado === 'ENTREGADA'
+      ? 'No se pueden editar los artículos: ya está entregada.'
+      : 'No se pueden editar los artículos en este estado.'
+  const filasEdicion: FilaEdicion[] = items.map((item) => {
+    const producto = productoDe(item)
+    const solicitado = Number(item.cantidad_solicitada)
+    const surtido = Number(item.cantidad_surtida) || 0
+    const productoId = producto?.id || ''
+    return {
+      itemId: item.id,
+      productoId,
+      nombre: producto?.nombre || 'Producto eliminado',
+      sku: producto?.sku || '',
+      unidad: item.unidad || producto?.unidad_medida || '',
+      solicitado,
+      surtido,
+      bloqueo:
+        productoId && comprados.has(productoId)
+          ? 'compra'
+          : surtido > 0
+            ? 'surtido'
+            : null,
+    }
   })
 
   // Hay stock total solo si TODOS los artículos están cubiertos
@@ -424,6 +494,11 @@ export default async function OrdenDetallePage({
               orden.estado === 'ENTREGADA' || orden.estado === 'PARCIAL'
             }
             surtida={completa}
+            ordenId={orden.id}
+            catalogo={catalogo}
+            filasEdicion={filasEdicion}
+            editable={editable}
+            motivoNoEditable={motivoNoEditable}
           />
         )}
       </section>

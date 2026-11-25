@@ -10,6 +10,11 @@ import {
   validarFotoFirmada,
 } from '@/utils/facturaFirmada'
 import { esRequisicionProtegida } from '@/utils/requisicionesCompletas'
+import {
+  validarEdicionItems,
+  type ItemEditado,
+  type ItemExistenteEdicion,
+} from '@/utils/editarItemsOrden'
 
 type ItemDetectado = {
   codigo_pdf: string
@@ -351,5 +356,195 @@ export async function editarOrden(ordenId: string, cliente_id: string, estado: s
   if (error) throw new Error(error.message)
   
   revalidatePath('/ordenes')
+  return { success: true }
+}
+
+// Editar los artículos de una requisición (Alex, 2026-11-25): cambiar
+// cantidades, quitar artículos y agregar nuevos del catálogo. A
+// diferencia de `guardarItemsEnOrden` (que borra todo e inserta con
+// surtido 0, porque es la captura inicial), aquí cada fila se
+// actualiza por separado para NO perder lo ya surtido. Los candados
+// viven en `validarEdicionItems` y se vuelven a verificar aquí: la
+// interfaz nunca es la última palabra.
+//
+// DEVUELVE el resultado, nunca lanza (ver `surtirOrden`): en
+// producción Next.js redacta el mensaje real de un error lanzado y
+// el teléfono solo recibiría "Minified React error #441".
+export async function editarItemsOrden(
+  ordenId: string,
+  items: ItemEditado[],
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  // 1. Estado y candado de firmada: una requisición entregada y
+  // firmada es evidencia de entrega y no se toca desde la app.
+  const { data: orden, error: ordenError } = await supabase
+    .from('ordenes')
+    .select('estado, factura_firmada_path')
+    .eq('id', ordenId)
+    .single()
+  if (ordenError || !orden) {
+    return { success: false, error: 'Requisición no encontrada.' }
+  }
+  if (
+    esRequisicionProtegida({
+      facturaFirmadaPath: orden.factura_firmada_path ?? null,
+    })
+  ) {
+    return {
+      success: false,
+      error: 'Esta requisición está firmada y sellada. No se puede editar.',
+    }
+  }
+  if (orden.estado === 'ENTREGADA') {
+    return {
+      success: false,
+      error: 'Esta requisición ya está entregada. No se puede editar.',
+    }
+  }
+  if (!['BORRADOR', 'PENDIENTE', 'PARCIAL'].includes(orden.estado)) {
+    return {
+      success: false,
+      error: 'Esta requisición no se puede editar en su estado actual.',
+    }
+  }
+
+  // 2. Artículos actuales, con lo surtido y el nombre para los
+  // mensajes de error.
+  const { data: actuales, error: itemsError } = await supabase
+    .from('orden_items')
+    .select('id, producto_id, cantidad_solicitada, cantidad_surtida, unidad, productos (nombre)')
+    .eq('orden_id', ordenId)
+  if (itemsError || !actuales) {
+    return { success: false, error: 'No se pudieron leer los artículos.' }
+  }
+
+  // 3. Candado de compra: productos que ya están en una orden de
+  // compra de esta requisición. Si la consulta falla, no se edita
+  // nada: mejor no guardar que guardar rompiendo una compra.
+  const { data: compras, error: comprasError } = await supabase
+    .from('ordenes_compra')
+    .select('id')
+    .eq('requisition_id', ordenId)
+  if (comprasError) {
+    return {
+      success: false,
+      error: 'No se pudieron verificar las órdenes de compra.',
+    }
+  }
+  let comprados = new Set<string>()
+  if (compras && compras.length > 0) {
+    const { data: compradosItems, error: compradosError } = await supabase
+      .from('orden_compra_items')
+      .select('producto_id')
+      .in(
+        'orden_compra_id',
+        compras.map((c) => c.id),
+      )
+    if (compradosError) {
+      return {
+        success: false,
+        error: 'No se pudieron verificar las órdenes de compra.',
+      }
+    }
+    comprados = new Set(
+      (compradosItems || []).map((i) => i.producto_id as string),
+    )
+  }
+
+  // 4. Validación pura (los candados de surtido, compra, duplicados
+  // y cantidades).
+  const existentes: ItemExistenteEdicion[] = actuales.map((it) => {
+    const producto = it.productos as
+      | { nombre?: string | null }
+      | { nombre?: string | null }[]
+      | null
+    const nombre = Array.isArray(producto)
+      ? (producto[0]?.nombre ?? null)
+      : (producto?.nombre ?? null)
+    return {
+      itemId: it.id as string,
+      productoId: it.producto_id as string,
+      nombre: nombre || 'Producto',
+      solicitado: Number(it.cantidad_solicitada) || 0,
+      surtido: Number(it.cantidad_surtida) || 0,
+      bloqueadoPorCompra: comprados.has(it.producto_id as string),
+    }
+  })
+  const validacion = validarEdicionItems(existentes, items)
+  if (!validacion.ok) {
+    return { success: false, error: validacion.error }
+  }
+
+  // 5. Aplicar: quitar los que ya no están, actualizar los que
+  // cambiaron e insertar los nuevos. Lo surtido se conserva porque
+  // nunca se toca `cantidad_surtida`.
+  const editadosPorId = new Map(
+    items
+      .filter((i) => i.itemId !== null)
+      .map((i) => [i.itemId as string, i]),
+  )
+  for (const actual of actuales) {
+    if (editadosPorId.has(actual.id as string)) continue
+    const { error } = await supabase
+      .from('orden_items')
+      .delete()
+      .eq('id', actual.id)
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudo quitar un artículo: ${error.message}`,
+      }
+    }
+  }
+  for (const item of items) {
+    if (!item.itemId) continue
+    const actual = actuales.find((a) => a.id === item.itemId)
+    if (!actual) continue
+    const unidad = normalizarUnidad(item.unidad) || null
+    if (
+      actual.producto_id === item.productoId &&
+      Number(actual.cantidad_solicitada) === Number(item.cantidad) &&
+      (actual.unidad ?? null) === unidad
+    ) {
+      continue
+    }
+    const { error } = await supabase
+      .from('orden_items')
+      .update({
+        producto_id: item.productoId,
+        cantidad_solicitada: item.cantidad,
+        unidad,
+      })
+      .eq('id', item.itemId)
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudo guardar un artículo: ${error.message}`,
+      }
+    }
+  }
+  const nuevos = items.filter((i) => i.itemId === null)
+  if (nuevos.length > 0) {
+    const { error } = await supabase.from('orden_items').insert(
+      nuevos.map((n) => ({
+        orden_id: ordenId,
+        producto_id: n.productoId,
+        cantidad_solicitada: n.cantidad,
+        cantidad_surtida: 0,
+        unidad: normalizarUnidad(n.unidad) || null,
+      })),
+    )
+    if (error) {
+      return {
+        success: false,
+        error: `No se pudieron agregar los artículos: ${error.message}`,
+      }
+    }
+  }
+
+  revalidatePath('/ordenes')
+  revalidatePath(`/ordenes/${ordenId}`)
+  revalidatePath('/compras')
   return { success: true }
 }

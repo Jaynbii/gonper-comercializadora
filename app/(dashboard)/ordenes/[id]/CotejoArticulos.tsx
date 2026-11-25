@@ -8,15 +8,19 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Pencil, Search } from 'lucide-react'
 import { Badge } from '@/components/EstadoBadge'
 import CotejoSurtido from './CotejoSurtido'
+import EditarArticulosModal from './EditarArticulosModal'
 import {
   FILTROS_COTEJO,
   filtrarCotejo,
   type FilaCotejo,
   type FiltroCotejo,
 } from '@/utils/filtroCotejo'
+import type { FilaEdicion } from '@/utils/editarItemsOrden'
+import type { ProductoCatalogo } from '@/utils/vincularProductos'
 
 const numero = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
 
@@ -36,13 +40,25 @@ export default function CotejoArticulos({
   filas,
   muestraSurtido,
   surtida,
+  ordenId,
+  catalogo,
+  filasEdicion,
+  editable,
+  motivoNoEditable,
 }: {
   filas: FilaCotejo[]
   muestraSurtido: boolean
   surtida: boolean
+  ordenId: string
+  catalogo: ProductoCatalogo[]
+  filasEdicion: FilaEdicion[]
+  editable: boolean
+  motivoNoEditable: string
 }) {
+  const router = useRouter()
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<FiltroCotejo>('todos')
+  const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const visibles = useMemo(
     () => filtrarCotejo(filas, busqueda, filtro),
     [filas, busqueda, filtro],
@@ -108,7 +124,31 @@ export default function CotejoArticulos({
             )
           })}
         </div>
+        {editable ? (
+          <button
+            type="button"
+            onClick={() => setModalEditarAbierto(true)}
+            className="btn btn-quiet w-full justify-center"
+          >
+            <Pencil className="h-4 w-4" strokeWidth={1.75} />
+            Editar artículos
+          </button>
+        ) : (
+          <p className="text-[12px] text-gonper-muted">{motivoNoEditable}</p>
+        )}
       </div>
+
+      <EditarArticulosModal
+        open={modalEditarAbierto}
+        onClose={() => setModalEditarAbierto(false)}
+        onGuardado={() => {
+          setModalEditarAbierto(false)
+          router.refresh()
+        }}
+        ordenId={ordenId}
+        filas={filasEdicion}
+        catalogo={catalogo}
+      />
 
       <CotejoSurtido surtida={surtida}>
         {visibles.length === 0 ? (
