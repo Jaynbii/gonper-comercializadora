@@ -1172,8 +1172,11 @@ export default function ComprasClient({
           los márgenes negativos cubren el padding del <main> para
           que al quedar fijo se vea como una barra y no se transparente
           el contenido que pasa por debajo. Solo las pestañas quedan
-          fijas; el título se va al bajar para no comer pantalla. */}
-      <div className="sticky top-0 z-20 -mx-5 bg-gonper-bg px-5 pb-3 pt-4 md:-mx-8 md:px-8">
+          fijas; el título se va al bajar para no comer pantalla.
+          El top negativo compensa el pt-6 (móvil) / pt-8 (escritorio)
+          del <main>: sin él quedaba una franja de ~40 px arriba de la
+          barra por la que se colaba el contenido al bajar. */}
+      <div className="sticky top-[-1.5rem] z-20 -mx-5 bg-gonper-bg px-5 pb-3 pt-4 md:-mx-8 md:top-[-2rem] md:px-8">
         <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
         <button
           type="button"
