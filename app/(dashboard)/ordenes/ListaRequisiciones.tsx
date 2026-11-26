@@ -13,8 +13,10 @@ import ProcesarPdfButton from './ProcesarPdfButton'
 import AccionesOrden from './AccionesOrden'
 import EstadoBadge, { Badge } from '@/components/EstadoBadge'
 import {
+  filtrarPorEstado,
   filtrarRequisiciones,
   type RequisicionBuscable,
+  type TabRequisiciones,
 } from '@/utils/filtroRequisiciones'
 import { normalizarTexto } from '@/utils/filtroCotejo'
 
@@ -42,6 +44,25 @@ const fecha = new Intl.DateTimeFormat('es-MX', {
   year: 'numeric',
 })
 
+const TABS: { id: TabRequisiciones; etiqueta: string; vacio: string }[] = [
+  { id: 'TODAS', etiqueta: 'Todas', vacio: '' },
+  {
+    id: 'PENDIENTE',
+    etiqueta: 'Pendientes',
+    vacio: 'No hay requisiciones pendientes',
+  },
+  {
+    id: 'PARCIAL',
+    etiqueta: 'Parciales',
+    vacio: 'No hay requisiciones parciales',
+  },
+  {
+    id: 'ENTREGADA',
+    etiqueta: 'Entregadas',
+    vacio: 'No hay requisiciones entregadas',
+  },
+]
+
 export default function ListaRequisiciones({
   ordenes,
   clientes,
@@ -52,6 +73,7 @@ export default function ListaRequisiciones({
   nuevaId?: string
 }) {
   const [busqueda, setBusqueda] = useState('')
+  const [tab, setTab] = useState<TabRequisiciones>('TODAS')
 
   const buscables: RequisicionBuscable[] = useMemo(
     () =>
@@ -63,9 +85,27 @@ export default function ListaRequisiciones({
       })),
     [ordenes],
   )
+  const conteos = useMemo(() => {
+    const c: Record<TabRequisiciones, number> = {
+      TODAS: buscables.length,
+      PENDIENTE: 0,
+      PARCIAL: 0,
+      ENTREGADA: 0,
+    }
+    for (const r of buscables) {
+      if (r.estado === 'PENDIENTE') c.PENDIENTE += 1
+      else if (r.estado === 'PARCIAL') c.PARCIAL += 1
+      else if (r.estado === 'ENTREGADA') c.ENTREGADA += 1
+    }
+    return c
+  }, [buscables])
+  const porEstado = useMemo(
+    () => filtrarPorEstado(buscables, tab),
+    [buscables, tab],
+  )
   const filtradas = useMemo(
-    () => filtrarRequisiciones(buscables, busqueda),
-    [buscables, busqueda],
+    () => filtrarRequisiciones(porEstado, busqueda),
+    [porEstado, busqueda],
   )
   const buscando = normalizarTexto(busqueda).length > 0
   const lista = useMemo(
@@ -75,27 +115,59 @@ export default function ListaRequisiciones({
       ),
     [ordenes, filtradas],
   )
+  const tabActiva = TABS.find((t) => t.id === tab)!
 
   return (
     <>
-      <div className="relative mt-5">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gonper-muted"
-          strokeWidth={1.75}
-        />
-        <input
-          type="text"
-          placeholder="Buscar por folio, cliente o estado"
-          className="field pl-9"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          aria-label="Buscar requisición"
-        />
+      {/* Menú de pestañas fijo, igual que Compras (Alex, 2026-11-26):
+          queda pegado arriba al bajar, para cambiar de pestaña sin
+          volver hasta arriba. El buscador va dentro de la misma
+          barra para que tampoco se pierda al bajar. */}
+      <div className="sticky top-[-1.5rem] z-20 -mx-5 bg-gonper-bg px-5 pb-3 pt-4 md:-mx-8 md:top-[-2rem] md:px-8">
+        <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[4px] px-2 py-2 text-[12.5px] font-medium transition-colors duration-[120ms] sm:flex-none sm:px-3.5 ${
+                tab === t.id
+                  ? 'bg-gonper-primary text-gonper-on-primary'
+                  : 'text-gonper-muted hover:text-gonper-text'
+              }`}
+            >
+              {t.etiqueta}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10.5px] tabular-nums ${
+                  tab === t.id
+                    ? 'bg-gonper-text/10 text-gonper-on-primary'
+                    : 'bg-gonper-surface-muted text-gonper-muted'
+                }`}
+              >
+                {conteos[t.id]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="relative mt-3">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gonper-muted"
+            strokeWidth={1.75}
+          />
+          <input
+            type="text"
+            placeholder="Buscar por folio, cliente o estado"
+            className="field pl-9"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            aria-label="Buscar requisición"
+          />
+        </div>
       </div>
       {buscando && (
         <p className="mt-2 text-[12px] text-gonper-muted">
-          {lista.length} de {ordenes.length}{' '}
-          {ordenes.length === 1 ? 'requisición' : 'requisiciones'}
+          {lista.length} de {porEstado.length}{' '}
+          {porEstado.length === 1 ? 'requisición' : 'requisiciones'}
         </p>
       )}
 
@@ -110,6 +182,17 @@ export default function ListaRequisiciones({
             className="btn btn-quiet mt-3"
           >
             Limpiar búsqueda
+          </button>
+        </div>
+      ) : !buscando && tab !== 'TODAS' && lista.length === 0 ? (
+        <div className="card mt-4 px-4 py-5 text-center">
+          <p className="text-[13px] text-gonper-muted">{tabActiva.vacio}</p>
+          <button
+            type="button"
+            onClick={() => setTab('TODAS')}
+            className="btn btn-quiet mt-3"
+          >
+            Ver todas las requisiciones
           </button>
         </div>
       ) : (

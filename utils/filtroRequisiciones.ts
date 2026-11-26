@@ -11,6 +11,20 @@ export type RequisicionBuscable = {
   estado: string
 }
 
+// Pestañas de la lista de requisiciones (Alex, 2026-11-26): mismo
+// menú que Compras — Todas, Pendientes, Parciales y Entregadas.
+// Borrador y Cancelada no tienen pestaña propia y solo se ven en
+// Todas (hoy no hay ninguna de las dos en la lista).
+export type TabRequisiciones = 'TODAS' | 'PENDIENTE' | 'PARCIAL' | 'ENTREGADA'
+
+export function filtrarPorEstado(
+  requisiciones: RequisicionBuscable[],
+  tab: TabRequisiciones,
+): RequisicionBuscable[] {
+  if (tab === 'TODAS') return requisiciones
+  return requisiciones.filter((r) => r.estado === tab)
+}
+
 export function filtrarRequisiciones(
   requisiciones: RequisicionBuscable[],
   busqueda: string,
