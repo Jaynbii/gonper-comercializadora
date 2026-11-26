@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  filtrarPorEstado,
   filtrarRequisiciones,
   type RequisicionBuscable,
 } from './filtroRequisiciones.ts'
@@ -36,4 +37,32 @@ test('filtrarRequisiciones: busca por estado', () => {
 
 test('filtrarRequisiciones: sin coincidencias devuelve lista vacía', () => {
   assert.deepEqual(filtrarRequisiciones(lista, 'zzz'), [])
+})
+
+test('filtrarPorEstado: TODAS devuelve toda la lista', () => {
+  assert.deepEqual(filtrarPorEstado(lista, 'TODAS'), lista)
+})
+
+test('filtrarPorEstado: cada pestaña devuelve solo su estado', () => {
+  assert.deepEqual(
+    filtrarPorEstado(lista, 'PENDIENTE').map((x) => x.id),
+    ['2'],
+  )
+  assert.deepEqual(
+    filtrarPorEstado(lista, 'PARCIAL').map((x) => x.id),
+    ['1'],
+  )
+  assert.deepEqual(
+    filtrarPorEstado(lista, 'ENTREGADA').map((x) => x.id),
+    ['3'],
+  )
+})
+
+test('filtrarPorEstado + filtrarRequisiciones: la búsqueda se compone con la pestaña', () => {
+  const parciales = filtrarPorEstado(lista, 'PARCIAL')
+  assert.deepEqual(
+    filtrarRequisiciones(parciales, 'mantenimiento').map((x) => x.id),
+    ['1'],
+  )
+  assert.deepEqual(filtrarRequisiciones(parciales, 'ingresos'), [])
 })
