@@ -124,7 +124,12 @@ export default function ListaRequisiciones({
           volver hasta arriba. El buscador va dentro de la misma
           barra para que tampoco se pierda al bajar. */}
       <div className="sticky top-[-1.5rem] z-20 -mx-5 bg-gonper-bg px-5 pb-3 pt-4 md:-mx-8 md:top-[-2rem] md:px-8">
-        <div className="flex w-full rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto">
+        {/* En móvil las 4 pestañas con su contador no caben en una
+            fila (Alex, 2026-11-26, captura: "Parciales" se recortaba
+            y "Entregadas" se salía del borde): en pantallas chicas
+            van en 2x2 para que nada se recorte ni se salga; en
+            escritorio siguen en una fila como Compras. */}
+        <div className="grid w-full grid-cols-2 gap-1 rounded-[6px] border border-gonper-border bg-gonper-surface p-1 sm:inline-flex sm:w-auto sm:gap-0">
           {TABS.map((t) => (
             <button
               key={t.id}
