@@ -141,7 +141,8 @@ function PorOrdenCards({
         return (
           <article
             key={orden.ordenId}
-            className={`card p-4 ${
+            id={`req-card-${orden.ordenId}`}
+            className={`card scroll-mt-24 p-4 ${
               seleccionada ? 'ring-2 ring-gonper-primary' : ''
             }`}
           >
@@ -453,14 +454,22 @@ function TarjetaOrdenCompra({
   esAdmin,
   onEliminar,
   onRecibir,
+  resaltar = false,
 }: {
   orden: OrdenCompra
   esAdmin: boolean
   onEliminar: (orden: OrdenCompra) => void
   onRecibir: (orden: OrdenCompra) => void
+  // Orden recién generada: anillo verde para encontrarla de un
+  // vistazo dentro de la carpeta (Alex, 2026-11-26).
+  resaltar?: boolean
 }) {
   return (
-    <article className="card flex flex-col p-4">
+    <article
+      className={`card flex flex-col p-4 ${
+        resaltar ? 'ring-2 ring-gonper-primary' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-[14.5px] font-semibold tracking-[-0.01em]">
           {orden.proveedores?.nombre || 'Proveedor'}
@@ -582,14 +591,24 @@ export default function ComprasClient({
   // sincronización se hace en el evento verFaltante (abajo), no en
   // un efecto: llamar a setState dentro de un efecto es un
   // anti-patrón de React y lo rechaza el lint. Este efecto solo
-  // hace scroll hasta las cards cuando cambia la requisición.
+  // hace scroll hasta LA CARD de esa requisición cuando cambia
+  // (Alex, 2026-11-26: antes bajaba solo al inicio de la sección
+  // y la card se perdía entre todas las demás).
   const porRequisicionRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!ordenInicialValida) return
-    porRequisicionRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    })
+    const t = window.setTimeout(() => {
+      const card = document.getElementById(`req-card-${ordenInicialValida}`)
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      porRequisicionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 60)
+    return () => window.clearTimeout(t)
   }, [ordenInicialValida])
 
   const toggleOrdenSeleccionada = (ordenId: string) => {
@@ -653,8 +672,9 @@ export default function ComprasClient({
   )
 
   // "Ver faltante" estando ya en /compras: cambia a la vista
-  // "Por requisición", selecciona esa requisición y baja hasta sus
-  // cards. También actualiza la URL (?orden=<id>) para que se pueda
+  // "Por requisición", selecciona esa requisición y baja hasta SU
+  // card (no al inicio de la sección, donde se perdía entre todas).
+  // También actualiza la URL (?orden=<id>) para que se pueda
   // compartir y el botón Atrás funcione. Es un evento, no un efecto.
   const verFaltante = (ordenId: string) => {
     setErrorMsg('')
@@ -666,6 +686,11 @@ export default function ComprasClient({
       transitionTypes: ['nav-section'],
     })
     window.setTimeout(() => {
+      const card = document.getElementById(`req-card-${ordenId}`)
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
       porRequisicionRef.current?.scrollIntoView({
         behavior: 'smooth',
         block: 'start',
@@ -728,6 +753,19 @@ export default function ComprasClient({
   const [carpetaAbiertaId, setCarpetaAbiertaId] = useState<string | null>(
     null,
   )
+
+  // Órdenes recién generadas (Alex, 2026-11-26): al confirmar la
+  // compra se salta a la pestaña "Órdenes de compra" y se abre la
+  // carpeta de esa requisición con las órdenes nuevas resaltadas,
+  // para no tener que buscarlas entre todas. Se limpian al cerrar
+  // la carpeta.
+  const [ordenesGeneradasIds, setOrdenesGeneradasIds] = useState<string[]>(
+    [],
+  )
+  const cerrarCarpeta = () => {
+    setCarpetaAbiertaId(null)
+    setOrdenesGeneradasIds([])
+  }
 
   // Eliminar una orden de compra (solo admin, solo Pendiente, desde
   // el menú "..." de la card). El ConfirmDialog pide confirmación;
@@ -989,6 +1027,7 @@ export default function ComprasClient({
     setMensaje('')
 
     const generadas: string[] = []
+    const generadasIds: string[] = []
     const recibidas: string[] = []
     const errores: string[] = []
     for (const grupo of grupos) {
@@ -1004,6 +1043,7 @@ export default function ComprasClient({
           requisicionAComprar.ordenId,
         )
         generadas.push(`${grupo.proveedorNombre} (${res.folio})`)
+        generadasIds.push(res.id)
 
         // Comprar+recibir: si el checkbox está activado, la mercancía
         // se recibe en el mismo paso con la RPC existente
@@ -1063,7 +1103,23 @@ export default function ComprasClient({
       setMensaje(
         `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoRecibido}${avisoSinPrecio}`,
       )
-      router.refresh()
+      if (errores.length === 0) {
+        // Salto directo a la compra recién generada (Alex,
+        // 2026-11-26): pestaña "Órdenes de compra" + carpeta de la
+        // requisición abierta con las órdenes nuevas resaltadas, para
+        // no buscarlas entre todas. Se reemplaza la URL para soltar
+        // ?orden=&comprar=1 y que un recargar no reabra el diálogo;
+        // el replace recarga los datos del servidor (la orden nueva
+        // ya viene en ordenesCompra y la carpeta se abre sola al
+        // aparecer). Con errores no se salta: el diálogo queda
+        // abierto con el aviso.
+        setOrdenesGeneradasIds(generadasIds)
+        setTab('ordenes')
+        setCarpetaAbiertaId(requisicionAComprar.ordenId)
+        router.replace('/compras', { transitionTypes: ['nav-section'] })
+      } else {
+        router.refresh()
+      }
     }
     if (errores.length > 0) {
       // Se deja el diálogo abierto para que el aviso (p. ej. el
@@ -1763,7 +1819,7 @@ export default function ComprasClient({
           con la X, tocando fuera o con Escape (diálogo nativo). */}
       <Modal
         open={carpetaAbierta !== null}
-        onClose={() => setCarpetaAbiertaId(null)}
+        onClose={cerrarCarpeta}
         variant="zoom"
         title={
           carpetaAbierta?.requisicion
@@ -1795,7 +1851,7 @@ export default function ComprasClient({
             )}
             <button
               type="button"
-              onClick={() => setCarpetaAbiertaId(null)}
+              onClick={cerrarCarpeta}
               className="btn btn-primary flex-1 sm:flex-none"
             >
               Cerrar
@@ -1817,6 +1873,7 @@ export default function ComprasClient({
                 key={orden.id}
                 orden={orden}
                 esAdmin={esAdmin}
+                resaltar={ordenesGeneradasIds.includes(orden.id)}
                 onEliminar={(ordenElegida) => {
                   setErrorEliminar('')
                   setOrdenAEliminar(ordenElegida)
