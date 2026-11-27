@@ -106,12 +106,42 @@
     @apply text-[11px] font-medium uppercase tracking-[0.13em] text-gonper-muted;
   }
 
+  /* PRESS DOWN (reel "Button Part 7" de ui_motion_prompts, Alex
+     2026-11-27): al presionar, el botón se hunde 2 px y su sombra se
+     comprime, como la píldora que se hunde en su base. Va en .btn
+     para que TODOS los botones lo tengan; el color no cambia. */
   .btn {
-    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] font-medium transition-[color,background-color,border-color,transform,box-shadow] duration-200 ease-out active:scale-[0.94] disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
+    @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-4 text-[13px] font-medium transition-[color,background-color,border-color,transform,box-shadow] duration-200 ease-out active:translate-y-[2px] active:scale-[0.97] active:shadow-none disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:px-3.5;
   }
 
+  /* RIPPLE (mismo reel): al presionar un botón primario, un disco
+     pálido se abre desde el centro y se desvanece. Solo CSS: el
+     disco es el ::after, que crece mientras el botón está presionado
+     y se recoge al soltar. */
   .btn-primary {
-    @apply bg-gonper-primary text-gonper-on-primary shadow-card hover:bg-gonper-primary-hover;
+    @apply relative overflow-hidden bg-gonper-primary text-gonper-on-primary shadow-card hover:bg-gonper-primary-hover;
+  }
+
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.35);
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.45s ease-out,
+      opacity 0.45s ease-out;
+  }
+
+  .btn-primary:active::after {
+    transform: translate(-50%, -50%) scale(18);
+    opacity: 1;
   }
 
   .btn-quiet {
@@ -122,6 +152,72 @@
      En escritorio (ratón) se achica a 32 px. */
   .btn-icon {
     @apply grid h-11 w-11 place-items-center rounded-[10px] text-gonper-muted transition-[color,background-color,transform] duration-200 ease-out hover:bg-gonper-surface-muted hover:text-gonper-text active:scale-90 sm:h-8 sm:w-8;
+  }
+
+  /* JELLY BOUNCE (reel "Button Part 7" de ui_motion_prompts, Alex
+     2026-11-27): al presionar un botón de icono, se aplasta como
+     gelatina y rebota. El aplastado va al inicio del keyframe para
+     que se vea hasta en un toque rápido; el vaivén completa si se
+     mantiene presionado. */
+  .btn-icon:active {
+    animation: jelly-bounce 0.45s ease-out;
+  }
+
+  /* LOAD & SUCCESS (mismo reel): la píldora se encoge a círculo con
+     el spinner y termina en palomita. El ancho tiene que venir
+     fijado desde JS (utils/botonCarga.ts), porque width: auto no
+     anima. flex: none anula el flex-1 del pie del diálogo;
+     overflow: hidden recorta la etiqueta mientras se encoge. En
+     escritorio el botón mide 36 px de alto, así que el círculo es
+     de 36 px. */
+  .btn-cargando,
+  .btn-exito {
+    flex: none !important;
+    width: 44px !important;
+    padding-inline: 0 !important;
+    gap: 0 !important;
+    border-radius: 9999px !important;
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+      width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+      padding 0.35s ease,
+      border-radius 0.35s ease;
+  }
+
+  .btn-cargando:disabled,
+  .btn-exito:disabled {
+    opacity: 1;
+  }
+
+  @media (min-width: 640px) {
+    .btn-cargando,
+    .btn-exito {
+      width: 36px !important;
+    }
+  }
+
+  /* Etiqueta del botón flotante (EXPAND MORPH, mismo reel): vive
+     colapsada y solo se despliega al presionar el botón, cuando el
+     círculo se estira a píldora. */
+  .fab-etiqueta {
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    transition:
+      max-width 0.35s ease,
+      margin-left 0.35s ease,
+      opacity 0.2s ease;
+  }
+
+  .fab:active .fab-etiqueta {
+    max-width: 12rem;
+    margin-left: 0.5rem;
+    opacity: 1;
   }
 
   .badge {
@@ -288,6 +384,56 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* GLOW PULSE (reel "Button Part 7" de ui_motion_prompts, Alex
+   2026-11-27): anillos que respiran alrededor del botón flotante.
+   Solo 3 respiraciones al cargar cada pantalla y luego descansa,
+   para llamar la atención sin quedar latiendo todo el rato. */
+.fab-pulso::before,
+.fab-pulso::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  border: 2px solid var(--color-gonper-primary);
+  animation: fab-pulso 2.4s ease-out 3;
+  pointer-events: none;
+}
+
+.fab-pulso::after {
+  animation-delay: 0.8s;
+}
+
+@keyframes fab-pulso {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* JELLY BOUNCE (mismo reel): el botón de icono se aplasta como
+   gelatina y rebota con un vaivén hasta enderezarse. */
+@keyframes jelly-bounce {
+  0% {
+    transform: scale(1, 1) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.18, 0.82) rotate(-3deg);
+  }
+  55% {
+    transform: scale(0.92, 1.08) rotate(2deg);
+  }
+  75% {
+    transform: scale(1.05, 0.95) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1, 1) rotate(0deg);
   }
 }
 

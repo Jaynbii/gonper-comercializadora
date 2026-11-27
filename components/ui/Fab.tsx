@@ -5,7 +5,7 @@ import { useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 const CLASES_BASE =
-  'animate-fab fixed right-5 z-50 grid h-14 w-14 place-items-center rounded-full border-2 border-gonper-success bg-gonper-primary text-gonper-on-primary shadow-[0_12px_28px_-8px_rgba(123,182,1,0.5)] transition-[background-color,transform] duration-[140ms] ease-out hover:bg-gonper-primary-hover active:scale-95'
+  'fab fab-pulso animate-fab fixed right-5 z-50 flex h-14 w-auto min-w-14 max-w-14 items-center justify-center rounded-full border-2 border-gonper-success bg-gonper-primary text-gonper-on-primary shadow-[0_12px_28px_-8px_rgba(123,182,1,0.5)] transition-[background-color,transform,max-width] duration-300 ease-out hover:bg-gonper-primary-hover active:max-w-56'
 
 export default function Fab({
   label,
@@ -60,6 +60,9 @@ export default function Fab({
         className={clases}
       >
         {icon}
+        <span aria-hidden="true" className="fab-etiqueta">
+          {label}
+        </span>
       </Link>
     ) : (
       <button
@@ -71,6 +74,9 @@ export default function Fab({
         className={clases}
       >
         {icon}
+        <span aria-hidden="true" className="fab-etiqueta">
+          {label}
+        </span>
       </button>
     ),
     document.body,

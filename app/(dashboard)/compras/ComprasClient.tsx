@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   Download,
   Folder,
@@ -40,6 +41,7 @@ import {
   armarFilasFaltantesPdf,
   generarPdfFaltantes,
 } from '@/utils/faltantesPdf'
+import { fijarAnchoBoton } from '@/utils/botonCarga'
 
 type Proveedor = {
   id: string
@@ -916,6 +918,10 @@ export default function ComprasClient({
   const [comprandoRequisicionId, setComprandoRequisicionId] = useState<
     string | null
   >(null)
+  // LOAD & SUCCESS (reel "Button Part 7" de ui_motion_prompts, Alex
+  // 2026-11-27): el botón ya mostró el spinner encogido a círculo y
+  // ahora muestra la palomita antes de saltar a la carpeta.
+  const [compraExitosa, setCompraExitosa] = useState(false)
   const [errorCompra, setErrorCompra] = useState('')
 
   // Comprar+recibir: en la operación de Alex el proveedor entrega al
@@ -1104,26 +1110,38 @@ export default function ComprasClient({
         `Compras generadas para ${requisicionAComprar.folio}: ${generadas.join(', ')}.${avisoRecibido}${avisoSinPrecio}`,
       )
       if (errores.length === 0) {
-        // Salto directo a la compra recién generada (Alex,
-        // 2026-11-26): pestaña "Órdenes de compra" + carpeta de la
-        // requisición abierta con las órdenes nuevas resaltadas, para
-        // no buscarlas entre todas. Se reemplaza la URL para soltar
+        // LOAD & SUCCESS (reel "Button Part 7" de ui_motion_prompts,
+        // Alex 2026-11-27): la píldora ya se encogió a círculo con
+        // el spinner; ahora muestra la palomita ~800 ms antes de
+        // saltar, para que el éxito se vea y no sea un parpadeo. El
+        // salto directo (Alex, 2026-11-26) va dentro del temporizador:
+        // pestaña "Órdenes de compra" + carpeta de la requisición
+        // abierta con las órdenes nuevas resaltadas, para no
+        // buscarlas entre todas. Se reemplaza la URL para soltar
         // ?orden=&comprar=1 y que un recargar no reabra el diálogo;
         // el replace recarga los datos del servidor (la orden nueva
         // ya viene en ordenesCompra y la carpeta se abre sola al
         // aparecer). Con errores no se salta: el diálogo queda
         // abierto con el aviso.
-        setOrdenesGeneradasIds(generadasIds)
-        setTab('ordenes')
-        setCarpetaAbiertaId(requisicionAComprar.ordenId)
-        router.replace('/compras', { transitionTypes: ['nav-section'] })
+        setCompraExitosa(true)
+        const reqId = requisicionAComprar.ordenId
+        window.setTimeout(() => {
+          setOrdenesGeneradasIds(generadasIds)
+          setTab('ordenes')
+          setCarpetaAbiertaId(reqId)
+          router.replace('/compras', { transitionTypes: ['nav-section'] })
+          setRequisicionAComprar(null)
+          setCompraDesmarcados(new Set())
+          setCompraExitosa(false)
+        }, 800)
       } else {
         router.refresh()
       }
     }
     if (errores.length > 0) {
       // Se deja el diálogo abierto para que el aviso (p. ej. el
-      // bloqueo por duplicado) se vea; si no hay errores, se cierra.
+      // bloqueo por duplicado) se vea; si no hay errores, el
+      // temporizador de arriba cierra el diálogo tras la palomita.
       setErrorCompra(
         (generadas.length > 0
           ? 'Se generaron algunas compras. '
@@ -1131,9 +1149,6 @@ export default function ComprasClient({
           'Errores: ' +
           errores.join(' | '),
       )
-    } else if (generadas.length > 0) {
-      setRequisicionAComprar(null)
-      setCompraDesmarcados(new Set())
     }
   }
 
@@ -1904,30 +1919,46 @@ export default function ComprasClient({
             <button
               type="button"
               onClick={() => {
-                if (comprandoRequisicionId) return
+                if (comprandoRequisicionId || compraExitosa) return
                 setRequisicionAComprar(null)
                 setCompraDesmarcados(new Set())
                 setErrorCompra('')
               }}
-              disabled={comprandoRequisicionId !== null}
+              disabled={comprandoRequisicionId !== null || compraExitosa}
               className="btn btn-quiet flex-1 sm:flex-none"
             >
               Cancelar
             </button>
             <button
               type="button"
-              onClick={confirmarCompraRequisicion}
+              onClick={(e) => {
+                fijarAnchoBoton(e)
+                void confirmarCompraRequisicion()
+              }}
               disabled={
                 comprandoRequisicionId !== null ||
+                compraExitosa ||
                 !compraRequisicion ||
                 compraGruposVisibles.length === 0
               }
-              className="btn btn-primary flex-1 sm:flex-none"
+              className={`btn btn-primary flex-1 sm:flex-none ${
+                compraExitosa
+                  ? 'btn-exito'
+                  : comprandoRequisicionId
+                    ? 'btn-cargando'
+                    : ''
+              }`}
             >
-              <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
-              {comprandoRequisicionId
-                ? 'Generando compras…'
-                : 'Confirmar compra'}
+              {compraExitosa ? (
+                <Check className="h-5 w-5" strokeWidth={2.5} />
+              ) : comprandoRequisicionId ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+              ) : (
+                <>
+                  <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
+                  Confirmar compra
+                </>
+              )}
             </button>
           </>
         }
